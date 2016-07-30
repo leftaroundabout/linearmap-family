@@ -36,6 +36,11 @@ class (VectorSpace v, Num' (Scalar v)) => LinearSpace v where
   zeroMapping :: (LinearSpace w, Scalar w ~ Scalar v) => v -→ w
   addLinearMaps :: (LinearSpace w, Scalar w ~ Scalar v)
                 => (v -→ w) -> (v -→ w) -> v -→ w
+  subtractLinearMaps :: (LinearSpace w, Scalar w ~ Scalar v)
+                => (v -→ w) -> (v -→ w) -> v -→ w
+  subtractLinearMaps m n = addLinearMaps m (negateLinearMap n)
+  scaleLinearMap :: (LinearSpace w, Scalar w ~ Scalar v)
+                => Scalar v -> (v -→ w) -> v -→ w
   negateLinearMap :: (LinearSpace w, Scalar w ~ Scalar v)
                 => (v -→ w) -> v -→ w
   linearCoFst :: (LinearSpace w, Scalar w ~ Scalar v)
@@ -45,6 +50,16 @@ class (VectorSpace v, Num' (Scalar v)) => LinearSpace v where
   fanoutBlocks :: ( LinearSpace w, LinearSpace x
                 , Scalar w ~ Scalar v, Scalar x ~ Scalar v )
      => (v-→w) -> (v-→x) -> v -→ (w,x)
+  fstBlock :: ( LinearSpace w, LinearSpace x
+                , Scalar w ~ Scalar v, Scalar x ~ Scalar v )
+     => (v-→(w,x)) -> v -→ w
+  sndBlock :: ( LinearSpace w, LinearSpace x
+                , Scalar w ~ Scalar v, Scalar x ~ Scalar v )
+     => (v-→(w,x)) -> v -→ x
+  sepBlocks :: ( LinearSpace w, LinearSpace x
+                , Scalar w ~ Scalar v, Scalar x ~ Scalar v )
+     => (v-→(w,x)) -> (v-→w, v-→x)
+  sepBlocks m = (fstBlock m, sndBlock m)
   firstBlock :: ( LinearSpace w, LinearSpace x
                 , Scalar w ~ Scalar v, Scalar x ~ Scalar v )
      => (v-→w) -> v -→ (w,x)
@@ -76,9 +91,12 @@ instance Num' s => LinearSpace (ZeroDim s) where
   linearId = CoOrigin
   zeroMapping = CoOrigin
   negateLinearMap CoOrigin = CoOrigin
+  scaleLinearMap _ CoOrigin = CoOrigin
   addLinearMaps CoOrigin CoOrigin = CoOrigin
   linearCoFst = CoOrigin
   linearCoSnd = CoOrigin
+  fstBlock CoOrigin = CoOrigin
+  sndBlock CoOrigin = CoOrigin
   fanoutBlocks CoOrigin CoOrigin = CoOrigin
   firstBlock CoOrigin = CoOrigin
   secondBlock CoOrigin = CoOrigin
@@ -92,7 +110,48 @@ instance (LinearSpace v, LinearSpace w, Scalar v~s, Scalar w~s)
                => AdditiveGroup (LinearMap s v w) where
   zeroV = LinearMap zeroMapping
   LinearMap f ^+^ LinearMap g = LinearMap $ addLinearMaps f g
+  LinearMap f ^-^ LinearMap g = LinearMap $ subtractLinearMaps f g
   negateV (LinearMap f) = LinearMap $ negateLinearMap f
+instance (LinearSpace v, LinearSpace w, Scalar v~s, Scalar w~s)
+               => VectorSpace (LinearMap s v w) where
+  type Scalar (LinearMap s v w) = s
+  μ *^ LinearMap f = LinearMap $ scaleLinearMap μ f
+instance Num (LinearMap ℝ ℝ ℝ) where
+  fromInteger = LinearMap . RealVect . fromInteger
+  (+) = (^+^)
+  (-) = (^-^)
+  LinearMap (RealVect m) * LinearMap (RealVect n)
+         = LinearMap . RealVect $ m*n
+  abs (LinearMap (RealVect n)) = LinearMap . RealVect $ abs n
+  signum (LinearMap (RealVect n)) = LinearMap . RealVect $ signum n
+instance Fractional (LinearMap ℝ ℝ ℝ) where
+  fromRational = LinearMap . RealVect . fromRational
+  LinearMap (RealVect m) / LinearMap (RealVect n)
+         = LinearMap . RealVect $ m/n
+  recip (LinearMap (RealVect n)) = LinearMap . RealVect $ recip n
+  
+infixr 6 ⊕, >+<
+(⊕), (>+<) :: LinearMap s u w -> LinearMap s v w -> LinearMap s (u,v) w
+LinearMap m ⊕ LinearMap n = LinearMap $ CoDirectSum m n
+(>+<) = (⊕)
+
+instance Show (LinearMap ℝ ℝ ℝ) where
+  show (LinearMap (RealVect n)) = show n
+instance ∀ u v . (Show (LinearMap ℝ u ℝ), Show (LinearMap ℝ v ℝ))
+           => Show (LinearMap ℝ (u,v) ℝ) where
+  showsPrec p (LinearMap (CoDirectSum m n))
+        = showParen (p>6)
+            (showsPrec 6 (LinearMap m :: LinearMap ℝ u ℝ)
+                         . ("⊕"++) . showsPrec 6 (LinearMap n :: LinearMap ℝ v ℝ))
+instance ∀ s u v w . ( LinearSpace u, LinearSpace v, LinearSpace w
+                     , Scalar u ~ s, Scalar v ~ s, Scalar w ~ s
+                     , Show (LinearMap s u v), Show (LinearMap s u w) )
+           => Show (LinearMap s u (v,w)) where
+  showsPrec p (LinearMap m)
+        = showParen (p>6)
+            (showsPrec 6 (LinearMap mv :: LinearMap s u v)
+                         . (" &&& "++) . showsPrec 6 (LinearMap mw :: LinearMap s u w))
+   where (mv, mw) = sepBlocks m
 
 instance Category (LinearMap s) where
   type Object (LinearMap s) v = (LinearSpace v, Scalar v ~ s)
@@ -124,10 +183,13 @@ instance LinearSpace ℝ where
   data ℝ -→ w = RealVect w
   linearId = RealVect 1
   zeroMapping = RealVect zeroV
+  scaleLinearMap μ (RealVect v) = RealVect $ μ *^ v
   addLinearMaps (RealVect v) (RealVect w) = RealVect $ v ^+^ w
   negateLinearMap (RealVect w) = RealVect $ negateV w
   linearCoFst = RealVect (1, zeroV)
   linearCoSnd = RealVect (zeroV, 1)
+  fstBlock (RealVect (u, v)) = RealVect u
+  sndBlock (RealVect (u, v)) = RealVect v
   fanoutBlocks (RealVect v) (RealVect w) = RealVect (v,w)
   firstBlock (RealVect v) = RealVect (v,zeroV)
   secondBlock (RealVect w) = RealVect (zeroV,w)
@@ -139,6 +201,8 @@ instance ∀ u v . (LinearSpace u, LinearSpace v, Scalar u ~ Scalar v)
   data (u,v) -→ w = CoDirectSum !(u-→w) !(v-→w)
   linearId = CoDirectSum linearCoFst linearCoSnd
   zeroMapping = CoDirectSum zeroMapping zeroMapping
+  scaleLinearMap μ (CoDirectSum fu fv)
+      = CoDirectSum (scaleLinearMap μ fu) (scaleLinearMap μ fv)
   addLinearMaps (CoDirectSum fu fv) (CoDirectSum fu' fv')
       = CoDirectSum (addLinearMaps fu fu') (addLinearMaps fv fv')
   negateLinearMap (CoDirectSum fu fv)
@@ -147,6 +211,11 @@ instance ∀ u v . (LinearSpace u, LinearSpace v, Scalar u ~ Scalar v)
                             (composeLinear linearCoFst linearCoSnd)
   linearCoSnd = CoDirectSum (composeLinear linearCoSnd linearCoFst)
                             (composeLinear linearCoSnd linearCoSnd)
+  fstBlock (CoDirectSum fu fv) = CoDirectSum (fstBlock fu) (fstBlock fv)
+  sndBlock (CoDirectSum fu fv) = CoDirectSum (sndBlock fu) (sndBlock fv)
+  sepBlocks (CoDirectSum fu fv) = (CoDirectSum fuw fvw, CoDirectSum fux fvx)
+   where (fuw,fux) = sepBlocks fu
+         (fvw,fvx) = sepBlocks fv
   fanoutBlocks (CoDirectSum fu fv) (CoDirectSum gu gv)
               = CoDirectSum (fanoutBlocks fu gu) (fanoutBlocks fv gv)
   firstBlock (CoDirectSum fu fv) = CoDirectSum (firstBlock fu) (firstBlock fv)
