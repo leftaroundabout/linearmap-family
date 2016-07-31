@@ -16,6 +16,7 @@
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE UnicodeSyntax              #-}
+{-# LANGUAGE TupleSections              #-}
 
 module Math.LinearMap.TypeFamily.Class (LinearSpace (..)) where
 
@@ -27,6 +28,11 @@ import qualified Prelude as Hask
 import Control.Category.Constrained.Prelude
 import Control.Arrow.Constrained
 
+import Data.Tree (Tree(..), Forest)
+import Data.List (sortBy)
+import qualified Data.Set as Set
+import Data.Set (Set)
+import Data.Ord (comparing)
 
 type Num' s = (Num s, VectorSpace s, Scalar s ~ s)
 
@@ -226,62 +232,49 @@ instance ∀ u v . (LinearSpace u, LinearSpace v, Scalar u ~ Scalar v)
   composeLinear f (CoDirectSum fu fv)
         = CoDirectSum (composeLinear f fu) (composeLinear f fv)
 
+lfstBlock :: ( LinearSpace u, LinearSpace v, LinearSpace w
+             , Scalar u ~ Scalar v, Scalar v ~ Scalar w )
+          => (u-→w) -> (u,v)-→w
+lfstBlock f = CoDirectSum f zeroMapping
+lsndBlock :: ( LinearSpace u, LinearSpace v, LinearSpace w
+            , Scalar u ~ Scalar v, Scalar v ~ Scalar w )
+          => (v-→w) -> (u,v)-→w
+lsndBlock f = CoDirectSum zeroMapping f
+
 type DualSpace v = v -→ Scalar v
 
 type Fractional' s = (Fractional s, Eq s, VectorSpace s, Scalar s ~ s)
 
 class (LinearSpace v, LinearSpace (Scalar v)) => SemiInner v where
-  {-# MINIMAL orthogonalise | orthogonalPart #-} 
---   -- | Contrary to common belief, /vector division/ is actually quite a useful
---   --   operation and in fact more general than the ubiquitous inner product.
---   --   Like scalar division this is partial, i.e. @v ^/^ zeroV@ is undefined.
---   --   Laws for @v,w ≠ zeroV@:
---   --   @
---   --   v ^/^ v ≡ 1
---   --   @
---   --   @
---   --   (ν*^u + μ*^v) ^/^ w ≡ ν * (u^/w) + μ * (v^/^w)
---   --   @
---   --   On inner-product spaces, @v^/^w ≡ (v<.>w)/(w<.>w)@.
---   (^/^) :: v -> v -> Scalar v
---   v^/^v₁ = applyLinear (recipV v₁) v
--- 
--- -- (v ^/^ w) ⋅ (w ^/^ v)
--- --   = ⟨v|w)/⟨w|w⟩ ⋅ ⟨w|v⟩/⟨v|v⟩
--- -- (v ^/^ w) / (w ^/^ v)
--- --   = ⟨v|w)/⟨w|w⟩ / ⟨w|v⟩/⟨v|v⟩
--- --   = ⟨v|v)/⟨w|w⟩
---   
---   recipV :: v -> DualSpace v
-  
-  -- | If @(u',v') = orthogonalise u v@, then
-  --   @
-  --   u' ^+^ v' ≡ u ^+^ v
-  --   @
-  --   @
-  --   u' ^/^ v' ≡ 0
-  --   @
-  orthogonalise :: v -> v -> (v,v)
-  orthogonalise u v = (u^+^v^-^v', v')
-   where v' = orthogonalPart u v
-  orthogonalPart :: v -> v -> v
-  orthogonalPart u v = snd (orthogonalise u v)
+  dualBasis :: [(Int,v)] -> Forest (Int, DualSpace v)
+--  coDualBasis :: [(i,DualSpace v)] -> [(i,v)]
 
 instance (Fractional' s, SemiInner s) => SemiInner (ZeroDim s) where
---   Origin ^/^ Origin = 0  -- Not really sensible of course; actually (^/^) is
---                          -- /always undefined/ on 'ZeroDim' space. 1 might be
---                          -- a more reasonable result, but it would disagree
---                          -- with the 'recipV' induced one.
---   recipV Origin = CoOrigin
-  orthogonalise Origin Origin = (Origin, Origin)
+  dualBasis _ = []
 
 instance SemiInner ℝ where
 --   (^/^) = (/)
 --   recipV = RealVect . recip
-  orthogonalise n m = (n+m, 0)
+  dualBasis = fmap ((`Node`[]) . second (RealVect . recip))
+                . sortBy (comparing $ abs . snd)
 
 instance (SemiInner u, SemiInner v, Scalar u ~ Scalar v) => SemiInner (u,v) where
-  orthogonalise (u₀,v₀) (u₁,v₁) = ((u₀^+^u₁, zeroV), (zeroV, v₀^+^v₁))
+  dualBasis = fmap (\(i,(u,v))->((i,u),(i,v))) >>> unzip
+              >>> dualBasis *** dualBasis >>> combineBaseis False (mempty :: Set Int)
+   where combineBaseis _ forbidden (bu, []) = combineBaseis False forbidden (bu,[])
+         combineBaseis _ forbidden ([], bv) = combineBaseis True forbidden ([],bv)
+         combineBaseis False forbidden (Node (i,du) bu' : abu, bv)
+            | i`Set.member`forbidden  = combineBaseis False forbidden (abu, bv)
+            | otherwise
+                 = Node (i, lfstBlock du)
+                        (combineBaseis True (Set.insert i forbidden) (bu', bv))
+                       : combineBaseis False forbidden (abu, bv)
+         combineBaseis True forbidden (bu, Node (i,dv) bv' : abv)
+            | i`Set.member`forbidden  = combineBaseis True forbidden (bu, abv)
+            | otherwise
+                 = Node (i, lsndBlock dv)
+                        (combineBaseis False (Set.insert i forbidden) (bu, bv'))
+                       : combineBaseis True forbidden (bu, abv)
   
 (^/^) :: (InnerSpace v, Eq (Scalar v), Fractional (Scalar v)) => v -> v -> Scalar v
 v^/^w = case (v<.>w) of
