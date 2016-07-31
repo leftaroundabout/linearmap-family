@@ -228,7 +228,7 @@ instance ∀ u v . (LinearSpace u, LinearSpace v, Scalar u ~ Scalar v)
 
 type DualSpace v = v -→ Scalar v
 
-type Fractional' s = (Fractional s, VectorSpace s, Scalar s ~ s)
+type Fractional' s = (Fractional s, Eq s, VectorSpace s, Scalar s ~ s)
 
 class (LinearSpace v, LinearSpace (Scalar v)) => SemiInner v where
   {-# MINIMAL orthogonalise | orthogonalPart #-} 
@@ -283,6 +283,10 @@ instance SemiInner ℝ where
 instance (SemiInner u, SemiInner v, Scalar u ~ Scalar v) => SemiInner (u,v) where
   orthogonalise (u₀,v₀) (u₁,v₁) = ((u₀^+^u₁, zeroV), (zeroV, v₀^+^v₁))
   
+(^/^) :: (InnerSpace v, Eq (Scalar v), Fractional (Scalar v)) => v -> v -> Scalar v
+v^/^w = case (v<.>w) of
+   0 -> 0
+   vw -> vw / (w<.>w)
 
 class LinearSpace v => LeastSquares v where
   splitOffDependent :: v -> v -> (Scalar v, v)
@@ -298,7 +302,8 @@ class LinearSpace v => LeastSquares v where
             => (w-→v) -> v->[w]
   leastSquareApproach m
       = \v -> iterate (\w -> let v' = applyLinear m w
-                             in w ^+^ preLeastSquareSolve m (v^-^v') ) zeroV
+                             in w ^+^ preLeastSquareSolve m (v^-^v') )
+                  $ preLeastSquareSolve m v
    where plss = preLeastSquareSolve m
   pseudoInverse :: (LeastSquares w, Scalar w~Scalar v)
             => (w-→v) -> v-→w
@@ -321,8 +326,8 @@ instance LeastSquares ℝ where
   pseudoInverse m = RealVect $ u ^/ νu
    where (u,νu) = coRiesz m
   
-instance ( LeastSquares u, SemiInner u, LeastSquares v, SemiInner v
-         , Scalar u ~ Scalar v, Fractional (Scalar v) )
+instance ( LeastSquares u, InnerSpace u, LeastSquares v, InnerSpace v
+         , Scalar u ~ Scalar v, Fractional' (Scalar v) )
             => LeastSquares (u,v) where
   -- splitOffDependent (u,v) (u₁,v₁) = case (splitOffDependent u u₁, spl0
   nullSpaceProject f = nullSpaceProject fu . nullSpaceProject fv
@@ -330,12 +335,14 @@ instance ( LeastSquares u, SemiInner u, LeastSquares v, SemiInner v
   coRiesz (CoDirectSum fu fv) = ((u,v), νu+νv)
    where (u,νu) = coRiesz fu
          (v,νv) = coRiesz fv
-  preLeastSquareSolve m = \(u,v) -> mdv0sp (mduLss u) ^+^ mdu0sp (mdvLss v)
+  preLeastSquareSolve m = plss
    where (mdu,mdv) = sepBlocks m
          mduLss = preLeastSquareSolve mdu
          mdvLss = preLeastSquareSolve mdv
          mdu0sp = nullSpaceProject mdu
          mdv0sp = nullSpaceProject mdv
+         plss (u,v) = w₀ ^* ((u,v)^/^applyLinear m w₀)
+          where w₀ = mdv0sp (mduLss u) ^+^ mdu0sp (mdvLss v)
   -- pseudoInverse m = RealVect $ coRiesz m
 
 infixr 0 \$
