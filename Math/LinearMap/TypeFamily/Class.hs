@@ -289,8 +289,17 @@ class LinearSpace v => LeastSquares v where
   coRiesz :: DualSpace v -> (v, Scalar v)
   nullSpaceProject :: (LeastSquares w, Scalar w~Scalar v)
             => (w-→v) -> w->w
+  preLeastSquareSolve :: (LeastSquares w, Scalar w~Scalar v)
+            => (w-→v) -> v->w
+  preLeastSquareSolve = leastSquareSolve
   leastSquareSolve :: (LeastSquares w, Scalar w~Scalar v)
             => (w-→v) -> v->w
+  leastSquareApproach :: (LeastSquares w, Scalar w~Scalar v)
+            => (w-→v) -> v->[w]
+  leastSquareApproach m
+      = \v -> iterate (\w -> let v' = applyLinear m w
+                             in w ^+^ preLeastSquareSolve m (v^-^v') ) zeroV
+   where plss = preLeastSquareSolve m
   pseudoInverse :: (LeastSquares w, Scalar w~Scalar v)
             => (w-→v) -> v-→w
 
@@ -321,15 +330,12 @@ instance ( LeastSquares u, SemiInner u, LeastSquares v, SemiInner v
   coRiesz (CoDirectSum fu fv) = ((u,v), νu+νv)
    where (u,νu) = coRiesz fu
          (v,νv) = coRiesz fv
-  leastSquareSolve m (u,v) = x₀u ^+^ x₀v ^+^ correction ^* 1
+  preLeastSquareSolve m = \(u,v) -> mdv0sp (mduLss u) ^+^ mdu0sp (mdvLss v)
    where (mdu,mdv) = sepBlocks m
-         x₀u₀ = leastSquareSolve mdu u
-         x₀v₀ = leastSquareSolve mdv v
-         x₀u = nullSpaceProject mdv x₀u₀
-         x₀v = nullSpaceProject mdu x₀v₀
-         (ru,rv) = (u,v) ^-^ applyLinear m (x₀v ^+^ x₀u)
-         correction = nullSpaceProject mdv (leastSquareSolve mdu ru)
-                  ^+^ nullSpaceProject mdu (leastSquareSolve mdv rv)
+         mduLss = preLeastSquareSolve mdu
+         mdvLss = preLeastSquareSolve mdv
+         mdu0sp = nullSpaceProject mdu
+         mdv0sp = nullSpaceProject mdv
   -- pseudoInverse m = RealVect $ coRiesz m
 
 infixr 0 \$
