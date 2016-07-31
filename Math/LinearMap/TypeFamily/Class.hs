@@ -176,6 +176,8 @@ instance Num' s => PreArrow (LinearMap s) where
   terminal = zeroV
   fst = LinearMap $ CoDirectSum linearId zeroMapping
   snd = LinearMap $ CoDirectSum zeroMapping linearId
+instance Num' s => EnhancedCat (->) (LinearMap s) where
+  arr (LinearMap m) = applyLinear m
 
 type ℝ = Double
 
@@ -285,6 +287,8 @@ instance (SemiInner u, SemiInner v, Scalar u ~ Scalar v) => SemiInner (u,v) wher
 class LinearSpace v => LeastSquares v where
   splitOffDependent :: v -> v -> (Scalar v, v)
   coRiesz :: DualSpace v -> (v, Scalar v)
+  nullSpaceProject :: (LeastSquares w, Scalar w~Scalar v)
+            => (w-→v) -> w->w
   leastSquareSolve :: (LeastSquares w, Scalar w~Scalar v)
             => (w-→v) -> v->w
   pseudoInverse :: (LeastSquares w, Scalar w~Scalar v)
@@ -293,6 +297,7 @@ class LinearSpace v => LeastSquares v where
 
 instance Num' s => LeastSquares (ZeroDim s) where
   splitOffDependent Origin Origin = (1, Origin)
+  nullSpaceProject _ _ = zeroV
   coRiesz CoOrigin = (Origin, 0)
   leastSquareSolve _ _ = zeroV
   pseudoInverse _ = zeroMapping
@@ -300,26 +305,36 @@ instance Num' s => LeastSquares (ZeroDim s) where
 instance LeastSquares ℝ where
   splitOffDependent r s = (r/s, 0)
   coRiesz (RealVect r) = (r, r^2)
+  nullSpaceProject f = \v -> v ^-^ f' ^* (applyLinear f v / νf)
+   where (f',νf) = coRiesz f
   leastSquareSolve m μ = (μ/νu) *^ u
    where (u,νu) = coRiesz m
   pseudoInverse m = RealVect $ u ^/ νu
    where (u,νu) = coRiesz m
   
 instance ( LeastSquares u, SemiInner u, LeastSquares v, SemiInner v
-         , Scalar u ~ Scalar v )
+         , Scalar u ~ Scalar v, Fractional (Scalar v) )
             => LeastSquares (u,v) where
   -- splitOffDependent (u,v) (u₁,v₁) = case (splitOffDependent u u₁, spl0
+  nullSpaceProject f = nullSpaceProject fu . nullSpaceProject fv
+   where (fu, fv) = sepBlocks f
   coRiesz (CoDirectSum fu fv) = ((u,v), νu+νv)
    where (u,νu) = coRiesz fu
          (v,νv) = coRiesz fv
-  leastSquareSolve m (u,v) = m'u ^+^ m'v ^-^ m'v'u ^-^ m'u'v
-   where mdu = composeLinear (CoDirectSum linearId zeroMapping) m
-         mdv = composeLinear (CoDirectSum zeroMapping linearId) m
-         m'u = leastSquareSolve mdu u
-         m'v = leastSquareSolve mdv v
-         (u'v,_) = applyLinear m m'v
-         (_,v'u) = applyLinear m m'u
-         m'u'v = leastSquareSolve mdu u'v
-         m'v'u = leastSquareSolve mdv v'u
+  leastSquareSolve m (u,v) = x₀u ^+^ x₀v ^+^ correction ^* 1
+   where (mdu,mdv) = sepBlocks m
+         x₀u₀ = leastSquareSolve mdu u
+         x₀v₀ = leastSquareSolve mdv v
+         x₀u = nullSpaceProject mdv x₀u₀
+         x₀v = nullSpaceProject mdu x₀v₀
+         (ru,rv) = (u,v) ^-^ applyLinear m (x₀v ^+^ x₀u)
+         correction = nullSpaceProject mdv (leastSquareSolve mdu ru)
+                  ^+^ nullSpaceProject mdu (leastSquareSolve mdv rv)
   -- pseudoInverse m = RealVect $ coRiesz m
+
+infixr 0 \$
+
+(\$) :: (LeastSquares u, LeastSquares v, Scalar u ~ Scalar v)
+          => LinearMap s u v -> v -> u
+LinearMap m \$ v = leastSquareSolve m v
     
