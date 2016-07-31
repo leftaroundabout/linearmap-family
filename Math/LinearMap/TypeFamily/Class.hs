@@ -29,7 +29,7 @@ import Control.Category.Constrained.Prelude
 import Control.Arrow.Constrained
 
 import Data.Tree (Tree(..), Forest)
-import Data.List (sortBy)
+import Data.List (sortBy, foldl')
 import qualified Data.Set as Set
 import Data.Set (Set)
 import Data.Ord (comparing)
@@ -99,6 +99,7 @@ instance Num' s => LinearSpace (ZeroDim s) where
   negateLinearMap CoOrigin = CoOrigin
   scaleLinearMap _ CoOrigin = CoOrigin
   addLinearMaps CoOrigin CoOrigin = CoOrigin
+  subtractLinearMaps CoOrigin CoOrigin = CoOrigin
   linearCoFst = CoOrigin
   linearCoSnd = CoOrigin
   fstBlock CoOrigin = CoOrigin
@@ -193,6 +194,7 @@ instance LinearSpace ℝ where
   zeroMapping = RealVect zeroV
   scaleLinearMap μ (RealVect v) = RealVect $ μ *^ v
   addLinearMaps (RealVect v) (RealVect w) = RealVect $ v ^+^ w
+  subtractLinearMaps (RealVect v) (RealVect w) = RealVect $ v ^-^ w
   negateLinearMap (RealVect w) = RealVect $ negateV w
   linearCoFst = RealVect (1, zeroV)
   linearCoSnd = RealVect (zeroV, 1)
@@ -213,6 +215,8 @@ instance ∀ u v . (LinearSpace u, LinearSpace v, Scalar u ~ Scalar v)
       = CoDirectSum (scaleLinearMap μ fu) (scaleLinearMap μ fv)
   addLinearMaps (CoDirectSum fu fv) (CoDirectSum fu' fv')
       = CoDirectSum (addLinearMaps fu fu') (addLinearMaps fv fv')
+  subtractLinearMaps (CoDirectSum fu fv) (CoDirectSum fu' fv')
+      = CoDirectSum (subtractLinearMaps fu fu') (subtractLinearMaps fv fv')
   negateLinearMap (CoDirectSum fu fv)
       = CoDirectSum (negateLinearMap fu) (negateLinearMap fv)
   linearCoFst = CoDirectSum (composeLinear linearCoFst linearCoFst)
@@ -241,28 +245,49 @@ lsndBlock :: ( LinearSpace u, LinearSpace v, LinearSpace w
           => (v-→w) -> (u,v)-→w
 lsndBlock f = CoDirectSum zeroMapping f
 
-type DualSpace v = v -→ Scalar v
+type DualSpace v = LinearMap (Scalar v) v (Scalar v)
 
 type Fractional' s = (Fractional s, Eq s, VectorSpace s, Scalar s ~ s)
 
 class (LinearSpace v, LinearSpace (Scalar v)) => SemiInner v where
-  dualBasis :: [(Int,v)] -> Forest (Int, DualSpace v)
+  dualBasisCandidates :: [(Int,v)] -> Forest (Int, v -→ Scalar v)
 --  coDualBasis :: [(i,DualSpace v)] -> [(i,v)]
 
 instance (Fractional' s, SemiInner s) => SemiInner (ZeroDim s) where
-  dualBasis _ = []
+  dualBasisCandidates _ = []
+
+orthonormaliseDuals :: (SemiInner v, Fractional (Scalar v))
+                          => [(v, DualSpace v)] -> [(v,DualSpace v)]
+orthonormaliseDuals [] = []
+orthonormaliseDuals ((v,v'₀):ws) = (v,v') : [(w, w' ^-^ (w'$v)*^v') | (w,w')<-wssys]
+ where wssys = orthonormaliseDuals ws
+       v'₁ = foldl' (\v'i (w,w') -> v'i ^-^ (v'i$w)*^w') v'₀ wssys
+       v' = v'₁ ^/ (v'₁$v)
+
+dualBasis :: (SemiInner v, Fractional (Scalar v)) => [v] -> [DualSpace v]
+dualBasis vs = snd <$> orthonormaliseDuals (zip' vsIxed candidates)
+ where zip' ((i,v):vs) ((j,v'):ds)
+        | i<j   = zip' vs ((j,v'):ds)
+        | i==j  = (v,v') : zip' vs ds
+       zip' _ _ = []
+       candidates = map (second LinearMap) . sortBy (comparing fst) . findBest
+                             $ dualBasisCandidates vsIxed
+        where findBest [] = []
+              findBest (Node iv' bv' : _) = iv' : findBest bv'
+       vsIxed = zip [0..] vs
 
 instance SemiInner ℝ where
 --   (^/^) = (/)
 --   recipV = RealVect . recip
-  dualBasis = fmap ((`Node`[]) . second (RealVect . recip))
-                . sortBy (comparing $ abs . snd)
+  dualBasisCandidates = fmap ((`Node`[]) . second (RealVect . recip))
+                . sortBy (comparing $ negate . abs . snd)
+                . filter ((/=0) . snd)
 
 instance (SemiInner u, SemiInner v, Scalar u ~ Scalar v) => SemiInner (u,v) where
-  dualBasis = fmap (\(i,(u,v))->((i,u),(i,v))) >>> unzip
-              >>> dualBasis *** dualBasis >>> combineBaseis False (mempty :: Set Int)
-   where combineBaseis _ forbidden (bu, []) = combineBaseis False forbidden (bu,[])
-         combineBaseis _ forbidden ([], bv) = combineBaseis True forbidden ([],bv)
+  dualBasisCandidates = fmap (\(i,(u,v))->((i,u),(i,v))) >>> unzip
+              >>> dualBasisCandidates *** dualBasisCandidates
+              >>> combineBaseis False mempty
+   where combineBaseis _ _ ([], []) = []
          combineBaseis False forbidden (Node (i,du) bu' : abu, bv)
             | i`Set.member`forbidden  = combineBaseis False forbidden (abu, bv)
             | otherwise
@@ -275,6 +300,8 @@ instance (SemiInner u, SemiInner v, Scalar u ~ Scalar v) => SemiInner (u,v) wher
                  = Node (i, lsndBlock dv)
                         (combineBaseis False (Set.insert i forbidden) (bu, bv'))
                        : combineBaseis True forbidden (bu, abv)
+         combineBaseis _ forbidden (bu, []) = combineBaseis False forbidden (bu,[])
+         combineBaseis _ forbidden ([], bv) = combineBaseis True forbidden ([],bv)
   
 (^/^) :: (InnerSpace v, Eq (Scalar v), Fractional (Scalar v)) => v -> v -> Scalar v
 v^/^w = case (v<.>w) of
@@ -283,7 +310,7 @@ v^/^w = case (v<.>w) of
 
 class LinearSpace v => LeastSquares v where
   splitOffDependent :: v -> v -> (Scalar v, v)
-  coRiesz :: DualSpace v -> (v, Scalar v)
+  coRiesz :: (v -→ Scalar v) -> (v, Scalar v)
   nullSpaceProject :: (LeastSquares w, Scalar w~Scalar v)
             => (w-→v) -> w->w
   preLeastSquareSolve :: (LeastSquares w, Scalar w~Scalar v)
