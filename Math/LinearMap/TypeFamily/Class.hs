@@ -34,6 +34,7 @@ import Data.List (sortBy, foldl')
 import qualified Data.Set as Set
 import Data.Set (Set)
 import Data.Ord (comparing)
+import Data.List (maximumBy)
 
 type Num' s = (Num s, VectorSpace s, Scalar s ~ s)
 
@@ -271,12 +272,23 @@ cartesianDualBasisCandidates
                         --   the functional list.
      -> ([(Int,v)] -> Forest (Int, v -→ Scalar v))
                         -- ^ Suitable definition of 'dualBasisCandidates'.
-cartesianDualBasisCandidates dvs abss vcas = go sorted
- where sorted = fst <$> sortBy (comparing $ negate . snd)
-                               [ ((i,j), av) | (i,v)<-vcas, (j,av)<-zip jfus $ abss v ]
-       go ((i,j):scs) = Node (i, dvs!!j) (go [(i',j') | (i',j')<-scs, i'/=i, j'/=j])
-                                        : go [(i',j') | (i',j')<-scs, i'/=i]
-       jfus = [0 .. length dvs-1]
+cartesianDualBasisCandidates dvs abss vcas = go 0 sorted
+ where sorted = sortBy (comparing $ negate . snd . snd)
+                       [ (i, (av, maximum av)) | (i,v)<-vcas, let av = abss v ]
+       go k ((i,(av,_)):scs)
+          | k<n   = Node (i, dv) (go (k+1) [(i',(zeroAt j av',m)) | (i',(av',m))<-scs])
+                                : go k scs
+          | otherwise = []
+        where (j,_) = maximumBy (comparing snd) $ zip jfus av
+              dv = dvs !! j
+       
+       jfus = [0 .. n-1]
+       n = length dvs
+       
+       zeroAt :: Int -> [ℝ] -> [ℝ]
+       zeroAt _ [] = []
+       zeroAt 0 (_:l) = (-1/0):l
+       zeroAt j (e:l) = e : zeroAt (j-1) l
 
 instance (Fractional' s, SemiInner s) => SemiInner (ZeroDim s) where
   dualBasisCandidates _ = []
