@@ -17,6 +17,7 @@
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE UnicodeSyntax              #-}
 {-# LANGUAGE TupleSections              #-}
+{-# LANGUAGE StandaloneDeriving         #-}
 
 module Math.LinearMap.TypeFamily.Class (LinearSpace (..)) where
 
@@ -143,13 +144,13 @@ LinearMap m ⊕ LinearMap n = LinearMap $ CoDirectSum m n
 (>+<) = (⊕)
 
 instance Show (LinearMap ℝ ℝ ℝ) where
-  show (LinearMap (RealVect n)) = show n
+  showsPrec p (LinearMap (RealVect n)) = showsPrec p n
 instance ∀ u v . (Show (LinearMap ℝ u ℝ), Show (LinearMap ℝ v ℝ))
            => Show (LinearMap ℝ (u,v) ℝ) where
   showsPrec p (LinearMap (CoDirectSum m n))
         = showParen (p>6)
             (showsPrec 6 (LinearMap m :: LinearMap ℝ u ℝ)
-                         . ("⊕"++) . showsPrec 6 (LinearMap n :: LinearMap ℝ v ℝ))
+                         . ("⊕"++) . showsPrec 7 (LinearMap n :: LinearMap ℝ v ℝ))
 instance ∀ s u v w . ( LinearSpace u, LinearSpace v, LinearSpace w
                      , Scalar u ~ s, Scalar v ~ s, Scalar w ~ s
                      , Show (LinearMap s u v), Show (LinearMap s u w) )
@@ -308,66 +309,68 @@ v^/^w = case (v<.>w) of
    0 -> 0
    vw -> vw / (w<.>w)
 
-class LinearSpace v => LeastSquares v where
-  splitOffDependent :: v -> v -> (Scalar v, v)
-  coRiesz :: (v -→ Scalar v) -> (v, Scalar v)
-  nullSpaceProject :: (LeastSquares w, Scalar w~Scalar v)
-            => (w-→v) -> w->w
-  preLeastSquareSolve :: (LeastSquares w, Scalar w~Scalar v)
-            => (w-→v) -> v->w
-  preLeastSquareSolve = leastSquareSolve
-  leastSquareSolve :: (LeastSquares w, Scalar w~Scalar v)
-            => (w-→v) -> v->w
-  leastSquareApproach :: (LeastSquares w, Scalar w~Scalar v)
-            => (w-→v) -> v->[w]
-  leastSquareApproach m
-      = \v -> iterate (\w -> let v' = applyLinear m w
-                             in w ^+^ preLeastSquareSolve m (v^-^v') )
-                  $ preLeastSquareSolve m v
-   where plss = preLeastSquareSolve m
-  pseudoInverse :: (LeastSquares w, Scalar w~Scalar v)
-            => (w-→v) -> v-→w
+class (LinearSpace v, LinearSpace (Scalar v)) => FiniteDimensional v where
+  -- | For spaces with a canonical finite basis, this need not contain any
+  --   information.
+  data EntireBasis v :: *
+  
+  -- | Split up a linear map in “column vectors” WRT some suitable basis.
+  decomposeLinMap :: (v-→w) -> (EntireBasis v, [w]->[w])
+  
+  recomposeEntire :: EntireBasis v -> [Scalar v] -> (v, [Scalar v])
+  
+  recomposeContraLinMap :: (LinearSpace w, Scalar w ~ Scalar v, Hask.Functor f)
+           => (f (Scalar w) -> w) -> f (DualSpace v) -> v-→w
+  
 
 
-instance Num' s => LeastSquares (ZeroDim s) where
-  splitOffDependent Origin Origin = (1, Origin)
-  nullSpaceProject _ _ = zeroV
-  coRiesz CoOrigin = (Origin, 0)
-  leastSquareSolve _ _ = zeroV
-  pseudoInverse _ = zeroMapping
+instance (Num' s, LinearSpace s) => FiniteDimensional (ZeroDim s) where
+  data EntireBasis (ZeroDim s) = ZeroBasis
+  recomposeEntire ZeroBasis l = (Origin, l)
+  decomposeLinMap _ = (ZeroBasis, id)
+  recomposeContraLinMap _ _ = CoOrigin
   
-instance LeastSquares ℝ where
-  splitOffDependent r s = (r/s, 0)
-  coRiesz (RealVect r) = (r, r^2)
-  nullSpaceProject f = \v -> v ^-^ f' ^* (applyLinear f v / νf)
-   where (f',νf) = coRiesz f
-  leastSquareSolve m μ = (μ/νu) *^ u
-   where (u,νu) = coRiesz m
-  pseudoInverse m = RealVect $ u ^/ νu
-   where (u,νu) = coRiesz m
+instance FiniteDimensional ℝ where
+  data EntireBasis ℝ = RealsBasis
+  recomposeEntire RealsBasis [] = (0, [])
+  recomposeEntire RealsBasis (μ:cs) = (μ, cs)
+  decomposeLinMap (RealVect v) = (RealsBasis, (v:))
+  recomposeContraLinMap fw = RealVect . fw . fmap ($1)
+
+deriving instance Show (EntireBasis ℝ)
   
-instance ( LeastSquares u, InnerSpace u, LeastSquares v, InnerSpace v
+instance ( FiniteDimensional u, InnerSpace u, FiniteDimensional v, InnerSpace v
          , Scalar u ~ Scalar v, Fractional' (Scalar v) )
-            => LeastSquares (u,v) where
-  -- splitOffDependent (u,v) (u₁,v₁) = case (splitOffDependent u u₁, spl0
-  nullSpaceProject f = nullSpaceProject fu . nullSpaceProject fv
-   where (fu, fv) = sepBlocks f
-  coRiesz (CoDirectSum fu fv) = ((u,v), νu+νv)
-   where (u,νu) = coRiesz fu
-         (v,νv) = coRiesz fv
-  preLeastSquareSolve m = plss
-   where (mdu,mdv) = sepBlocks m
-         mduLss = preLeastSquareSolve mdu
-         mdvLss = preLeastSquareSolve mdv
-         mdu0sp = nullSpaceProject mdu
-         mdv0sp = nullSpaceProject mdv
-         plss (u,v) = w₀ ^* ((u,v)^/^applyLinear m w₀)
-          where w₀ = mdv0sp (mduLss u) ^+^ mdu0sp (mdvLss v)
-  -- pseudoInverse m = RealVect $ coRiesz m
+            => FiniteDimensional (u,v) where
+  data EntireBasis (u,v) = TupleBasis !(EntireBasis u) !(EntireBasis v)
+  decomposeLinMap (CoDirectSum fu fv) = case (decomposeLinMap fu, decomposeLinMap fv) of
+         ((bu, du), (bv, dv)) -> (TupleBasis bu bv, du . dv)
+  recomposeEntire (TupleBasis bu bv) coefs = case recomposeEntire bu coefs of
+                        (u, coefs') -> case recomposeEntire bv coefs' of
+                         (v, coefs'') -> ((u,v), coefs'')
+  recomposeContraLinMap fw dds
+         = CoDirectSum (recomposeContraLinMap fw 
+                         $ fmap (\(LinearMap (CoDirectSum v' _)) -> LinearMap v') dds)
+                       (recomposeContraLinMap fw
+                         $ fmap (\(LinearMap (CoDirectSum _ v')) -> LinearMap v') dds)
+  
+deriving instance (Show (EntireBasis u), Show (EntireBasis v))
+                    => Show (EntireBasis (u,v))
 
 infixr 0 \$
 
-(\$) :: (LeastSquares u, LeastSquares v, Scalar u ~ Scalar v)
+(\$) :: ( FiniteDimensional u, FiniteDimensional v, SemiInner v
+        , Scalar u ~ Scalar v, Fractional (Scalar v) )
           => LinearMap s u v -> v -> u
-LinearMap m \$ v = leastSquareSolve m v
+(\$) (LinearMap m) = fst . \v -> recomposeEntire mbas [v' $ v | v' <- v's]
+ where v's = dualBasis $ mdecomp []
+       (mbas, mdecomp) = decomposeLinMap m
     
+
+pseudoInverse :: ( FiniteDimensional u, FiniteDimensional v, SemiInner v
+        , Scalar u ~ Scalar v, Fractional (Scalar v) )
+          => LinearMap s u v -> LinearMap s v u
+pseudoInverse (LinearMap m) = LinearMap mi
+ where mi = recomposeContraLinMap (fst . recomposeEntire mbas) v's
+       v's = dualBasis $ mdecomp []
+       (mbas, mdecomp) = decomposeLinMap m
