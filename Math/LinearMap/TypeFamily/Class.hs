@@ -251,8 +251,32 @@ type DualSpace v = LinearMap (Scalar v) v (Scalar v)
 type Fractional' s = (Fractional s, Eq s, VectorSpace s, Scalar s ~ s)
 
 class (LinearSpace v, LinearSpace (Scalar v)) => SemiInner v where
+  -- | Lazily enumerate choices of a basis of functionals that can be made dual
+  --   to the given vectors, in order of preference (which roughly means, /large in
+  --   the normal direction/. (I.e., if the vector @𝑣@ is assigned early to the
+  --   dual vector @𝑣'@, then @𝑣' $ 𝑣$ should be large and all the other products
+  --   comparably small. The purpose is that we should be able to make this basis
+  --   orthonormal with a ~Gaussian-elimination approach, in a way that stays
+  --   numerically stable. It is essentially the choice of a pivot element.)
+  -- 
+  --   For simple finite-dimensional array-vectors, you can easily define this
+  --   method using 'cartesianDualBasisCandidates'.
   dualBasisCandidates :: [(Int,v)] -> Forest (Int, v -→ Scalar v)
 --  coDualBasis :: [(i,DualSpace v)] -> [(i,v)]
+
+cartesianDualBasisCandidates
+     :: [v-→Scalar v]   -- ^ Set of canonical basis functionals.
+     -> (v -> [ℝ])      -- ^ Decompose a vector in /absolute value/ components.
+                        --   the list indices should correspond to those in
+                        --   the functional list.
+     -> ([(Int,v)] -> Forest (Int, v -→ Scalar v))
+                        -- ^ Suitable definition of 'dualBasisCandidates'.
+cartesianDualBasisCandidates dvs abss vcas = go sorted
+ where sorted = fst <$> sortBy (comparing $ negate . snd)
+                               [ ((i,j), av) | (i,v)<-vcas, (j,av)<-zip jfus $ abss v ]
+       go ((i,j):scs) = Node (i, dvs!!j) (go [(i',j') | (i',j')<-scs, i'/=i, j'/=j])
+                                        : go [(i',j') | (i',j')<-scs, i'/=i]
+       jfus = [0 .. length dvs-1]
 
 instance (Fractional' s, SemiInner s) => SemiInner (ZeroDim s) where
   dualBasisCandidates _ = []
