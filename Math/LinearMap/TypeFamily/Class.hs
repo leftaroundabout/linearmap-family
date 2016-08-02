@@ -359,7 +359,6 @@ instance (Fractional' s, Ord s, SemiInner s) => SemiInner (V1 s) where
 instance SemiInner (V) where {      \
   dualBasisCandidates                \
      = cartesianDualBasisCandidates (LV <$> Mat.basis) (fmap sabs . toList) }
-
 FreeSemiInner(V2 ℝ, FromV2, abs)
 FreeSemiInner(V3 ℝ, FromV3, abs)
 FreeSemiInner(V4 ℝ, FromV4, abs)
@@ -410,6 +409,12 @@ instance (Num' s, LinearSpace s) => FiniteDimensional (ZeroDim s) where
   decomposeLinMap _ = (ZeroBasis, id)
   recomposeContraLinMap _ _ = CoOrigin
   
+instance (Num' s, LinearSpace s) => FiniteDimensional (V0 s) where
+  data EntireBasis (V0 s) = V0Basis
+  recomposeEntire V0Basis l = (V0, l)
+  decomposeLinMap _ = (V0Basis, id)
+  recomposeContraLinMap _ _ = FromV0 V0
+  
 instance FiniteDimensional ℝ where
   data EntireBasis ℝ = RealsBasis
   recomposeEntire RealsBasis [] = (0, [])
@@ -417,6 +422,19 @@ instance FiniteDimensional ℝ where
   decomposeLinMap (RealVect v) = (RealsBasis, (v:))
   recomposeContraLinMap fw = RealVect . fw . fmap ($1)
 
+#define FreeFiniteDimensional(V, VB, LV, take, give)      \
+instance (Num' s, LinearSpace s)                           \
+            => FiniteDimensional (V s) where {              \
+  data EntireBasis (V s) = VB;                               \
+  recomposeEntire _ (take:cs) = (give, cs);                   \
+  recomposeEntire b cs = recomposeEntire b $ cs ++ [0];        \
+  decomposeLinMap (LV m) = (VB, (toList m ++));                 \
+  recomposeContraLinMap fw mv = LV $ (\v -> fw $ fmap ($v) mv) <$> Mat.identity }
+FreeFiniteDimensional(V1, V1Basis, FromV1, c₀         , V1 c₀         )
+FreeFiniteDimensional(V2, V2Basis, FromV2, c₀:c₁      , V2 c₀ c₁      )
+FreeFiniteDimensional(V3, V3Basis, FromV3, c₀:c₁:c₂   , V3 c₀ c₁ c₂   )
+FreeFiniteDimensional(V4, V4Basis, FromV4, c₀:c₁:c₂:c₃, V4 c₀ c₁ c₂ c₃)
+                                  
 deriving instance Show (EntireBasis ℝ)
   
 instance ( FiniteDimensional u, InnerSpace u, FiniteDimensional v, InnerSpace v
