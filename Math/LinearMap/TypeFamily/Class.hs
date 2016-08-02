@@ -16,6 +16,7 @@
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE UnicodeSyntax              #-}
+{-# LANGUAGE CPP                        #-}
 {-# LANGUAGE TupleSections              #-}
 {-# LANGUAGE StandaloneDeriving         #-}
 
@@ -35,6 +36,10 @@ import qualified Data.Set as Set
 import Data.Set (Set)
 import Data.Ord (comparing)
 import Data.List (maximumBy)
+
+import Data.VectorSpace.Free
+import qualified Linear.Matrix as Mat
+import qualified Linear.Vector as Mat
 
 type Num' s = (Num s, VectorSpace s, Scalar s ~ s)
 
@@ -208,6 +213,30 @@ instance LinearSpace ℝ where
   applyLinear (RealVect w) μ = μ *^ w
   composeLinear f (RealVect w) = RealVect $ applyLinear f w
 
+#define FreeLinearSpace(V, LV)                          \
+instance Num' s => LinearSpace (V s) where {             \
+  data V s -→ w = LV (V w);                               \
+  linearId = LV Mat.identity;                              \
+  zeroMapping = LV $ pure zeroV;                            \
+  addLinearMaps (LV m) (LV n) = LV $ liftA2 (^+^) m n;       \
+  subtractLinearMaps (LV m) (LV n) = LV $ liftA2 (^-^) m n;   \
+  negateLinearMap (LV m) = LV $ fmap negateV m;                \
+  scaleLinearMap μ (LV m) = LV $ fmap (μ*^) m;                  \
+  linearCoFst = LV $ fmap (,zeroV) Mat.identity;                 \
+  linearCoSnd = LV $ fmap (zeroV,) Mat.identity;                  \
+  fstBlock (LV m) = LV $ fmap fst m;                               \
+  sndBlock (LV m) = LV $ fmap snd m;                                \
+  fanoutBlocks (LV m) (LV n) = LV $ liftA2 (,) m n;                  \
+  firstBlock (LV m) = LV $ fmap (,zeroV) m;                           \
+  secondBlock (LV m) = LV $ fmap (zeroV,) m;                           \
+  applyLinear (LV m) v = foldl' (^+^) zeroV $ liftA2 (^*) m v;          \
+  composeLinear f (LV m) = LV $ fmap (applyLinear f) m }
+FreeLinearSpace(V0, FromV0)
+FreeLinearSpace(V1, FromV1)
+FreeLinearSpace(V2, FromV2)
+FreeLinearSpace(V3, FromV3)
+FreeLinearSpace(V4, FromV4)
+  
 instance ∀ u v . (LinearSpace u, LinearSpace v, Scalar u ~ Scalar v)
                        => LinearSpace (u,v) where
   data (u,v) -→ w = CoDirectSum !(u-→w) !(v-→w)
