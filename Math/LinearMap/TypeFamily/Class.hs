@@ -36,6 +36,7 @@ import qualified Data.Set as Set
 import Data.Set (Set)
 import Data.Ord (comparing)
 import Data.List (maximumBy)
+import Data.Foldable (toList)
 
 import Data.VectorSpace.Free
 import qualified Linear.Matrix as Mat
@@ -321,6 +322,8 @@ cartesianDualBasisCandidates dvs abss vcas = go 0 sorted
 
 instance (Fractional' s, SemiInner s) => SemiInner (ZeroDim s) where
   dualBasisCandidates _ = []
+instance (Fractional' s, SemiInner s) => SemiInner (V0 s) where
+  dualBasisCandidates _ = []
 
 orthonormaliseDuals :: (SemiInner v, Fractional (Scalar v))
                           => [(v, DualSpace v)] -> [(v,DualSpace v)]
@@ -343,11 +346,23 @@ dualBasis vs = snd <$> orthonormaliseDuals (zip' vsIxed candidates)
        vsIxed = zip [0..] vs
 
 instance SemiInner ℝ where
---   (^/^) = (/)
---   recipV = RealVect . recip
   dualBasisCandidates = fmap ((`Node`[]) . second (RealVect . recip))
                 . sortBy (comparing $ negate . abs . snd)
                 . filter ((/=0) . snd)
+
+instance (Fractional' s, Ord s, SemiInner s) => SemiInner (V1 s) where
+  dualBasisCandidates = fmap ((`Node`[]) . second (FromV1 . recip))
+                . sortBy (comparing $ negate . abs . snd)
+                . filter ((/=0) . snd)
+
+#define FreeSemiInner(V, LV, sabs) \
+instance SemiInner (V) where {      \
+  dualBasisCandidates                \
+     = cartesianDualBasisCandidates (LV <$> Mat.basis) (fmap sabs . toList) }
+
+FreeSemiInner(V2 ℝ, FromV2, abs)
+FreeSemiInner(V3 ℝ, FromV3, abs)
+FreeSemiInner(V4 ℝ, FromV4, abs)
 
 instance (SemiInner u, SemiInner v, Scalar u ~ Scalar v) => SemiInner (u,v) where
   dualBasisCandidates = fmap (\(i,(u,v))->((i,u),(i,v))) >>> unzip
