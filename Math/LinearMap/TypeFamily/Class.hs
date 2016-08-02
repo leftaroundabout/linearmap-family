@@ -23,6 +23,7 @@
 module Math.LinearMap.TypeFamily.Class (LinearSpace (..)) where
 
 import Data.VectorSpace
+import Data.Basis
 
 import Prelude ()
 import qualified Prelude as Hask
@@ -216,7 +217,7 @@ instance LinearSpace ℝ where
 
 #define FreeLinearSpace(V, LV)                          \
 instance Num' s => LinearSpace (V s) where {             \
-  data V s -→ w = LV (V w);                               \
+  newtype V s -→ w = LV (V w);                            \
   linearId = LV Mat.identity;                              \
   zeroMapping = LV $ pure zeroV;                            \
   addLinearMaps (LV m) (LV n) = LV $ liftA2 (^+^) m n;       \
@@ -401,6 +402,8 @@ class (LinearSpace v, LinearSpace (Scalar v)) => FiniteDimensional v where
   recomposeContraLinMap :: (LinearSpace w, Scalar w ~ Scalar v, Hask.Functor f)
            => (f (Scalar w) -> w) -> f (DualSpace v) -> v-→w
   
+  sampleLinearFunction :: (v -> w) -> v-→w
+  
 
 
 instance (Num' s, LinearSpace s) => FiniteDimensional (ZeroDim s) where
@@ -408,12 +411,14 @@ instance (Num' s, LinearSpace s) => FiniteDimensional (ZeroDim s) where
   recomposeEntire ZeroBasis l = (Origin, l)
   decomposeLinMap _ = (ZeroBasis, id)
   recomposeContraLinMap _ _ = CoOrigin
+  sampleLinearFunction _ = CoOrigin
   
 instance (Num' s, LinearSpace s) => FiniteDimensional (V0 s) where
   data EntireBasis (V0 s) = V0Basis
   recomposeEntire V0Basis l = (V0, l)
   decomposeLinMap _ = (V0Basis, id)
   recomposeContraLinMap _ _ = FromV0 V0
+  sampleLinearFunction _ = FromV0 V0
   
 instance FiniteDimensional ℝ where
   data EntireBasis ℝ = RealsBasis
@@ -421,6 +426,7 @@ instance FiniteDimensional ℝ where
   recomposeEntire RealsBasis (μ:cs) = (μ, cs)
   decomposeLinMap (RealVect v) = (RealsBasis, (v:))
   recomposeContraLinMap fw = RealVect . fw . fmap ($1)
+  sampleLinearFunction f = RealVect $ f 1
 
 #define FreeFiniteDimensional(V, VB, LV, take, give)      \
 instance (Num' s, LinearSpace s)                           \
@@ -429,6 +435,7 @@ instance (Num' s, LinearSpace s)                           \
   recomposeEntire _ (take:cs) = (give, cs);                   \
   recomposeEntire b cs = recomposeEntire b $ cs ++ [0];        \
   decomposeLinMap (LV m) = (VB, (toList m ++));                 \
+  sampleLinearFunction f = LV $ fmap f Mat.identity;             \
   recomposeContraLinMap fw mv = LV $ (\v -> fw $ fmap ($v) mv) <$> Mat.identity }
 FreeFiniteDimensional(V1, V1Basis, FromV1, c₀         , V1 c₀         )
 FreeFiniteDimensional(V2, V2Basis, FromV2, c₀:c₁      , V2 c₀ c₁      )
@@ -451,6 +458,8 @@ instance ( FiniteDimensional u, InnerSpace u, FiniteDimensional v, InnerSpace v
                          $ fmap (\(LinearMap (CoDirectSum v' _)) -> LinearMap v') dds)
                        (recomposeContraLinMap fw
                          $ fmap (\(LinearMap (CoDirectSum _ v')) -> LinearMap v') dds)
+  sampleLinearFunction f = CoDirectSum (sampleLinearFunction $ f . (,zeroV))
+                                       (sampleLinearFunction $ f . (zeroV,))
   
 deriving instance (Show (EntireBasis u), Show (EntireBasis v))
                     => Show (EntireBasis (u,v))
@@ -472,3 +481,52 @@ pseudoInverse (LinearMap m) = LinearMap mi
  where mi = recomposeContraLinMap (fst . recomposeEntire mbas) v's
        v's = dualBasis $ mdecomp []
        (mbas, mdecomp) = decomposeLinMap m
+
+
+riesz :: (FiniteDimensional v, InnerSpace v) => DualSpace v -> v
+riesz (LinearMap dv) = fst . recomposeEntire bas $ compos []
+ where (bas, compos) = decomposeLinMap dv
+
+coRiesz :: (FiniteDimensional v, InnerSpace v) => v -> DualSpace v
+coRiesz v = LinearMap $ sampleLinearFunction (v<.>)
+
+showsPrecAsRiesz :: (FiniteDimensional v, InnerSpace v, Show v)
+                      => Int -> DualSpace v -> ShowS
+showsPrecAsRiesz p dv = showParen (p>9) $ ("coRiesz "++) . showsPrec 10 (riesz dv)
+
+instance Show (LinearMap ℝ (V0 ℝ) ℝ) where showsPrec = showsPrecAsRiesz
+instance Show (LinearMap ℝ (V1 ℝ) ℝ) where showsPrec = showsPrecAsRiesz
+instance Show (LinearMap ℝ (V2 ℝ) ℝ) where showsPrec = showsPrecAsRiesz
+instance Show (LinearMap ℝ (V3 ℝ) ℝ) where showsPrec = showsPrecAsRiesz
+instance Show (LinearMap ℝ (V4 ℝ) ℝ) where showsPrec = showsPrecAsRiesz
+
+
+infixl 7 ×<
+(×<) :: (FiniteDimensional v, InnerSpace v, HasBasis w, Scalar v ~ Scalar w)
+           => Basis w -> v -> LinearMap (Scalar v) v w
+bw ×< v = LinearMap $ sampleLinearFunction (\v' -> recompose [(bw, v<.>v')])
+
+instance Show (LinearMap s v (V0 s)) where
+  show _ = "zeroV"
+instance (FiniteDimensional v, InnerSpace v, Scalar v ~ ℝ, Show v)
+              => Show (LinearMap ℝ v (V1 ℝ)) where
+  showsPrec p m = showParen (p>6) $ ("ex ×< "++) . showsPrec 7 (riesz $ coRiesz (V1 1) . m)
+instance (FiniteDimensional v, InnerSpace v, Scalar v ~ ℝ, Show v)
+              => Show (LinearMap ℝ v (V2 ℝ)) where
+  showsPrec p m = showParen (p>6)
+              $ ("ex×<"++) . showsPrec 7 (riesz $ coRiesz (V2 1 0) . m)
+         . (" ^+^ ey×<"++) . showsPrec 7 (riesz $ coRiesz (V2 0 1) . m)
+instance (FiniteDimensional v, InnerSpace v, Scalar v ~ ℝ, Show v)
+              => Show (LinearMap ℝ v (V3 ℝ)) where
+  showsPrec p m = showParen (p>6)
+              $ ("ex×<"++) . showsPrec 7 (riesz $ coRiesz (V3 1 0 0) . m)
+         . (" ^+^ ey×<"++) . showsPrec 7 (riesz $ coRiesz (V3 0 1 0) . m)
+         . (" ^+^ ez×<"++) . showsPrec 7 (riesz $ coRiesz (V3 0 0 1) . m)
+instance (FiniteDimensional v, InnerSpace v, Scalar v ~ ℝ, Show v)
+              => Show (LinearMap ℝ v (V4 ℝ)) where
+  showsPrec p m = showParen (p>6)
+              $ ("ex×<"++) . showsPrec 7 (riesz $ coRiesz (V4 1 0 0 0) . m)
+         . (" ^+^ ey×<"++) . showsPrec 7 (riesz $ coRiesz (V4 0 1 0 0) . m)
+         . (" ^+^ ez×<"++) . showsPrec 7 (riesz $ coRiesz (V4 0 0 1 0) . m)
+         . (" ^+^ ew×<"++) . showsPrec 7 (riesz $ coRiesz (V4 0 0 0 1) . m)
+
