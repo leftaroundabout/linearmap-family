@@ -1,5 +1,5 @@
 -- |
--- Module      : Math.LinearMap.TypeFamily.Class
+-- Module      : Math.LinearMap.Category
 -- Copyright   : (c) Justus Sagemüller 2016
 -- License     : GPL v3
 -- 
@@ -20,9 +20,9 @@
 {-# LANGUAGE TupleSections              #-}
 {-# LANGUAGE StandaloneDeriving         #-}
 
-module Math.LinearMap.TypeFamily.Class (
+module Math.LinearMap.Category (
             -- * Linear maps
-              LinearMap (..)
+              LinearMap (..), (+>)()
             , DualSpace
             , (⊕), (>+<)
             -- * Solving linear equations
@@ -149,8 +149,11 @@ instance Num' s => LinearSpace (ZeroDim s) where
   composeLinear _ _ = CoOrigin
 
 
--- | The cartesian monoidal category of vector spaces with linear maps
---   as mappings. The common matrix operations are given by:
+-- | The cartesian monoidal category of vector spaces over the field @s@
+--   with linear maps as morphisms. This category is in maths called
+--   <https://en.wikipedia.org/wiki/Category_of_modules#Example:_the_category_of_vector_spaces VectK>.
+-- 
+--   The common matrix operations are given by:
 -- 
 --   * Identity matrix: 'Control.Category.Constrained.id'.
 --   * Matrix addition: 'Data.AdditiveGroup.^+^' (linear maps form an ordinary vector space).
@@ -159,6 +162,9 @@ instance Num' s => LinearSpace (ZeroDim s) where
 --   * Vertical matrix concatenation: 'Control.Arrow.Constrained.&&&'.
 --   * Horizontal matrix concatenation: '⊕', aka '>+<'.
 newtype LinearMap s v w = LinearMap {getLinearMap :: v -→ w}
+
+-- | Infix synonym for 'LinearMap', without explicit mention of the scalar type.
+type v +> w = LinearMap (Scalar v) v w
 
 instance (LinearSpace v, LinearSpace w, Scalar v~s, Scalar w~s)
                => AdditiveGroup (LinearMap s v w) where
@@ -190,11 +196,11 @@ infixr 6 ⊕, >+<
 --   '&&&' fanout operation: evaluate two (linear) functions in parallel
 --   and sum up the results.
 --   The typical use is to concatenate “row vectors” in a matrix definition.
-(⊕) :: LinearMap s u w -> LinearMap s v w -> LinearMap s (u,v) w
+(⊕) :: (u+>w) -> (v+>w) -> (u,v)+>w
 LinearMap m ⊕ LinearMap n = LinearMap $ CoDirectSum m n
 
 -- | ASCII version of '⊕'
-(>+<) :: LinearMap s u w -> LinearMap s v w -> LinearMap s (u,v) w
+(>+<) :: (u+>w) -> (v+>w) -> (u,v)+>w
 (>+<) = (⊕)
 
 instance Show (LinearMap ℝ ℝ ℝ) where
@@ -324,7 +330,7 @@ lsndBlock :: ( LinearSpace u, LinearSpace v, LinearSpace w
           => (v-→w) -> (u,v)-→w
 lsndBlock f = CoDirectSum zeroMapping f
 
-type DualSpace v = LinearMap (Scalar v) v (Scalar v)
+type DualSpace v = v+>Scalar v
 
 type Fractional' s = (Fractional s, Eq s, VectorSpace s, Scalar s ~ s)
 
@@ -533,7 +539,7 @@ infixr 0 \$
 --   apply this operator to the matrix element.
 (\$) :: ( FiniteDimensional u, FiniteDimensional v, SemiInner v
         , Scalar u ~ Scalar v, Fractional (Scalar v) )
-          => LinearMap s u v -> v -> u
+          => (u+>v) -> v -> u
 (\$) (LinearMap m) = fst . \v -> recomposeEntire mbas [v' $ v | v' <- v's]
  where v's = dualBasis $ mdecomp []
        (mbas, mdecomp) = decomposeLinMap m
@@ -541,7 +547,7 @@ infixr 0 \$
 
 pseudoInverse :: ( FiniteDimensional u, FiniteDimensional v, SemiInner v
         , Scalar u ~ Scalar v, Fractional (Scalar v) )
-          => LinearMap s u v -> LinearMap s v u
+          => (u+>v) -> v+>u
 pseudoInverse (LinearMap m) = LinearMap mi
  where mi = recomposeContraLinMap (fst . recomposeEntire mbas) v's
        v's = dualBasis $ mdecomp []
@@ -577,7 +583,7 @@ infixl 7 .<
 --   Note that this operation is in general pretty inefficient; it is
 --   provided mostly to lay out matrix definitions neatly.
 (.<) :: (FiniteDimensional v, InnerSpace v, HasBasis w, Scalar v ~ Scalar w)
-           => Basis w -> v -> LinearMap (Scalar v) v w
+           => Basis w -> v -> v+>w
 bw .< v = LinearMap $ sampleLinearFunction (\v' -> recompose [(bw, v<.>v')])
 
 instance Show (LinearMap s v (V0 s)) where
