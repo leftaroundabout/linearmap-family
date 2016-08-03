@@ -20,7 +20,24 @@
 {-# LANGUAGE TupleSections              #-}
 {-# LANGUAGE StandaloneDeriving         #-}
 
-module Math.LinearMap.TypeFamily.Class (LinearSpace (..)) where
+module Math.LinearMap.TypeFamily.Class (
+            -- * Linear maps
+              LinearMap (..)
+            , DualSpace
+            , (⊕), (>+<)
+            -- * Solving linear equations
+            , (\$), pseudoInverse
+            -- * The classes of suitable vector spaces
+            -- ** General linear maps
+            , LinearSpace (..)
+            -- ** Orthonormal systems
+            , SemiInner (..), cartesianDualBasisCandidates
+            -- ** Finite baseis
+            , FiniteDimensional (..)
+            -- * Utility
+            , riesz, coRiesz, showsPrecAsRiesz, (.<)
+            , Num', Fractional'
+            ) where
 
 import Data.VectorSpace
 import Data.Basis
@@ -45,7 +62,19 @@ import qualified Linear.Vector as Mat
 
 type Num' s = (Num s, VectorSpace s, Scalar s ~ s)
 
+-- | The class of vector spaces which implement linear maps. Alternatively,
+--   this can be considered as the class of spaces with a properly tractable
+--   <https://en.wikipedia.org/wiki/Dual_space dual space>.
 class (VectorSpace v, Num' (Scalar v)) => LinearSpace v where
+  -- | Internal representation of a linear map from the space @v@ to the space @w@.
+  --   For array-of-numbers Hilbert spaces, this will generally be just
+  --   an “array of column vectors”, or, in the special case 'w ~ Scalar v',
+  --   a single vector that's considered as a “row vector”. (More precisely
+  --   speaking, this represents a /dual vector/: a member of the 'DualSpace',
+  --   aka a <https://en.wikipedia.org/wiki/Linear_form functional>.)
+  -- 
+  --   Only use the '-→' type and the methods below for /instantiating/ this class.
+  --   For actually /working/ with linear mappings, use the 'LinearMap' wrapper.
   data (-→) v w :: *
   linearId :: v -→ v
   zeroMapping :: (LinearSpace w, Scalar w ~ Scalar v) => v -→ w
@@ -120,6 +149,15 @@ instance Num' s => LinearSpace (ZeroDim s) where
   composeLinear _ _ = CoOrigin
 
 
+-- | The cartesian monoidal category of vector spaces with linear maps
+--   as mappings. The common matrix operations are given by:
+-- 
+--   * Identity matrix: 'Control.Category.Constrained.id'.
+--   * Matrix addition: 'Data.AdditiveGroup.^+^' (linear maps form an ordinary vector space).
+--   * Matrix-matrix multiplication: 'Control.Category.Constrained..'.
+--   * Matrix-vector multiplication: 'Control.Arrow.Constrained.$'.
+--   * Vertical matrix concatenation: 'Control.Arrow.Constrained.&&&'.
+--   * Horizontal matrix concatenation: '⊕', aka '>+<'.
 newtype LinearMap s v w = LinearMap {getLinearMap :: v -→ w}
 
 instance (LinearSpace v, LinearSpace w, Scalar v~s, Scalar w~s)
@@ -147,8 +185,16 @@ instance Fractional (LinearMap ℝ ℝ ℝ) where
   recip (LinearMap (RealVect n)) = LinearMap . RealVect $ recip n
   
 infixr 6 ⊕, >+<
-(⊕), (>+<) :: LinearMap s u w -> LinearMap s v w -> LinearMap s (u,v) w
+
+-- | The dual operation to the tuple constructor, or rather to the
+--   '&&&' fanout operation: evaluate two (linear) functions in parallel
+--   and sum up the results.
+--   The typical use is to concatenate “row vectors” in a matrix definition.
+(⊕) :: LinearMap s u w -> LinearMap s v w -> LinearMap s (u,v) w
 LinearMap m ⊕ LinearMap n = LinearMap $ CoDirectSum m n
+
+-- | ASCII version of '⊕'
+(>+<) :: LinearMap s u w -> LinearMap s v w -> LinearMap s (u,v) w
 (>+<) = (⊕)
 
 instance Show (LinearMap ℝ ℝ ℝ) where
@@ -282,19 +328,28 @@ type DualSpace v = LinearMap (Scalar v) v (Scalar v)
 
 type Fractional' s = (Fractional s, Eq s, VectorSpace s, Scalar s ~ s)
 
+-- | 'SemiInner' is the class of vector spaces with finite subspaces in which
+--   you can define a basis that can be used to project from the whole space
+--   into the subspace. The usual application is for using a kind of
+--   <https://en.wikipedia.org/wiki/Galerkin_method Galerkin method> to
+--   give an approximate solution (see '\$') to a linear equation in a possibly
+--   infinite-dimensional space.
+-- 
+--   Of course, this also works for spaces which are already finite-dimensional themselves.
 class (LinearSpace v, LinearSpace (Scalar v)) => SemiInner v where
   -- | Lazily enumerate choices of a basis of functionals that can be made dual
-  --   to the given vectors, in order of preference (which roughly means, /large in
-  --   the normal direction/. (I.e., if the vector @𝑣@ is assigned early to the
-  --   dual vector @𝑣'@, then @𝑣' $ 𝑣$ should be large and all the other products
-  --   comparably small. The purpose is that we should be able to make this basis
-  --   orthonormal with a ~Gaussian-elimination approach, in a way that stays
-  --   numerically stable. It is essentially the choice of a pivot element.)
+  --   to the given vectors, in order of preference (which roughly means, large in
+  --   the normal direction.) I.e., if the vector @𝑣@ is assigned early to the
+  --   dual vector @𝑣'@, then @(𝑣' $ 𝑣)@ should be large and all the other products
+  --   comparably small.
+  -- 
+  --   The purpose is that we should be able to make this basis orthonormal
+  --   with a ~Gaussian-elimination approach, in a way that stays numerically
+  --   stable. This is otherwise known as the /choice of a pivot element/.
   -- 
   --   For simple finite-dimensional array-vectors, you can easily define this
   --   method using 'cartesianDualBasisCandidates'.
   dualBasisCandidates :: [(Int,v)] -> Forest (Int, v -→ Scalar v)
---  coDualBasis :: [(i,DualSpace v)] -> [(i,v)]
 
 cartesianDualBasisCandidates
      :: [v-→Scalar v]   -- ^ Set of canonical basis functionals.
@@ -390,8 +445,13 @@ v^/^w = case (v<.>w) of
    vw -> vw / (w<.>w)
 
 class (LinearSpace v, LinearSpace (Scalar v)) => FiniteDimensional v where
-  -- | For spaces with a canonical finite basis, this need not contain any
-  --   information.
+  -- | Whereas 'Basis'-values refer to a single basis vector, a single
+  --   'EntireBasis' value represents a complete collection of such basis vectors,
+  --   which can be used to associate a vector with a list of coefficients.
+  -- 
+  --   For spaces with a canonical finite basis, 'EntireBasis' does not actually
+  --   need to contain any information, since all vectors will anyway be represented in
+  --   that same basis.
   data EntireBasis v :: *
   
   -- | Split up a linear map in “column vectors” WRT some suitable basis.
@@ -466,6 +526,11 @@ deriving instance (Show (EntireBasis u), Show (EntireBasis v))
 
 infixr 0 \$
 
+-- | Inverse function application, in the sense of providing a
+--   /least-squares-error/ solution to a linear equation system.
+-- 
+--   If you want to solve for multiple RHS vectors, be sure to partially
+--   apply this operator to the matrix element.
 (\$) :: ( FiniteDimensional u, FiniteDimensional v, SemiInner v
         , Scalar u ~ Scalar v, Fractional (Scalar v) )
           => LinearMap s u v -> v -> u
@@ -483,6 +548,8 @@ pseudoInverse (LinearMap m) = LinearMap mi
        (mbas, mdecomp) = decomposeLinMap m
 
 
+-- | The <https://en.wikipedia.org/wiki/Riesz_representation_theorem Riesz representation theorem>
+--   provides an isomorphism between a Hilbert space and its (continuous) dual space.
 riesz :: (FiniteDimensional v, InnerSpace v) => DualSpace v -> v
 riesz (LinearMap dv) = fst . recomposeEntire bas $ compos []
  where (bas, compos) = decomposeLinMap dv
@@ -490,6 +557,9 @@ riesz (LinearMap dv) = fst . recomposeEntire bas $ compos []
 coRiesz :: (FiniteDimensional v, InnerSpace v) => v -> DualSpace v
 coRiesz v = LinearMap $ sampleLinearFunction (v<.>)
 
+-- | Functions are generally a pain to display, but since linear functionals
+--   in a Hilbert space can be represented by /vectors/ in that space,
+--   this can be used for implementing a 'Show' instance.
 showsPrecAsRiesz :: (FiniteDimensional v, InnerSpace v, Show v)
                       => Int -> DualSpace v -> ShowS
 showsPrecAsRiesz p dv = showParen (p>9) $ ("coRiesz "++) . showsPrec 10 (riesz dv)
@@ -501,10 +571,14 @@ instance Show (LinearMap ℝ (V3 ℝ) ℝ) where showsPrec = showsPrecAsRiesz
 instance Show (LinearMap ℝ (V4 ℝ) ℝ) where showsPrec = showsPrecAsRiesz
 
 
-infixl 7 ×<
-(×<) :: (FiniteDimensional v, InnerSpace v, HasBasis w, Scalar v ~ Scalar w)
+infixl 7 .<
+
+-- | Outer product of a general @v@-vector and a basis element from @w@.
+--   Note that this operation is in general pretty inefficient; it is
+--   provided mostly to lay out matrix definitions neatly.
+(.<) :: (FiniteDimensional v, InnerSpace v, HasBasis w, Scalar v ~ Scalar w)
            => Basis w -> v -> LinearMap (Scalar v) v w
-bw ×< v = LinearMap $ sampleLinearFunction (\v' -> recompose [(bw, v<.>v')])
+bw .< v = LinearMap $ sampleLinearFunction (\v' -> recompose [(bw, v<.>v')])
 
 instance Show (LinearMap s v (V0 s)) where
   show _ = "zeroV"
@@ -514,19 +588,19 @@ instance (FiniteDimensional v, InnerSpace v, Scalar v ~ ℝ, Show v)
 instance (FiniteDimensional v, InnerSpace v, Scalar v ~ ℝ, Show v)
               => Show (LinearMap ℝ v (V2 ℝ)) where
   showsPrec p m = showParen (p>6)
-              $ ("ex×<"++) . showsPrec 7 (riesz $ coRiesz (V2 1 0) . m)
-         . (" ^+^ ey×<"++) . showsPrec 7 (riesz $ coRiesz (V2 0 1) . m)
+              $ ("ex.<"++) . showsPrec 7 (riesz $ coRiesz (V2 1 0) . m)
+         . (" ^+^ ey.<"++) . showsPrec 7 (riesz $ coRiesz (V2 0 1) . m)
 instance (FiniteDimensional v, InnerSpace v, Scalar v ~ ℝ, Show v)
               => Show (LinearMap ℝ v (V3 ℝ)) where
   showsPrec p m = showParen (p>6)
-              $ ("ex×<"++) . showsPrec 7 (riesz $ coRiesz (V3 1 0 0) . m)
-         . (" ^+^ ey×<"++) . showsPrec 7 (riesz $ coRiesz (V3 0 1 0) . m)
-         . (" ^+^ ez×<"++) . showsPrec 7 (riesz $ coRiesz (V3 0 0 1) . m)
+              $ ("ex.<"++) . showsPrec 7 (riesz $ coRiesz (V3 1 0 0) . m)
+         . (" ^+^ ey.<"++) . showsPrec 7 (riesz $ coRiesz (V3 0 1 0) . m)
+         . (" ^+^ ez.<"++) . showsPrec 7 (riesz $ coRiesz (V3 0 0 1) . m)
 instance (FiniteDimensional v, InnerSpace v, Scalar v ~ ℝ, Show v)
               => Show (LinearMap ℝ v (V4 ℝ)) where
   showsPrec p m = showParen (p>6)
-              $ ("ex×<"++) . showsPrec 7 (riesz $ coRiesz (V4 1 0 0 0) . m)
-         . (" ^+^ ey×<"++) . showsPrec 7 (riesz $ coRiesz (V4 0 1 0 0) . m)
-         . (" ^+^ ez×<"++) . showsPrec 7 (riesz $ coRiesz (V4 0 0 1 0) . m)
-         . (" ^+^ ew×<"++) . showsPrec 7 (riesz $ coRiesz (V4 0 0 0 1) . m)
+              $ ("ex.<"++) . showsPrec 7 (riesz $ coRiesz (V4 1 0 0 0) . m)
+         . (" ^+^ ey.<"++) . showsPrec 7 (riesz $ coRiesz (V4 0 1 0 0) . m)
+         . (" ^+^ ez.<"++) . showsPrec 7 (riesz $ coRiesz (V4 0 0 1 0) . m)
+         . (" ^+^ ew.<"++) . showsPrec 7 (riesz $ coRiesz (V4 0 0 0 1) . m)
 
