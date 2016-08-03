@@ -364,9 +364,9 @@ cartesianDualBasisCandidates dvs abss vcas = go 0 sorted
        go k ((i,(av,_)):scs)
           | k<n   = Node (i, dv) (go (k+1) [(i',(zeroAt j av',m)) | (i',(av',m))<-scs])
                                 : go k scs
-          | otherwise = []
         where (j,_) = maximumBy (comparing snd) $ zip jfus av
               dv = dvs !! j
+       go _ _ = []
        
        jfus = [0 .. n-1]
        n = length dvs
