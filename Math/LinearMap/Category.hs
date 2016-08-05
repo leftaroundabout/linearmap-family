@@ -78,6 +78,13 @@ class (VectorSpace v, Num' (Scalar v)) => LinearSpace v where
   --   Only use the '-→' type and the methods below for /instantiating/ this class.
   --   For actually /working/ with linear mappings, use the 'LinearMap' wrapper.
   type LinearMapping v w :: *
+  type LinearMapping v w = TensorProduct (DualVector v) w
+  
+  type TensorProduct v w :: *
+  type TensorProduct v w = LinearMapping (DualVector v) w
+  
+  type DualVector v :: *
+  type DualVector v = LinearMapping v (Scalar v)
  
   linearId :: v +> v
   zeroMapping :: (LinearSpace w, Scalar w ~ Scalar v) => v +> w
@@ -135,6 +142,8 @@ instance VectorSpace (ZeroDim s) where
   _ *^ Origin = Origin
 instance Num' s => LinearSpace (ZeroDim s) where
   type LinearMapping (ZeroDim s) v = ZeroDim s
+  type TensorProduct (ZeroDim s) v = ZeroDim s
+  type DualVector (ZeroDim s) = ZeroDim s
   linearId = LinearMap Origin
   zeroMapping = LinearMap Origin
   negateLinearMap (LinearMap Origin) = LinearMap Origin
@@ -252,6 +261,8 @@ type ℝ = Double
 
 instance LinearSpace ℝ where
   type LinearMapping ℝ w = w
+  type TensorProduct ℝ w = w
+  type DualVector ℝ = ℝ
   linearId = LinearMap 1
   zeroMapping = LinearMap zeroV
   scaleLinearMap μ (LinearMap v) = LinearMap $ μ *^ v
@@ -268,9 +279,11 @@ instance LinearSpace ℝ where
   applyLinear (LinearMap w) μ = μ *^ w
   composeLinear f (LinearMap w) = LinearMap $ applyLinear f w
 
-#define FreeLinearSpace(V, LV)                          \
-instance Num' s => LinearSpace (V s) where {             \
-  type LinearMapping (V s) w = V w;                       \
+#define FreeLinearSpace(V, LV)                        \
+instance Num' s => LinearSpace (V s) where {           \
+  type LinearMapping (V s) w = V w;                     \
+  type TensorProduct (V s) w = V w;                      \
+  type DualVector (V s) = V s;                            \
   linearId = LV Mat.identity;                              \
   zeroMapping = LV $ pure zeroV;                            \
   addLinearMaps (LV m) (LV n) = LV $ liftA2 (^+^) m n;       \
@@ -295,6 +308,8 @@ FreeLinearSpace(V4, LinearMap)
 instance ∀ u v . (LinearSpace u, LinearSpace v, Scalar u ~ Scalar v)
                        => LinearSpace (u,v) where
   type LinearMapping (u,v) w = (LinearMapping u w, LinearMapping v w)
+  type TensorProduct (u,v) w = (TensorProduct u w, TensorProduct v w)
+  type DualVector (u,v) = (DualVector u, DualVector v)
   linearId = linearCoFst ⊕ linearCoSnd
   zeroMapping = zeroMapping ⊕ zeroMapping
   scaleLinearMap μ (LinearMap (fu, fv))
