@@ -63,40 +63,36 @@ import qualified Linear.Matrix as Mat
 import qualified Linear.Vector as Mat
 
 type Num' s = (Num s, VectorSpace s, Scalar s ~ s)
+type Num'' s = (Num' s, LinearSpace s)
+  
+class (VectorSpace v) => TensorSpace v where
+  type TensorProduct v w :: *
+  zeroTensor :: (TensorSpace w, Scalar w ~ Scalar v) => v ⊗ w
+  addTensors :: (TensorSpace w, Scalar w ~ Scalar v)
+                => (v ⊗ w) -> (v ⊗ w) -> v ⊗ w
+  subtractTensors :: (TensorSpace w, Scalar w ~ Scalar v)
+                => (v ⊗ w) -> (v ⊗ w) -> v ⊗ w
+  subtractTensors m n = addTensors m (negateTensor n)
+  scaleTensor :: (TensorSpace w, Scalar w ~ Scalar v)
+                => Scalar v -> (v ⊗ w) -> v ⊗ w
+  negateTensor :: (TensorSpace w, Scalar w ~ Scalar v)
+                => (v ⊗ w) -> v ⊗ w
 
 -- | The class of vector spaces which implement linear maps. Alternatively,
 --   this can be considered as the class of spaces with a properly tractable
 --   <https://en.wikipedia.org/wiki/Dual_space dual space>.
-class (VectorSpace v, Num' (Scalar v)) => LinearSpace v where
-  -- | Internal representation of a linear map from the space @v@ to the space @w@.
+class ( TensorSpace v, TensorSpace (DualVector v)
+      , Num' (Scalar v), Scalar (DualVector v) ~ Scalar v )
+              => LinearSpace v where
+  -- | Internal representation of a linear map from the space @v@ to its field.
   --   For array-of-numbers Hilbert spaces, this will generally be just
-  --   an “array of column vectors”, or, in the special case 'w ~ Scalar v',
-  --   a single vector that's considered as a “row vector”. (More precisely
-  --   speaking, this represents a /dual vector/: a member of the 'DualSpace',
-  --   aka a <https://en.wikipedia.org/wiki/Linear_form functional>.)
+  --   an “row vector”
   -- 
-  --   Only use the '-→' type and the methods below for /instantiating/ this class.
-  --   For actually /working/ with linear mappings, use the 'LinearMap' wrapper.
-  type LinearMapping v w :: *
-  type LinearMapping v w = TensorProduct (DualVector v) w
-  
-  type TensorProduct v w :: *
-  type TensorProduct v w = LinearMapping (DualVector v) w
-  
+  --   Only use the 'DualVector' type and the methods below for /instantiating/ 
+  --   this class. For actually /working/ with dual vectors, use 'DualSpace'.
   type DualVector v :: *
-  type DualVector v = LinearMapping v (Scalar v)
  
   linearId :: v +> v
-  zeroMapping :: (LinearSpace w, Scalar w ~ Scalar v) => v +> w
-  addLinearMaps :: (LinearSpace w, Scalar w ~ Scalar v)
-                => (v +> w) -> (v +> w) -> v +> w
-  subtractLinearMaps :: (LinearSpace w, Scalar w ~ Scalar v)
-                => (v +> w) -> (v +> w) -> v +> w
-  subtractLinearMaps m n = addLinearMaps m (negateLinearMap n)
-  scaleLinearMap :: (LinearSpace w, Scalar w ~ Scalar v)
-                => Scalar v -> (v +> w) -> v +> w
-  negateLinearMap :: (LinearSpace w, Scalar w ~ Scalar v)
-                => (v +> w) -> v +> w
   linearCoFst :: (LinearSpace w, Scalar w ~ Scalar v)
                 => v +> (v,w)
   linearCoSnd :: (LinearSpace w, Scalar w ~ Scalar v)
@@ -120,6 +116,8 @@ class (VectorSpace v, Num' (Scalar v)) => LinearSpace v where
   secondBlock :: ( LinearSpace w, LinearSpace x
                       , Scalar w ~ Scalar v, Scalar x ~ Scalar v )
            => (v+>x) -> v +> (w,x)
+  contractTensor :: (LinearSpace w, Scalar w ~ Scalar v)
+           => (v+>(v⊗w)) -> w
   applyLinear :: (LinearSpace w, Scalar w ~ Scalar v)
                 => (v +> w) -> v -> w
   composeLinear :: ( LinearSpace w, LinearSpace x
@@ -140,16 +138,16 @@ instance AdditiveGroup (ZeroDim s) where
 instance VectorSpace (ZeroDim s) where
   type Scalar (ZeroDim s) = s
   _ *^ Origin = Origin
-instance Num' s => LinearSpace (ZeroDim s) where
-  type LinearMapping (ZeroDim s) v = ZeroDim s
+instance Num' s => TensorSpace (ZeroDim s) where
   type TensorProduct (ZeroDim s) v = ZeroDim s
+  zeroTensor = Tensor Origin
+  negateTensor (Tensor Origin) = Tensor Origin
+  scaleTensor _ (Tensor Origin) = Tensor Origin
+  addTensors (Tensor Origin) (Tensor Origin) = Tensor Origin
+  subtractTensors (Tensor Origin) (Tensor Origin) = Tensor Origin
+instance Num' s => LinearSpace (ZeroDim s) where
   type DualVector (ZeroDim s) = ZeroDim s
   linearId = LinearMap Origin
-  zeroMapping = LinearMap Origin
-  negateLinearMap (LinearMap Origin) = LinearMap Origin
-  scaleLinearMap _ (LinearMap Origin) = LinearMap Origin
-  addLinearMaps (LinearMap Origin) (LinearMap Origin) = LinearMap Origin
-  subtractLinearMaps (LinearMap Origin) (LinearMap Origin) = LinearMap Origin
   linearCoFst = LinearMap Origin
   linearCoSnd = LinearMap Origin
   fstBlock (LinearMap Origin) = LinearMap Origin
@@ -157,6 +155,7 @@ instance Num' s => LinearSpace (ZeroDim s) where
   fanoutBlocks (LinearMap Origin) (LinearMap Origin) = LinearMap Origin
   firstBlock (LinearMap Origin) = LinearMap Origin
   secondBlock (LinearMap Origin) = LinearMap Origin
+  contractTensor _ = zeroV
   applyLinear _ _ = zeroV
   composeLinear _ _ = LinearMap Origin
 
@@ -173,21 +172,31 @@ instance Num' s => LinearSpace (ZeroDim s) where
 --   * Matrix-vector multiplication: 'Control.Arrow.Constrained.$'.
 --   * Vertical matrix concatenation: 'Control.Arrow.Constrained.&&&'.
 --   * Horizontal matrix concatenation: '⊕', aka '>+<'.
-newtype LinearMap s v w = LinearMap {getLinearMap :: LinearMapping v w}
+newtype LinearMap s v w = LinearMap {getLinearMap :: TensorProduct (DualVector v) w}
+
+newtype Tensor s v w = Tensor {getTensorProduct :: TensorProduct v w}
+
+asTensor :: LinearMap s v w -> Tensor s (DualVector v) w
+asTensor (LinearMap m) = Tensor m
+fromTensor :: Tensor s (DualVector v) w -> LinearMap s v w
+fromTensor (Tensor m) = LinearMap m
 
 -- | Infix synonym for 'LinearMap', without explicit mention of the scalar type.
 type v +> w = LinearMap (Scalar v) v w
 
+-- | Infix synonym for 'Tensor', without explicit mention of the scalar type.
+type v ⊗ w = Tensor (Scalar v) v w
+
 instance (LinearSpace v, LinearSpace w, Scalar v~s, Scalar w~s)
                => AdditiveGroup (LinearMap s v w) where
-  zeroV = zeroMapping
-  (^+^) = addLinearMaps
-  (^-^) = subtractLinearMaps
-  negateV = negateLinearMap
+  zeroV = fromTensor zeroTensor
+  m^+^n = fromTensor $ asTensor m ^+^ asTensor n
+  m^-^n = fromTensor $ asTensor m ^-^ asTensor n
+  negateV = fromTensor . negateV . asTensor
 instance (LinearSpace v, LinearSpace w, Scalar v~s, Scalar w~s)
                => VectorSpace (LinearMap s v w) where
   type Scalar (LinearMap s v w) = s
-  (*^) = scaleLinearMap
+  (*^) μ = fromTensor . scaleTensor μ . asTensor
 instance Num (LinearMap ℝ ℝ ℝ) where
   fromInteger = LinearMap . fromInteger
   (+) = (^+^)
@@ -201,8 +210,22 @@ instance Fractional (LinearMap ℝ ℝ ℝ) where
   LinearMap m / LinearMap n
          = LinearMap $ m/n
   recip (LinearMap n) = LinearMap $ recip n
+
+instance (TensorSpace v, TensorSpace w, Scalar v~s, Scalar w~s)
+               => AdditiveGroup (Tensor s v w) where
+  zeroV = zeroTensor
+  (^+^) = addTensors
+  (^-^) = subtractTensors
+  negateV = negateTensor
+instance (TensorSpace v, TensorSpace w, Scalar v~s, Scalar w~s)
+               => VectorSpace (Tensor s v w) where
+  type Scalar (Tensor s v w) = s
+  (*^) = scaleTensor
   
-infixr 6 ⊕, >+<
+infixr 6 ⊕, >+<, <⊕
+
+(<⊕) :: (u⊗w) -> (v⊗w) -> (u,v)⊗w
+Tensor m <⊕ Tensor n = Tensor $ (m, n)
 
 -- | The dual operation to the tuple constructor, or rather to the
 --   '&&&' fanout operation: evaluate two (linear) functions in parallel
@@ -259,16 +282,16 @@ instance Num' s => EnhancedCat (->) (LinearMap s) where
 
 type ℝ = Double
 
-instance LinearSpace ℝ where
-  type LinearMapping ℝ w = w
+instance TensorSpace ℝ where
   type TensorProduct ℝ w = w
+  zeroTensor = Tensor zeroV
+  scaleTensor μ (Tensor v) = Tensor $ μ *^ v
+  addTensors (Tensor v) (Tensor w) = Tensor $ v ^+^ w
+  subtractTensors (Tensor v) (Tensor w) = Tensor $ v ^-^ w
+  negateTensor (Tensor w) = Tensor $ negateV w
+instance LinearSpace ℝ where
   type DualVector ℝ = ℝ
   linearId = LinearMap 1
-  zeroMapping = LinearMap zeroV
-  scaleLinearMap μ (LinearMap v) = LinearMap $ μ *^ v
-  addLinearMaps (LinearMap v) (LinearMap w) = LinearMap $ v ^+^ w
-  subtractLinearMaps (LinearMap v) (LinearMap w) = LinearMap $ v ^-^ w
-  negateLinearMap (LinearMap w) = LinearMap $ negateV w
   linearCoFst = LinearMap (1, zeroV)
   linearCoSnd = LinearMap (zeroV, 1)
   fstBlock (LinearMap (u, v)) = LinearMap u
@@ -276,20 +299,21 @@ instance LinearSpace ℝ where
   fanoutBlocks (LinearMap v) (LinearMap w) = LinearMap (v,w)
   firstBlock (LinearMap v) = LinearMap (v,zeroV)
   secondBlock (LinearMap w) = LinearMap (zeroV,w)
+  contractTensor (LinearMap (Tensor w)) = w
   applyLinear (LinearMap w) μ = μ *^ w
   composeLinear f (LinearMap w) = LinearMap $ applyLinear f w
 
-#define FreeLinearSpace(V, LV)                        \
-instance Num' s => LinearSpace (V s) where {           \
-  type LinearMapping (V s) w = V w;                     \
-  type TensorProduct (V s) w = V w;                      \
-  type DualVector (V s) = V s;                            \
-  linearId = LV Mat.identity;                              \
-  zeroMapping = LV $ pure zeroV;                            \
-  addLinearMaps (LV m) (LV n) = LV $ liftA2 (^+^) m n;       \
-  subtractLinearMaps (LV m) (LV n) = LV $ liftA2 (^-^) m n;   \
-  negateLinearMap (LV m) = LV $ fmap negateV m;                \
-  scaleLinearMap μ (LV m) = LV $ fmap (μ*^) m;                  \
+#define FreeLinearSpace(V, LV, contraction)                                  \
+instance Num' s => TensorSpace (V s) where {                     \
+  type TensorProduct (V s) w = V w;                               \
+  zeroTensor = Tensor $ pure zeroV;                                \
+  addTensors (Tensor m) (Tensor n) = Tensor $ liftA2 (^+^) m n;     \
+  subtractTensors (Tensor m) (Tensor n) = Tensor $ liftA2 (^-^) m n; \
+  negateTensor (Tensor m) = Tensor $ fmap negateV m;                  \
+  scaleTensor μ (Tensor m) = Tensor $ fmap (μ*^) m };                  \
+instance Num' s => LinearSpace (V s) where {                  \
+  type DualVector (V s) = V s;                                 \
+  linearId = LV Mat.identity;                                   \
   linearCoFst = LV $ fmap (,zeroV) Mat.identity;                 \
   linearCoSnd = LV $ fmap (zeroV,) Mat.identity;                  \
   fstBlock (LV m) = LV $ fmap fst m;                               \
@@ -297,30 +321,34 @@ instance Num' s => LinearSpace (V s) where {           \
   fanoutBlocks (LV m) (LV n) = LV $ liftA2 (,) m n;                  \
   firstBlock (LV m) = LV $ fmap (,zeroV) m;                           \
   secondBlock (LV m) = LV $ fmap (zeroV,) m;                           \
-  applyLinear (LV m) v = foldl' (^+^) zeroV $ liftA2 (^*) m v;          \
+  contractTensor contraction;                                           \
+  applyLinear (LV m) v = foldl' (^+^) zeroV $ liftA2 (^*) m v;           \
   composeLinear f (LV m) = LV $ fmap (applyLinear f) m }
-FreeLinearSpace(V0, LinearMap)
-FreeLinearSpace(V1, LinearMap)
-FreeLinearSpace(V2, LinearMap)
-FreeLinearSpace(V3, LinearMap)
-FreeLinearSpace(V4, LinearMap)
+FreeLinearSpace(V0, LinearMap, (LinearMap V0) = zeroV)
+FreeLinearSpace(V1, LinearMap, (LinearMap (V1 (Tensor (V1 w)))) = w)
+FreeLinearSpace(V2, LinearMap, (LinearMap (V2 (Tensor (V2 w₀ _)) (Tensor (V2 _ w₁)))) = w₀^+^w₁)
+FreeLinearSpace(V3, LinearMap, (LinearMap (V3 (Tensor (V3 w₀ _ _)) (Tensor (V3 _ w₁ _)) (Tensor (V3 _ _ w₂)))) = w₀^+^w₁^+^w₂)
+FreeLinearSpace(V4, LinearMap, (LinearMap (V4 (Tensor (V4 w₀ _ _ _)) (Tensor (V4 _ w₁ _ _)) (Tensor (V4 _ _ w₂ _)) (Tensor (V4 _ _ _ w₃)))) = w₀^+^w₁^+^w₂^+^w₃)
   
 instance ∀ u v . (LinearSpace u, LinearSpace v, Scalar u ~ Scalar v)
-                       => LinearSpace (u,v) where
-  type LinearMapping (u,v) w = (LinearMapping u w, LinearMapping v w)
+                       => TensorSpace (u,v) where
   type TensorProduct (u,v) w = (TensorProduct u w, TensorProduct v w)
+  zeroTensor = zeroTensor <⊕ zeroTensor
+  scaleTensor μ (Tensor (fu, fv))
+              = μ *^ Tensor fu <⊕ μ *^ Tensor fv
+  addTensors (Tensor (fu, fv)) (Tensor (fu', fv'))
+          = (Tensor fu ^+^ Tensor fu') <⊕ (Tensor fv ^+^ Tensor fv')
+  subtractTensors (Tensor (fu, fv)) (Tensor (fu', fv'))
+          = (Tensor fu ^-^ Tensor fu') <⊕ (Tensor fv ^-^ Tensor fv')
+  negateTensor (Tensor (fu, fv)) = negateV (Tensor fu) <⊕ negateV (Tensor fv)
+instance ∀ u v . ( LinearSpace u, LinearSpace (DualVector u)
+                 , LinearSpace v, LinearSpace (DualVector v)
+                 , Scalar u ~ Scalar v )
+                       => LinearSpace (u,v) where
   type DualVector (u,v) = (DualVector u, DualVector v)
   linearId = linearCoFst ⊕ linearCoSnd
-  zeroMapping = zeroMapping ⊕ zeroMapping
-  scaleLinearMap μ (LinearMap (fu, fv))
-              = μ *^ LinearMap fu ⊕ μ *^ LinearMap fv
-  addLinearMaps (LinearMap (fu, fv)) (LinearMap (fu', fv'))
-          = (LinearMap fu ^+^ LinearMap fu') ⊕ (LinearMap fv ^+^ LinearMap fv')
-  subtractLinearMaps (LinearMap (fu, fv)) (LinearMap (fu', fv'))
-          = (LinearMap fu ^-^ LinearMap fu') ⊕ (LinearMap fv ^-^ LinearMap fv')
-  negateLinearMap (LinearMap (fu, fv)) = negateV (LinearMap fu) ⊕ negateV (LinearMap fv)
-  linearCoFst = composeLinear linearCoFst linearCoFst ⊕ composeLinear linearCoFst linearCoSnd
-  linearCoSnd = composeLinear linearCoSnd linearCoFst ⊕ composeLinear linearCoSnd linearCoSnd
+  -- linearCoFst = composeLinear linearCoFst linearCoFst ⊕ composeLinear linearCoFst linearCoSnd
+  -- linearCoSnd = composeLinear linearCoSnd linearCoFst ⊕ composeLinear linearCoSnd linearCoSnd
   fstBlock (fu :⊕ fv) = fstBlock fu ⊕ fstBlock fv
   sndBlock (fu :⊕ fv) = sndBlock fu ⊕ sndBlock fv
   sepBlocks (LinearMap (fu, fv)) = (fuw ⊕ fvw, fux ⊕ fvx)
@@ -339,11 +367,31 @@ instance ∀ u v . (LinearSpace u, LinearSpace v, Scalar u ~ Scalar v)
 lfstBlock :: ( LinearSpace u, LinearSpace v, LinearSpace w
              , Scalar u ~ Scalar v, Scalar v ~ Scalar w )
           => (u+>w) -> (u,v)+>w
-lfstBlock f = f ⊕ zeroMapping
+lfstBlock f = f ⊕ zeroV
 lsndBlock :: ( LinearSpace u, LinearSpace v, LinearSpace w
             , Scalar u ~ Scalar v, Scalar v ~ Scalar w )
           => (v+>w) -> (u,v)+>w
-lsndBlock f = zeroMapping ⊕ f
+lsndBlock f = zeroV ⊕ f
+
+
+
+
+instance ∀ s u v . (LinearSpace u, LinearSpace v, Scalar u ~ s, Scalar v ~ s)
+                       => TensorSpace (LinearMap s u v) where
+  type TensorProduct (LinearMap s u v) w = TensorProduct (DualVector u) (Tensor s v w)
+instance ∀ s u v . (Num'' s, LinearSpace u, LinearSpace v, Scalar u ~ s, Scalar v ~ s)
+                       => LinearSpace (LinearMap s u v) where
+  type DualVector (LinearMap s u v) = LinearMap s v u
+  applyLinear (LinearMap f) g = contractTensor $ LinearMap f . g
+
+instance ∀ s u v . (LinearSpace u, LinearSpace v, Scalar u ~ s, Scalar v ~ s)
+                       => TensorSpace (Tensor s u v) where
+  type TensorProduct (Tensor s u v) w = TensorProduct u (Tensor s v w)
+instance ∀ s u v . (Num'' s, LinearSpace u, LinearSpace v, Scalar u ~ s, Scalar v ~ s)
+                       => LinearSpace (Tensor s u v) where
+  type DualVector (Tensor s u v) = Tensor s (DualSpace v) (DualSpace u)
+
+
 
 type DualSpace v = v+>Scalar v
 
@@ -440,7 +488,10 @@ FreeSemiInner(V2 ℝ, abs)
 FreeSemiInner(V3 ℝ, abs)
 FreeSemiInner(V4 ℝ, abs)
 
-instance (SemiInner u, SemiInner v, Scalar u ~ Scalar v) => SemiInner (u,v) where
+instance ( SemiInner u, SemiInner v
+         , LinearSpace (DualVector u), LinearSpace (DualVector v)
+         , Scalar u ~ Scalar v
+         ) => SemiInner (u,v) where
   dualBasisCandidates = fmap (\(i,(u,v))->((i,u),(i,v))) >>> unzip
               >>> dualBasisCandidates *** dualBasisCandidates
               >>> combineBaseis False mempty
@@ -525,7 +576,8 @@ FreeFiniteDimensional(V4, V4Basis, c₀:c₁:c₂:c₃, V4 c₀ c₁ c₂ c₃)
                                   
 deriving instance Show (EntireBasis ℝ)
   
-instance ( FiniteDimensional u, InnerSpace u, FiniteDimensional v, InnerSpace v
+instance ( FiniteDimensional u, LinearSpace (DualVector u)
+         , FiniteDimensional v, LinearSpace (DualVector v)
          , Scalar u ~ Scalar v, Fractional' (Scalar v) )
             => FiniteDimensional (u,v) where
   data EntireBasis (u,v) = TupleBasis !(EntireBasis u) !(EntireBasis v)
