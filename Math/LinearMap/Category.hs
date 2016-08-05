@@ -175,8 +175,13 @@ instance Num' s => LinearSpace (ZeroDim s) where
 --   * Horizontal matrix concatenation: '⊕', aka '>+<'.
 newtype LinearMap s v w = LinearMap {getLinearMap :: LinearMapping v w}
 
+newtype Tensor s v w = Tensor {getTensorProduct :: TensorProduct v w}
+
 -- | Infix synonym for 'LinearMap', without explicit mention of the scalar type.
 type v +> w = LinearMap (Scalar v) v w
+
+-- | Infix synonym for 'Tensor', without explicit mention of the scalar type.
+type v ⊗ w = Tensor (Scalar v) v w
 
 instance (LinearSpace v, LinearSpace w, Scalar v~s, Scalar w~s)
                => AdditiveGroup (LinearMap s v w) where
@@ -344,6 +349,19 @@ lsndBlock :: ( LinearSpace u, LinearSpace v, LinearSpace w
             , Scalar u ~ Scalar v, Scalar v ~ Scalar w )
           => (v+>w) -> (u,v)+>w
 lsndBlock f = zeroMapping ⊕ f
+
+
+
+
+instance ∀ s u v . (LinearSpace u, LinearSpace v, Scalar u ~ s, Scalar v ~ s)
+                       => LinearSpace (LinearMap s u v) where
+  type LinearMapping (LinearMap s u v) w = LinearMapping v (Tensor s w u)
+  type TensorProduct (LinearMap s u v) w = LinearMapping u (Tensor s v w)
+  type DualVector (LinearMap s u v) = LinearMap s v u
+  linearId = LinearMap _
+
+
+
 
 type DualSpace v = v+>Scalar v
 
