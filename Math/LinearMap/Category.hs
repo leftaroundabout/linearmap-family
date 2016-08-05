@@ -15,6 +15,8 @@
 {-# LANGUAGE TypeOperators              #-}
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
+{-# LANGUAGE PatternSynonyms            #-}
+{-# LANGUAGE ViewPatterns               #-}
 {-# LANGUAGE UnicodeSyntax              #-}
 {-# LANGUAGE CPP                        #-}
 {-# LANGUAGE TupleSections              #-}
@@ -204,6 +206,10 @@ LinearMap m ⊕ LinearMap n = LinearMap $ (m, n)
 (>+<) :: (u+>w) -> (v+>w) -> (u,v)+>w
 (>+<) = (⊕)
 
+pattern (:⊕) :: LinearMap s u w -> LinearMap s v w -> LinearMap s (u,v) w
+pattern (:⊕) m n <- LinearMap (LinearMap -> m, LinearMap -> n)
+ where LinearMap m :⊕ LinearMap n = LinearMap (m,n)
+
 instance Show (LinearMap ℝ ℝ ℝ) where
   showsPrec p (LinearMap n) = showsPrec p n
 instance ∀ u v . (Show (LinearMap ℝ u ℝ), Show (LinearMap ℝ v ℝ))
@@ -230,6 +236,8 @@ instance Num' s => Cartesian (LinearMap s) where
   swap = linearCoSnd ⊕ linearCoFst
   attachUnit = linearCoFst
   detachUnit = fst
+  regroup = linearCoFst . linearCoFst ⊕ (linearCoFst . linearCoSnd ⊕ linearCoSnd)
+  regroup' = (linearCoFst ⊕ linearCoSnd . linearCoFst) ⊕ linearCoSnd . linearCoSnd
 instance Num' s => Morphism (LinearMap s) where
   f *** g = firstBlock f ⊕ secondBlock g
 instance Num' s => PreArrow (LinearMap s) where
@@ -298,8 +306,8 @@ instance ∀ u v . (LinearSpace u, LinearSpace v, Scalar u ~ Scalar v)
   negateLinearMap (LinearMap (fu, fv)) = negateV (LinearMap fu) ⊕ negateV (LinearMap fv)
   linearCoFst = composeLinear linearCoFst linearCoFst ⊕ composeLinear linearCoFst linearCoSnd
   linearCoSnd = composeLinear linearCoSnd linearCoFst ⊕ composeLinear linearCoSnd linearCoSnd
-  -- fstBlock (LinearMap (fu, fv)) = fstBlock (LinearMap fu) ⊕ fstBlock (LinearMap fv)
-  -- sndBlock (LinearMap (fu, fv)) = sndBlock (LinearMap fu) ⊕ sndBlock (LinearMap fv)
+  fstBlock (fu :⊕ fv) = fstBlock fu ⊕ fstBlock fv
+  sndBlock (fu :⊕ fv) = sndBlock fu ⊕ sndBlock fv
   sepBlocks (LinearMap (fu, fv)) = (fuw ⊕ fvw, fux ⊕ fvx)
    where (fuw,fux) = sepBlocks $ LinearMap fu
          (fvw,fvx) = sepBlocks $ LinearMap fv
