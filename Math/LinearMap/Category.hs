@@ -75,46 +75,47 @@ class (VectorSpace v, Num' (Scalar v)) => LinearSpace v where
   -- 
   --   Only use the '-→' type and the methods below for /instantiating/ this class.
   --   For actually /working/ with linear mappings, use the 'LinearMap' wrapper.
-  data (-→) v w :: *
-  linearId :: v -→ v
-  zeroMapping :: (LinearSpace w, Scalar w ~ Scalar v) => v -→ w
+  type LinearMapping v w :: *
+ 
+  linearId :: v +> v
+  zeroMapping :: (LinearSpace w, Scalar w ~ Scalar v) => v +> w
   addLinearMaps :: (LinearSpace w, Scalar w ~ Scalar v)
-                => (v -→ w) -> (v -→ w) -> v -→ w
+                => (v +> w) -> (v +> w) -> v +> w
   subtractLinearMaps :: (LinearSpace w, Scalar w ~ Scalar v)
-                => (v -→ w) -> (v -→ w) -> v -→ w
+                => (v +> w) -> (v +> w) -> v +> w
   subtractLinearMaps m n = addLinearMaps m (negateLinearMap n)
   scaleLinearMap :: (LinearSpace w, Scalar w ~ Scalar v)
-                => Scalar v -> (v -→ w) -> v -→ w
+                => Scalar v -> (v +> w) -> v +> w
   negateLinearMap :: (LinearSpace w, Scalar w ~ Scalar v)
-                => (v -→ w) -> v -→ w
+                => (v +> w) -> v +> w
   linearCoFst :: (LinearSpace w, Scalar w ~ Scalar v)
-                => v -→ (v,w)
+                => v +> (v,w)
   linearCoSnd :: (LinearSpace w, Scalar w ~ Scalar v)
-                => v -→ (w,v)
+                => v +> (w,v)
   fanoutBlocks :: ( LinearSpace w, LinearSpace x
                 , Scalar w ~ Scalar v, Scalar x ~ Scalar v )
-     => (v-→w) -> (v-→x) -> v -→ (w,x)
+     => (v+>w) -> (v+>x) -> v +> (w,x)
   fstBlock :: ( LinearSpace w, LinearSpace x
                 , Scalar w ~ Scalar v, Scalar x ~ Scalar v )
-     => (v-→(w,x)) -> v -→ w
+     => (v+>(w,x)) -> v +> w
   sndBlock :: ( LinearSpace w, LinearSpace x
                 , Scalar w ~ Scalar v, Scalar x ~ Scalar v )
-     => (v-→(w,x)) -> v -→ x
+     => (v+>(w,x)) -> v +> x
   sepBlocks :: ( LinearSpace w, LinearSpace x
                 , Scalar w ~ Scalar v, Scalar x ~ Scalar v )
-     => (v-→(w,x)) -> (v-→w, v-→x)
+     => (v+>(w,x)) -> (v+>w, v+>x)
   sepBlocks m = (fstBlock m, sndBlock m)
   firstBlock :: ( LinearSpace w, LinearSpace x
                 , Scalar w ~ Scalar v, Scalar x ~ Scalar v )
-     => (v-→w) -> v -→ (w,x)
+     => (v+>w) -> v +> (w,x)
   secondBlock :: ( LinearSpace w, LinearSpace x
                       , Scalar w ~ Scalar v, Scalar x ~ Scalar v )
-           => (v-→x) -> v -→ (w,x)
+           => (v+>x) -> v +> (w,x)
   applyLinear :: (LinearSpace w, Scalar w ~ Scalar v)
-                => (v -→ w) -> v -> w
+                => (v +> w) -> v -> w
   composeLinear :: ( LinearSpace w, LinearSpace x
                    , Scalar w ~ Scalar v, Scalar x ~ Scalar v )
-           => (w -→ x) -> (v -→ w) -> v -→ x
+           => (w +> x) -> (v +> w) -> v +> x
 
 
 
@@ -131,22 +132,22 @@ instance VectorSpace (ZeroDim s) where
   type Scalar (ZeroDim s) = s
   _ *^ Origin = Origin
 instance Num' s => LinearSpace (ZeroDim s) where
-  data ZeroDim s -→ v = CoOrigin
-  linearId = CoOrigin
-  zeroMapping = CoOrigin
-  negateLinearMap CoOrigin = CoOrigin
-  scaleLinearMap _ CoOrigin = CoOrigin
-  addLinearMaps CoOrigin CoOrigin = CoOrigin
-  subtractLinearMaps CoOrigin CoOrigin = CoOrigin
-  linearCoFst = CoOrigin
-  linearCoSnd = CoOrigin
-  fstBlock CoOrigin = CoOrigin
-  sndBlock CoOrigin = CoOrigin
-  fanoutBlocks CoOrigin CoOrigin = CoOrigin
-  firstBlock CoOrigin = CoOrigin
-  secondBlock CoOrigin = CoOrigin
+  type LinearMapping (ZeroDim s) v = ZeroDim s
+  linearId = LinearMap Origin
+  zeroMapping = LinearMap Origin
+  negateLinearMap (LinearMap Origin) = LinearMap Origin
+  scaleLinearMap _ (LinearMap Origin) = LinearMap Origin
+  addLinearMaps (LinearMap Origin) (LinearMap Origin) = LinearMap Origin
+  subtractLinearMaps (LinearMap Origin) (LinearMap Origin) = LinearMap Origin
+  linearCoFst = LinearMap Origin
+  linearCoSnd = LinearMap Origin
+  fstBlock (LinearMap Origin) = LinearMap Origin
+  sndBlock (LinearMap Origin) = LinearMap Origin
+  fanoutBlocks (LinearMap Origin) (LinearMap Origin) = LinearMap Origin
+  firstBlock (LinearMap Origin) = LinearMap Origin
+  secondBlock (LinearMap Origin) = LinearMap Origin
   applyLinear _ _ = zeroV
-  composeLinear _ _ = CoOrigin
+  composeLinear _ _ = LinearMap Origin
 
 
 -- | The cartesian monoidal category of vector spaces over the field @s@
@@ -161,34 +162,34 @@ instance Num' s => LinearSpace (ZeroDim s) where
 --   * Matrix-vector multiplication: 'Control.Arrow.Constrained.$'.
 --   * Vertical matrix concatenation: 'Control.Arrow.Constrained.&&&'.
 --   * Horizontal matrix concatenation: '⊕', aka '>+<'.
-newtype LinearMap s v w = LinearMap {getLinearMap :: v -→ w}
+newtype LinearMap s v w = LinearMap {getLinearMap :: LinearMapping v w}
 
 -- | Infix synonym for 'LinearMap', without explicit mention of the scalar type.
 type v +> w = LinearMap (Scalar v) v w
 
 instance (LinearSpace v, LinearSpace w, Scalar v~s, Scalar w~s)
                => AdditiveGroup (LinearMap s v w) where
-  zeroV = LinearMap zeroMapping
-  LinearMap f ^+^ LinearMap g = LinearMap $ addLinearMaps f g
-  LinearMap f ^-^ LinearMap g = LinearMap $ subtractLinearMaps f g
-  negateV (LinearMap f) = LinearMap $ negateLinearMap f
+  zeroV = zeroMapping
+  (^+^) = addLinearMaps
+  (^-^) = subtractLinearMaps
+  negateV = negateLinearMap
 instance (LinearSpace v, LinearSpace w, Scalar v~s, Scalar w~s)
                => VectorSpace (LinearMap s v w) where
   type Scalar (LinearMap s v w) = s
-  μ *^ LinearMap f = LinearMap $ scaleLinearMap μ f
+  (*^) = scaleLinearMap
 instance Num (LinearMap ℝ ℝ ℝ) where
-  fromInteger = LinearMap . RealVect . fromInteger
+  fromInteger = LinearMap . fromInteger
   (+) = (^+^)
   (-) = (^-^)
-  LinearMap (RealVect m) * LinearMap (RealVect n)
-         = LinearMap . RealVect $ m*n
-  abs (LinearMap (RealVect n)) = LinearMap . RealVect $ abs n
-  signum (LinearMap (RealVect n)) = LinearMap . RealVect $ signum n
+  LinearMap m * LinearMap n
+         = LinearMap $ m*n
+  abs (LinearMap n) = LinearMap $ abs n
+  signum (LinearMap n) = LinearMap $ signum n
 instance Fractional (LinearMap ℝ ℝ ℝ) where
-  fromRational = LinearMap . RealVect . fromRational
-  LinearMap (RealVect m) / LinearMap (RealVect n)
-         = LinearMap . RealVect $ m/n
-  recip (LinearMap (RealVect n)) = LinearMap . RealVect $ recip n
+  fromRational = LinearMap . fromRational
+  LinearMap m / LinearMap n
+         = LinearMap $ m/n
+  recip (LinearMap n) = LinearMap $ recip n
   
 infixr 6 ⊕, >+<
 
@@ -197,17 +198,17 @@ infixr 6 ⊕, >+<
 --   and sum up the results.
 --   The typical use is to concatenate “row vectors” in a matrix definition.
 (⊕) :: (u+>w) -> (v+>w) -> (u,v)+>w
-LinearMap m ⊕ LinearMap n = LinearMap $ CoDirectSum m n
+LinearMap m ⊕ LinearMap n = LinearMap $ (m, n)
 
 -- | ASCII version of '⊕'
 (>+<) :: (u+>w) -> (v+>w) -> (u,v)+>w
 (>+<) = (⊕)
 
 instance Show (LinearMap ℝ ℝ ℝ) where
-  showsPrec p (LinearMap (RealVect n)) = showsPrec p n
+  showsPrec p (LinearMap n) = showsPrec p n
 instance ∀ u v . (Show (LinearMap ℝ u ℝ), Show (LinearMap ℝ v ℝ))
            => Show (LinearMap ℝ (u,v) ℝ) where
-  showsPrec p (LinearMap (CoDirectSum m n))
+  showsPrec p (LinearMap ((m, n)))
         = showParen (p>6)
             (showsPrec 6 (LinearMap m :: LinearMap ℝ u ℝ)
                          . ("⊕"++) . showsPrec 7 (LinearMap n :: LinearMap ℝ v ℝ))
@@ -215,61 +216,53 @@ instance ∀ s u v w . ( LinearSpace u, LinearSpace v, LinearSpace w
                      , Scalar u ~ s, Scalar v ~ s, Scalar w ~ s
                      , Show (LinearMap s u v), Show (LinearMap s u w) )
            => Show (LinearMap s u (v,w)) where
-  showsPrec p (LinearMap m)
+  showsPrec p m
         = showParen (p>6)
-            (showsPrec 6 (LinearMap mv :: LinearMap s u v)
-                         . (" &&& "++) . showsPrec 6 (LinearMap mw :: LinearMap s u w))
+            (showsPrec 6 mv . (" &&& "++) . showsPrec 6 mw)
    where (mv, mw) = sepBlocks m
 
 instance Category (LinearMap s) where
   type Object (LinearMap s) v = (LinearSpace v, Scalar v ~ s)
-  id = LinearMap linearId
-  LinearMap f . LinearMap g = LinearMap $ composeLinear f g
+  id = linearId
+  (.) = composeLinear
 instance Num' s => Cartesian (LinearMap s) where
   type UnitObject (LinearMap s) = ZeroDim s
-  swap = LinearMap $ CoDirectSum linearCoSnd linearCoFst
-  attachUnit = LinearMap linearCoFst
-  detachUnit = LinearMap $ CoDirectSum linearId zeroMapping
-  regroup = LinearMap $ CoDirectSum (composeLinear linearCoFst linearCoFst)
-                                    (CoDirectSum (composeLinear linearCoFst linearCoSnd)
-                                                 linearCoSnd )
-  regroup' = LinearMap $ CoDirectSum (CoDirectSum linearCoFst
-                                                  (composeLinear linearCoSnd linearCoFst))
-                                     (composeLinear linearCoSnd linearCoSnd)
+  swap = linearCoSnd ⊕ linearCoFst
+  attachUnit = linearCoFst
+  detachUnit = fst
 instance Num' s => Morphism (LinearMap s) where
-  LinearMap f *** LinearMap g
-      = LinearMap $ CoDirectSum (firstBlock f) (secondBlock g)
+  f *** g = firstBlock f ⊕ secondBlock g
 instance Num' s => PreArrow (LinearMap s) where
-  LinearMap f &&& LinearMap g = LinearMap $ fanoutBlocks f g
+  (&&&) = fanoutBlocks
   terminal = zeroV
-  fst = LinearMap $ CoDirectSum linearId zeroMapping
-  snd = LinearMap $ CoDirectSum zeroMapping linearId
+  fst = lfstBlock id
+  snd = lsndBlock id
 instance Num' s => EnhancedCat (->) (LinearMap s) where
-  arr (LinearMap m) = applyLinear m
+  arr m = applyLinear m
 
 type ℝ = Double
 
 instance LinearSpace ℝ where
-  data ℝ -→ w = RealVect w
-  linearId = RealVect 1
-  zeroMapping = RealVect zeroV
-  scaleLinearMap μ (RealVect v) = RealVect $ μ *^ v
-  addLinearMaps (RealVect v) (RealVect w) = RealVect $ v ^+^ w
-  subtractLinearMaps (RealVect v) (RealVect w) = RealVect $ v ^-^ w
-  negateLinearMap (RealVect w) = RealVect $ negateV w
-  linearCoFst = RealVect (1, zeroV)
-  linearCoSnd = RealVect (zeroV, 1)
-  fstBlock (RealVect (u, v)) = RealVect u
-  sndBlock (RealVect (u, v)) = RealVect v
-  fanoutBlocks (RealVect v) (RealVect w) = RealVect (v,w)
-  firstBlock (RealVect v) = RealVect (v,zeroV)
-  secondBlock (RealVect w) = RealVect (zeroV,w)
-  applyLinear (RealVect w) μ = μ *^ w
-  composeLinear f (RealVect w) = RealVect $ applyLinear f w
+  type LinearMapping ℝ w = w
+  linearId = LinearMap 1
+  zeroMapping = LinearMap zeroV
+  scaleLinearMap μ (LinearMap v) = LinearMap $ μ *^ v
+  addLinearMaps (LinearMap v) (LinearMap w) = LinearMap $ v ^+^ w
+  subtractLinearMaps (LinearMap v) (LinearMap w) = LinearMap $ v ^-^ w
+  negateLinearMap (LinearMap w) = LinearMap $ negateV w
+  linearCoFst = LinearMap (1, zeroV)
+  linearCoSnd = LinearMap (zeroV, 1)
+  fstBlock (LinearMap (u, v)) = LinearMap u
+  sndBlock (LinearMap (u, v)) = LinearMap v
+  fanoutBlocks (LinearMap v) (LinearMap w) = LinearMap (v,w)
+  firstBlock (LinearMap v) = LinearMap (v,zeroV)
+  secondBlock (LinearMap w) = LinearMap (zeroV,w)
+  applyLinear (LinearMap w) μ = μ *^ w
+  composeLinear f (LinearMap w) = LinearMap $ applyLinear f w
 
 #define FreeLinearSpace(V, LV)                          \
 instance Num' s => LinearSpace (V s) where {             \
-  newtype V s -→ w = LV (V w);                            \
+  type LinearMapping (V s) w = V w;                       \
   linearId = LV Mat.identity;                              \
   zeroMapping = LV $ pure zeroV;                            \
   addLinearMaps (LV m) (LV n) = LV $ liftA2 (^+^) m n;       \
@@ -285,50 +278,49 @@ instance Num' s => LinearSpace (V s) where {             \
   secondBlock (LV m) = LV $ fmap (zeroV,) m;                           \
   applyLinear (LV m) v = foldl' (^+^) zeroV $ liftA2 (^*) m v;          \
   composeLinear f (LV m) = LV $ fmap (applyLinear f) m }
-FreeLinearSpace(V0, FromV0)
-FreeLinearSpace(V1, FromV1)
-FreeLinearSpace(V2, FromV2)
-FreeLinearSpace(V3, FromV3)
-FreeLinearSpace(V4, FromV4)
+FreeLinearSpace(V0, LinearMap)
+FreeLinearSpace(V1, LinearMap)
+FreeLinearSpace(V2, LinearMap)
+FreeLinearSpace(V3, LinearMap)
+FreeLinearSpace(V4, LinearMap)
   
 instance ∀ u v . (LinearSpace u, LinearSpace v, Scalar u ~ Scalar v)
                        => LinearSpace (u,v) where
-  data (u,v) -→ w = CoDirectSum !(u-→w) !(v-→w)
-  linearId = CoDirectSum linearCoFst linearCoSnd
-  zeroMapping = CoDirectSum zeroMapping zeroMapping
-  scaleLinearMap μ (CoDirectSum fu fv)
-      = CoDirectSum (scaleLinearMap μ fu) (scaleLinearMap μ fv)
-  addLinearMaps (CoDirectSum fu fv) (CoDirectSum fu' fv')
-      = CoDirectSum (addLinearMaps fu fu') (addLinearMaps fv fv')
-  subtractLinearMaps (CoDirectSum fu fv) (CoDirectSum fu' fv')
-      = CoDirectSum (subtractLinearMaps fu fu') (subtractLinearMaps fv fv')
-  negateLinearMap (CoDirectSum fu fv)
-      = CoDirectSum (negateLinearMap fu) (negateLinearMap fv)
-  linearCoFst = CoDirectSum (composeLinear linearCoFst linearCoFst)
-                            (composeLinear linearCoFst linearCoSnd)
-  linearCoSnd = CoDirectSum (composeLinear linearCoSnd linearCoFst)
-                            (composeLinear linearCoSnd linearCoSnd)
-  fstBlock (CoDirectSum fu fv) = CoDirectSum (fstBlock fu) (fstBlock fv)
-  sndBlock (CoDirectSum fu fv) = CoDirectSum (sndBlock fu) (sndBlock fv)
-  sepBlocks (CoDirectSum fu fv) = (CoDirectSum fuw fvw, CoDirectSum fux fvx)
-   where (fuw,fux) = sepBlocks fu
-         (fvw,fvx) = sepBlocks fv
-  fanoutBlocks (CoDirectSum fu fv) (CoDirectSum gu gv)
-              = CoDirectSum (fanoutBlocks fu gu) (fanoutBlocks fv gv)
-  firstBlock (CoDirectSum fu fv) = CoDirectSum (firstBlock fu) (firstBlock fv)
-  secondBlock (CoDirectSum fu fv) = CoDirectSum (secondBlock fu) (secondBlock fv)
-  applyLinear (CoDirectSum fu fv) (u,v) = applyLinear fu u ^+^ applyLinear fv v
-  composeLinear f (CoDirectSum fu fv)
-        = CoDirectSum (composeLinear f fu) (composeLinear f fv)
+  type LinearMapping (u,v) w = (LinearMapping u w, LinearMapping v w)
+  linearId = linearCoFst ⊕ linearCoSnd
+  zeroMapping = zeroMapping ⊕ zeroMapping
+  scaleLinearMap μ (LinearMap (fu, fv))
+              = μ *^ LinearMap fu ⊕ μ *^ LinearMap fv
+  addLinearMaps (LinearMap (fu, fv)) (LinearMap (fu', fv'))
+          = (LinearMap fu ^+^ LinearMap fu') ⊕ (LinearMap fv ^+^ LinearMap fv')
+  subtractLinearMaps (LinearMap (fu, fv)) (LinearMap (fu', fv'))
+          = (LinearMap fu ^-^ LinearMap fu') ⊕ (LinearMap fv ^-^ LinearMap fv')
+  negateLinearMap (LinearMap (fu, fv)) = negateV (LinearMap fu) ⊕ negateV (LinearMap fv)
+  linearCoFst = composeLinear linearCoFst linearCoFst ⊕ composeLinear linearCoFst linearCoSnd
+  linearCoSnd = composeLinear linearCoSnd linearCoFst ⊕ composeLinear linearCoSnd linearCoSnd
+  -- fstBlock (LinearMap (fu, fv)) = fstBlock (LinearMap fu) ⊕ fstBlock (LinearMap fv)
+  -- sndBlock (LinearMap (fu, fv)) = sndBlock (LinearMap fu) ⊕ sndBlock (LinearMap fv)
+  sepBlocks (LinearMap (fu, fv)) = (fuw ⊕ fvw, fux ⊕ fvx)
+   where (fuw,fux) = sepBlocks $ LinearMap fu
+         (fvw,fvx) = sepBlocks $ LinearMap fv
+  fanoutBlocks (LinearMap (fu, fv)) (LinearMap (gu, gv))
+              = fanoutBlocks (LinearMap fu) (LinearMap gu)
+                ⊕ fanoutBlocks (LinearMap fv) (LinearMap gv)
+  firstBlock (LinearMap (fu, fv)) = firstBlock (LinearMap fu) ⊕ firstBlock (LinearMap fv)
+  secondBlock (LinearMap (fu, fv)) = secondBlock (LinearMap fu) ⊕ secondBlock (LinearMap fv)
+  applyLinear (LinearMap (fu, fv)) (u,v)
+             = applyLinear (LinearMap fu) u ^+^ applyLinear (LinearMap fv) v
+  composeLinear f (LinearMap (fu, fv))
+        = composeLinear f (LinearMap fu) ⊕ composeLinear f (LinearMap fv)
 
 lfstBlock :: ( LinearSpace u, LinearSpace v, LinearSpace w
              , Scalar u ~ Scalar v, Scalar v ~ Scalar w )
-          => (u-→w) -> (u,v)-→w
-lfstBlock f = CoDirectSum f zeroMapping
+          => (u+>w) -> (u,v)+>w
+lfstBlock f = f ⊕ zeroMapping
 lsndBlock :: ( LinearSpace u, LinearSpace v, LinearSpace w
             , Scalar u ~ Scalar v, Scalar v ~ Scalar w )
-          => (v-→w) -> (u,v)-→w
-lsndBlock f = CoDirectSum zeroMapping f
+          => (v+>w) -> (u,v)+>w
+lsndBlock f = zeroMapping ⊕ f
 
 type DualSpace v = v+>Scalar v
 
@@ -355,14 +347,14 @@ class (LinearSpace v, LinearSpace (Scalar v)) => SemiInner v where
   -- 
   --   For simple finite-dimensional array-vectors, you can easily define this
   --   method using 'cartesianDualBasisCandidates'.
-  dualBasisCandidates :: [(Int,v)] -> Forest (Int, v -→ Scalar v)
+  dualBasisCandidates :: [(Int,v)] -> Forest (Int, v +> Scalar v)
 
 cartesianDualBasisCandidates
-     :: [v-→Scalar v]   -- ^ Set of canonical basis functionals.
+     :: [v+>Scalar v]   -- ^ Set of canonical basis functionals.
      -> (v -> [ℝ])      -- ^ Decompose a vector in /absolute value/ components.
                         --   the list indices should correspond to those in
                         --   the functional list.
-     -> ([(Int,v)] -> Forest (Int, v -→ Scalar v))
+     -> ([(Int,v)] -> Forest (Int, v +> Scalar v))
                         -- ^ Suitable definition of 'dualBasisCandidates'.
 cartesianDualBasisCandidates dvs abss vcas = go 0 sorted
  where sorted = sortBy (comparing $ negate . snd . snd)
@@ -401,29 +393,29 @@ dualBasis vs = snd <$> orthonormaliseDuals (zip' vsIxed candidates)
         | i<j   = zip' vs ((j,v'):ds)
         | i==j  = (v,v') : zip' vs ds
        zip' _ _ = []
-       candidates = map (second LinearMap) . sortBy (comparing fst) . findBest
+       candidates = sortBy (comparing fst) . findBest
                              $ dualBasisCandidates vsIxed
         where findBest [] = []
               findBest (Node iv' bv' : _) = iv' : findBest bv'
        vsIxed = zip [0..] vs
 
 instance SemiInner ℝ where
-  dualBasisCandidates = fmap ((`Node`[]) . second (RealVect . recip))
+  dualBasisCandidates = fmap ((`Node`[]) . second (LinearMap . recip))
                 . sortBy (comparing $ negate . abs . snd)
                 . filter ((/=0) . snd)
 
 instance (Fractional' s, Ord s, SemiInner s) => SemiInner (V1 s) where
-  dualBasisCandidates = fmap ((`Node`[]) . second (FromV1 . recip))
+  dualBasisCandidates = fmap ((`Node`[]) . second (LinearMap . recip))
                 . sortBy (comparing $ negate . abs . snd)
                 . filter ((/=0) . snd)
 
-#define FreeSemiInner(V, LV, sabs) \
+#define FreeSemiInner(V, sabs) \
 instance SemiInner (V) where {      \
   dualBasisCandidates                \
-     = cartesianDualBasisCandidates (LV <$> Mat.basis) (fmap sabs . toList) }
-FreeSemiInner(V2 ℝ, FromV2, abs)
-FreeSemiInner(V3 ℝ, FromV3, abs)
-FreeSemiInner(V4 ℝ, FromV4, abs)
+     = cartesianDualBasisCandidates (LinearMap <$> Mat.basis) (fmap sabs . toList) }
+FreeSemiInner(V2 ℝ, abs)
+FreeSemiInner(V3 ℝ, abs)
+FreeSemiInner(V4 ℝ, abs)
 
 instance (SemiInner u, SemiInner v, Scalar u ~ Scalar v) => SemiInner (u,v) where
   dualBasisCandidates = fmap (\(i,(u,v))->((i,u),(i,v))) >>> unzip
@@ -461,14 +453,14 @@ class (LinearSpace v, LinearSpace (Scalar v)) => FiniteDimensional v where
   data EntireBasis v :: *
   
   -- | Split up a linear map in “column vectors” WRT some suitable basis.
-  decomposeLinMap :: (v-→w) -> (EntireBasis v, [w]->[w])
+  decomposeLinMap :: (v+>w) -> (EntireBasis v, [w]->[w])
   
   recomposeEntire :: EntireBasis v -> [Scalar v] -> (v, [Scalar v])
   
   recomposeContraLinMap :: (LinearSpace w, Scalar w ~ Scalar v, Hask.Functor f)
-           => (f (Scalar w) -> w) -> f (DualSpace v) -> v-→w
+           => (f (Scalar w) -> w) -> f (DualSpace v) -> v+>w
   
-  sampleLinearFunction :: (v -> w) -> v-→w
+  sampleLinearFunction :: (v -> w) -> v+>w
   
 
 
@@ -476,37 +468,37 @@ instance (Num' s, LinearSpace s) => FiniteDimensional (ZeroDim s) where
   data EntireBasis (ZeroDim s) = ZeroBasis
   recomposeEntire ZeroBasis l = (Origin, l)
   decomposeLinMap _ = (ZeroBasis, id)
-  recomposeContraLinMap _ _ = CoOrigin
-  sampleLinearFunction _ = CoOrigin
+  recomposeContraLinMap _ _ = LinearMap Origin
+  sampleLinearFunction _ = LinearMap Origin
   
 instance (Num' s, LinearSpace s) => FiniteDimensional (V0 s) where
   data EntireBasis (V0 s) = V0Basis
   recomposeEntire V0Basis l = (V0, l)
   decomposeLinMap _ = (V0Basis, id)
-  recomposeContraLinMap _ _ = FromV0 V0
-  sampleLinearFunction _ = FromV0 V0
+  recomposeContraLinMap _ _ = LinearMap V0
+  sampleLinearFunction _ = LinearMap V0
   
 instance FiniteDimensional ℝ where
   data EntireBasis ℝ = RealsBasis
   recomposeEntire RealsBasis [] = (0, [])
   recomposeEntire RealsBasis (μ:cs) = (μ, cs)
-  decomposeLinMap (RealVect v) = (RealsBasis, (v:))
-  recomposeContraLinMap fw = RealVect . fw . fmap ($1)
-  sampleLinearFunction f = RealVect $ f 1
+  decomposeLinMap (LinearMap v) = (RealsBasis, (v:))
+  recomposeContraLinMap fw = LinearMap . fw . fmap ($1)
+  sampleLinearFunction f = LinearMap $ f 1
 
-#define FreeFiniteDimensional(V, VB, LV, take, give)      \
+#define FreeFiniteDimensional(V, VB, take, give)          \
 instance (Num' s, LinearSpace s)                           \
             => FiniteDimensional (V s) where {              \
   data EntireBasis (V s) = VB;                               \
   recomposeEntire _ (take:cs) = (give, cs);                   \
   recomposeEntire b cs = recomposeEntire b $ cs ++ [0];        \
-  decomposeLinMap (LV m) = (VB, (toList m ++));                 \
-  sampleLinearFunction f = LV $ fmap f Mat.identity;             \
-  recomposeContraLinMap fw mv = LV $ (\v -> fw $ fmap ($v) mv) <$> Mat.identity }
-FreeFiniteDimensional(V1, V1Basis, FromV1, c₀         , V1 c₀         )
-FreeFiniteDimensional(V2, V2Basis, FromV2, c₀:c₁      , V2 c₀ c₁      )
-FreeFiniteDimensional(V3, V3Basis, FromV3, c₀:c₁:c₂   , V3 c₀ c₁ c₂   )
-FreeFiniteDimensional(V4, V4Basis, FromV4, c₀:c₁:c₂:c₃, V4 c₀ c₁ c₂ c₃)
+  decomposeLinMap (LinearMap m) = (VB, (toList m ++));          \
+  sampleLinearFunction f = LinearMap $ fmap f Mat.identity;      \
+  recomposeContraLinMap fw mv = LinearMap $ (\v -> fw $ fmap ($v) mv) <$> Mat.identity }
+FreeFiniteDimensional(V1, V1Basis, c₀         , V1 c₀         )
+FreeFiniteDimensional(V2, V2Basis, c₀:c₁      , V2 c₀ c₁      )
+FreeFiniteDimensional(V3, V3Basis, c₀:c₁:c₂   , V3 c₀ c₁ c₂   )
+FreeFiniteDimensional(V4, V4Basis, c₀:c₁:c₂:c₃, V4 c₀ c₁ c₂ c₃)
                                   
 deriving instance Show (EntireBasis ℝ)
   
@@ -514,18 +506,19 @@ instance ( FiniteDimensional u, InnerSpace u, FiniteDimensional v, InnerSpace v
          , Scalar u ~ Scalar v, Fractional' (Scalar v) )
             => FiniteDimensional (u,v) where
   data EntireBasis (u,v) = TupleBasis !(EntireBasis u) !(EntireBasis v)
-  decomposeLinMap (CoDirectSum fu fv) = case (decomposeLinMap fu, decomposeLinMap fv) of
+  decomposeLinMap (LinearMap (fu, fv))
+       = case (decomposeLinMap (LinearMap fu), decomposeLinMap (LinearMap fv)) of
          ((bu, du), (bv, dv)) -> (TupleBasis bu bv, du . dv)
   recomposeEntire (TupleBasis bu bv) coefs = case recomposeEntire bu coefs of
                         (u, coefs') -> case recomposeEntire bv coefs' of
                          (v, coefs'') -> ((u,v), coefs'')
   recomposeContraLinMap fw dds
-         = CoDirectSum (recomposeContraLinMap fw 
-                         $ fmap (\(LinearMap (CoDirectSum v' _)) -> LinearMap v') dds)
-                       (recomposeContraLinMap fw
-                         $ fmap (\(LinearMap (CoDirectSum _ v')) -> LinearMap v') dds)
-  sampleLinearFunction f = CoDirectSum (sampleLinearFunction $ f . (,zeroV))
-                                       (sampleLinearFunction $ f . (zeroV,))
+         = recomposeContraLinMap fw 
+               (fmap (\(LinearMap (v', _)) -> LinearMap v') dds)
+          ⊕ recomposeContraLinMap fw
+               (fmap (\(LinearMap (_, v')) -> LinearMap v') dds)
+  sampleLinearFunction f = sampleLinearFunction (f . (,zeroV))
+                         ⊕ sampleLinearFunction (f . (zeroV,))
   
 deriving instance (Show (EntireBasis u), Show (EntireBasis v))
                     => Show (EntireBasis (u,v))
@@ -540,7 +533,7 @@ infixr 0 \$
 (\$) :: ( FiniteDimensional u, FiniteDimensional v, SemiInner v
         , Scalar u ~ Scalar v, Fractional (Scalar v) )
           => (u+>v) -> v -> u
-(\$) (LinearMap m) = fst . \v -> recomposeEntire mbas [v' $ v | v' <- v's]
+(\$) m = fst . \v -> recomposeEntire mbas [v' $ v | v' <- v's]
  where v's = dualBasis $ mdecomp []
        (mbas, mdecomp) = decomposeLinMap m
     
@@ -548,20 +541,19 @@ infixr 0 \$
 pseudoInverse :: ( FiniteDimensional u, FiniteDimensional v, SemiInner v
         , Scalar u ~ Scalar v, Fractional (Scalar v) )
           => (u+>v) -> v+>u
-pseudoInverse (LinearMap m) = LinearMap mi
- where mi = recomposeContraLinMap (fst . recomposeEntire mbas) v's
-       v's = dualBasis $ mdecomp []
+pseudoInverse m = recomposeContraLinMap (fst . recomposeEntire mbas) v's
+ where v's = dualBasis $ mdecomp []
        (mbas, mdecomp) = decomposeLinMap m
 
 
 -- | The <https://en.wikipedia.org/wiki/Riesz_representation_theorem Riesz representation theorem>
 --   provides an isomorphism between a Hilbert space and its (continuous) dual space.
 riesz :: (FiniteDimensional v, InnerSpace v) => DualSpace v -> v
-riesz (LinearMap dv) = fst . recomposeEntire bas $ compos []
+riesz dv = fst . recomposeEntire bas $ compos []
  where (bas, compos) = decomposeLinMap dv
 
 coRiesz :: (FiniteDimensional v, InnerSpace v) => v -> DualSpace v
-coRiesz v = LinearMap $ sampleLinearFunction (v<.>)
+coRiesz v = sampleLinearFunction (v<.>)
 
 -- | Functions are generally a pain to display, but since linear functionals
 --   in a Hilbert space can be represented by /vectors/ in that space,
@@ -584,7 +576,7 @@ infixl 7 .<
 --   provided mostly to lay out matrix definitions neatly.
 (.<) :: (FiniteDimensional v, InnerSpace v, HasBasis w, Scalar v ~ Scalar w)
            => Basis w -> v -> v+>w
-bw .< v = LinearMap $ sampleLinearFunction (\v' -> recompose [(bw, v<.>v')])
+bw .< v = sampleLinearFunction (\v' -> recompose [(bw, v<.>v')])
 
 instance Show (LinearMap s v (V0 s)) where
   show _ = "zeroV"
