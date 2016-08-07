@@ -61,6 +61,7 @@ import Data.List (maximumBy)
 import Data.Foldable (toList)
 
 import Data.Coerce
+import Data.Type.Coercion
 
 import Data.VectorSpace.Free
 import qualified Linear.Matrix as Mat
@@ -87,7 +88,9 @@ class (VectorSpace v) => TensorSpace v where
                 => v -> w -> v ⊗ w
   transposeTensor :: (LSpace w, Scalar w ~ Scalar v)
                 => v ⊗ w -> w ⊗ v
-  coerceFmapTensor :: Coercible a b => v ⊗ a -> v ⊗ b
+  coerceFmapTensor :: Coercion a b -> Coercion (v⊗a) (v⊗b)
+  coerceFmapTensorProduct :: Hask.Functor p
+       => p v -> Coercion a b -> Coercion (TensorProduct v a) (TensorProduct v b)
 
 -- | The class of vector spaces which implement linear maps. Alternatively,
 --   this can be considered as the class of spaces with a properly tractable
@@ -161,9 +164,7 @@ class ( TensorSpace v, TensorSpace (DualVector v)
   composeLinear :: ( LSpace w, LSpace x
                    , Scalar w ~ Scalar v, Scalar x ~ Scalar v )
            => (w +> x) -> (v +> w) -> v +> x
-
-coerceAfterLinear :: (LinearSpace v, Coercible a b) => (v+>a) -> v+>b
-coerceAfterLinear = fromTensor . coerceFmapTensor . asTensor
+  coerceAfterLinear :: LinearSpace v => Coercion a b -> Coercion (v+>a) (v+>b)
 
 
 
@@ -188,7 +189,7 @@ instance Num' s => TensorSpace (ZeroDim s) where
   subtractTensors (Tensor Origin) (Tensor Origin) = Tensor Origin
   Origin ⊗ _ = Tensor Origin
   transposeTensor (Tensor Origin) = zeroV
-  coerceFmapTensor (Tensor Origin) = Tensor Origin
+  coerceFmapTensor Coercion = Coercion
 instance Num' s => LinearSpace (ZeroDim s) where
   type DualVector (ZeroDim s) = ZeroDim s
   linearId = LinearMap Origin
@@ -353,7 +354,7 @@ instance TensorSpace ℝ where
   negateTensor (Tensor w) = Tensor $ negateV w
   μ ⊗ w = Tensor $ μ *^ w
   transposeTensor (Tensor w) = w ⊗ 1
-  coerceFmapTensor (Tensor w) = Tensor $ coerce w
+  coerceFmapTensor Coercion = Coercion
 instance LinearSpace ℝ where
   type DualVector ℝ = ℝ
   linearId = LinearMap 1
@@ -373,7 +374,8 @@ instance LinearSpace ℝ where
   transposeTensor_l = tptl
    where tptl :: ∀ w . (LSpace w, Scalar w ~ ℝ) => (w ⊗ ℝ) +> (ℝ ⊗ w)
          tptl = LinearMap . asTensor
-                $ (coerceAfterLinear id :: LinearMap ℝ w (Tensor ℝ ℝ w))
+                $ (coerceWith (coerceAfterLinear Coercion) id
+                                     :: LinearMap ℝ w (Tensor ℝ ℝ w))
   contractTensor (LinearMap (Tensor w)) = w
   tensorProduct_l w = LinearMap $ Tensor w
   blockVectSpan w = Tensor $ LinearMap w
@@ -391,7 +393,7 @@ instance Num' s => TensorSpace (V s) where {                     \
   scaleTensor μ (Tensor m) = Tensor $ fmap (μ*^) m; \
   v ⊗ w = Tensor $ fmap (*^w) v; \
   transposeTensor = tp;                                        \
-  coerceFmapTensor = coerce };                  \
+  coerceFmapTensor Coercion = Coercion };                  \
 instance Num' s => LinearSpace (V s) where {                  \
   type DualVector (V s) = V s;                                 \
   linearId = LV Mat.identity;                                   \
@@ -493,6 +495,14 @@ bothTupleParts f (Tensor (fua, fva)) = Tensor (fub, fvb)
  where Tensor fub = f (Tensor fua :: Tensor s u a)
        Tensor fvb = f (Tensor fva :: Tensor s v a)
 
+coerceTupleTensor :: ∀ s u v a b
+    . (LSpace u, Scalar u ~ s, LSpace v, Scalar v ~ s, Coercible a b)
+            => Coercion (Tensor s (u,v) a) (Tensor s (u,v) b)
+coerceTupleTensor = case
+             ( coerceFmapTensorProduct ([]::[u]) cab
+             , coerceFmapTensorProduct ([]::[v]) cab ) of
+          (Coercion, Coercion) -> Coercion
+ where cab = Coercion :: Coercion a b
   
 instance ∀ u v . ( LSpace u, LSpace v, Scalar u ~ Scalar v )
                        => TensorSpace (u,v) where
@@ -508,7 +518,7 @@ instance ∀ u v . ( LSpace u, LSpace v, Scalar u ~ Scalar v )
   (u,v) ⊗ w = (u ⊗ w) <⊕ (v ⊗ w)
   transposeTensor (Tensor (fu, fv)) = fmapTensor linearCoFst (transposeTensor $ Tensor fu)
                                   ^+^ fmapTensor linearCoSnd (transposeTensor $ Tensor fv)
-  coerceFmapTensor = bothTupleParts coerceFmapTensor
+  coerceFmapTensor Coercion = coerceTupleTensor
 instance ∀ u v . ( LinearSpace u, LinearSpace (DualVector u), DualVector (DualVector u) ~ u
                  , LinearSpace v, LinearSpace (DualVector v), DualVector (DualVector v) ~ v
                  , Scalar u ~ Scalar v, Num'' (Scalar u) )
@@ -576,7 +586,8 @@ instance ∀ s u v . ( Num'' s, LSpace u, LSpace v, Scalar u ~ s, Scalar v ~ s )
          f = e . transposeTensor_l  --  (u ⊗ w')+> v
          g = asTensor f             --  (w ⊗ u') ⊗ v
          h = rassocTensor g         --  w ⊗ (u' ⊗ v)
-         i = coerceFmapTensor h     --  w ⊗ (u +> v)
+         i = coerceWith fTT h       --  w ⊗ (u +> v)
+         fTT = coerceFmapTensor Coercion
   t ⊗ w = deferLinearMap (tensorProduct_l w . t)
   -- coerceFmapTensor = deferLinearMap . coerceAfterLinear . hasteLinearMap
 instance ∀ s u v . (Num'' s, LSpace u, LSpace v, Scalar u ~ s, Scalar v ~ s)
