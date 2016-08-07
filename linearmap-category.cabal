@@ -22,7 +22,7 @@ library
   other-extensions:    FlexibleInstances, UndecidableInstances, FunctionalDependencies, TypeOperators, TypeFamilies
   build-depends:       base >=4.8 && <4.9,
                        vector-space >=0.10 && <0.11,
-                       constrained-categories >=0.2 && <0.3,
+                       constrained-categories >=0.2.5.2 && <0.3,
                        containers,
                        free-vector-spaces >= 0.1 && < 0.2,
                        linear
