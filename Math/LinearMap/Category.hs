@@ -105,11 +105,13 @@ class ( TensorSpace v, TensorSpace (DualVector v)
   type DualVector v :: *
  
   linearId :: v +> v
-  idTensor :: v ⊗ DualVector v
+  idTensor :: (Num'' (Scalar v), LinearSpace (DualVector v), v ~ DualVector (DualVector v))
+                    => v ⊗ DualVector v
+  idTensor = transposeTensor $ asTensor $ linearId
   coerceDoubleDual :: Coercion v (DualVector (DualVector v))
-  linearCoFst :: (LinearSpace w, Scalar w ~ Scalar v)
+  linearCoFst :: (LSpace w, Scalar w ~ Scalar v)
                 => v +> (v,w)
-  linearCoSnd :: (LinearSpace w, Scalar w ~ Scalar v)
+  linearCoSnd :: (LSpace w, Scalar w ~ Scalar v)
                 => v +> (w,v)
   fanoutBlocks :: ( LinearSpace w, LinearSpace x
                 , Scalar w ~ Scalar v, Scalar x ~ Scalar v )
@@ -143,11 +145,11 @@ class ( TensorSpace v, TensorSpace (DualVector v)
   blockVectSpan :: (LinearSpace w, Scalar w ~ Scalar v)
            => w -> v⊗(v+>w)
   transposeTensor_l :: (LSpace w, Scalar w ~ Scalar v)
-           => (w⊗v) +> (v⊗w)
+           => (v⊗w) +> (w⊗v)
   fmapTensor :: (LSpace w, LSpace x, Scalar w ~ Scalar v, Scalar x ~ Scalar v)
            => (w+>x) -> (v⊗w)->(v⊗x)
-  -- fmapTensor_l :: (LinearSpace w, LinearSpace x, Scalar w ~ Scalar v, Scalar x ~ Scalar v)
-  --          => (w+>x) -> (v⊗w)+>(v⊗x)
+  fmapTensor_l :: (LSpace w, LinearSpace x, Scalar w ~ Scalar v, Scalar x ~ Scalar v)
+           => (w+>x) -> (v⊗w)+>(v⊗x)
   diagSpanTensor :: (LinearSpace w, Scalar w ~ Scalar v)
            => (v+>(w⊗(w+>v)))
   contractTensor :: (LinearSpace w, Scalar w ~ Scalar v)
@@ -200,7 +202,7 @@ instance Num' s => LinearSpace (ZeroDim s) where
   tensorProduct_l _ = LinearMap Origin
   -- secondBlock_l = LinearMap Origin
   fmapTensor _ _ = Tensor Origin
-  -- fmapTensor_l f = LinearMap _
+  fmapTensor_l f = LinearMap Origin
   transposeTensor_l = LinearMap Origin
   contractTensor _ = zeroV
   blockVectSpan _ = Tensor Origin
@@ -234,7 +236,7 @@ asLinearMap :: ∀ s v w . (LSpace v, Scalar v ~ s)
            => Coercion (Tensor s v w) (LinearMap s (DualVector v) w)
 asLinearMap = Coercion
 fromLinearMap :: ∀ s v w . (LSpace v, Scalar v ~ s)
-           => Coercion (Tensor s v w) (LinearMap s (DualVector v) w)
+           => Coercion (LinearMap s (DualVector v) w) (Tensor s v w)
 fromLinearMap = Coercion
 
 -- | Infix synonym for 'LinearMap', without explicit mention of the scalar type.
@@ -368,11 +370,8 @@ instance LinearSpace ℝ where
   -- firstBlock_l = LinearMap $ fmapTensor  
   fmapTensor f (Tensor w) = Tensor (f $ w)
    -- where Tensor vtx = blockVectSpan x
-  transposeTensor_l = tptl
-   where tptl :: ∀ w . (LSpace w, Scalar w ~ ℝ) => (w ⊗ ℝ) +> (ℝ ⊗ w)
-         tptl = LinearMap $ asTensor
-                $ (fmap Coercion $ id
-                                     :: LinearMap ℝ w (Tensor ℝ ℝ w))
+  fmapTensor_l f = LinearMap (fromLinearMap . fmap Coercion $ f)
+  transposeTensor_l = LinearMap (fromLinearMap $ tensorProduct_l 1)
   contractTensor (LinearMap (Tensor w)) = w
   tensorProduct_l w = LinearMap $ Tensor w
   blockVectSpan w = Tensor $ LinearMap w
@@ -517,8 +516,9 @@ instance ∀ u v . ( LinearSpace u, LinearSpace (DualVector u), DualVector (Dual
   type DualVector (u,v) = (DualVector u, DualVector v)
   linearId = linearCoFst ⊕ linearCoSnd
   idTensor = fmapTensor linearCoFst idTensor <⊕ fmapTensor linearCoSnd idTensor
-  -- linearCoFst = composeLinear linearCoFst linearCoFst ⊕ composeLinear linearCoFst linearCoSnd
-  -- linearCoSnd = composeLinear linearCoSnd linearCoFst ⊕ composeLinear linearCoSnd linearCoSnd
+  coerceDoubleDual = Coercion
+  linearCoFst = composeLinear linearCoFst linearCoFst ⊕ composeLinear linearCoFst linearCoSnd
+  linearCoSnd = composeLinear linearCoSnd linearCoFst ⊕ composeLinear linearCoSnd linearCoSnd
   fstBlock (fu :⊕ fv) = fstBlock fu ⊕ fstBlock fv
   sndBlock (fu :⊕ fv) = sndBlock fu ⊕ sndBlock fv
   sepBlocks (LinearMap (fu, fv)) = (fuw ⊕ fvw, fux ⊕ fvx)
@@ -530,7 +530,7 @@ instance ∀ u v . ( LinearSpace u, LinearSpace (DualVector u), DualVector (Dual
   firstBlock (LinearMap (fu, fv)) = firstBlock (LinearMap fu) ⊕ firstBlock (LinearMap fv)
   secondBlock (LinearMap (fu, fv)) = secondBlock (LinearMap fu) ⊕ secondBlock (LinearMap fv)
   fmapTensor f (Tensor (fu, fv)) = fmapTensor f (Tensor fu) <⊕ fmapTensor f (Tensor fv)
-  -- blockVectSpan w = fmapTensor rcFst (blockVectSpan w) <⊕ fmapTensor rcSnd (blockVectSpan w)
+  -- blockVectSpan w = fmapTensor _ (blockVectSpan w) <⊕ fmapTensor _ (blockVectSpan w)
   applyLinear (LinearMap (fu, fv)) (u,v)
              = applyLinear (LinearMap fu) u ^+^ applyLinear (LinearMap fv) v
   composeLinear f (LinearMap (fu, fv))
@@ -579,20 +579,36 @@ instance ∀ s u v . ( Num'' s, LSpace u, LSpace v, Scalar u ~ s, Scalar v ~ s )
          h = rassocTensor $ g       --  w ⊗ (u' ⊗ v)
          i = fmap fromTensor $ h    --  w ⊗ (u +> v)
   t ⊗ w = deferLinearMap $ tensorProduct_l w . t
-  -- coerceFmapTensor = deferLinearMap . coerceAfterLinear . hasteLinearMap
+  coerceFmapTensorProduct = cftlp
+   where cftlp :: ∀ a b p . p (LinearMap s u v) -> Coercion a b
+                   -> Coercion (TensorProduct (DualVector u) (Tensor s v a))
+                               (TensorProduct (DualVector u) (Tensor s v b))
+         cftlp _ c = coerceFmapTensorProduct ([]::[DualVector u])
+                                             (fmap c :: Coercion (v⊗a) (v⊗b))
+
+-- | @((u+>v)+>w) -> v+>(u⊗w)@
+coCurryLinearMap :: Coercion (LinearMap s (LinearMap s u v) w) (LinearMap s v (Tensor s u w))
+coCurryLinearMap = Coercion
+
+-- | @(u+>(v⊗w)) -> (v+>u)+>w@
+coUncurryLinearMap :: Coercion (LinearMap s u (Tensor s v w)) (LinearMap s (LinearMap s v u) w)
+coUncurryLinearMap = Coercion
+
 instance ∀ s u v . (Num'' s, LSpace u, LSpace v, Scalar u ~ s, Scalar v ~ s)
                        => LinearSpace (LinearMap s u v) where
   type DualVector (LinearMap s u v) = LinearMap s v u
   linearId = LinearMap dst
    where LinearMap dst = diagSpanTensor :: LinearMap s v (Tensor s u (LinearMap s u v))
+  coerceDoubleDual = Coercion
   applyLinear (LinearMap f) g = contractTensor $ LinearMap f . g
+  composeLinear f g = coUncurryLinearMap $ fmapTensor_l f . (coCurryLinearMap$g)
 
 instance ∀ s u v . (LSpace u, LSpace v, Scalar u ~ s, Scalar v ~ s)
                        => TensorSpace (Tensor s u v) where
   type TensorProduct (Tensor s u v) w = TensorProduct u (Tensor s v w)
 instance ∀ s u v . (Num'' s, LSpace u, LSpace v, Scalar u ~ s, Scalar v ~ s)
                        => LinearSpace (Tensor s u v) where
-  type DualVector (Tensor s u v) = Tensor s (DualVector v) (DualVector u)
+  type DualVector (Tensor s u v) = Tensor s (DualVector u) (DualVector v)
 
 
 
