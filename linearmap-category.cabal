@@ -18,6 +18,7 @@ cabal-version:       >=1.10
 
 library
   exposed-modules:     Math.LinearMap.Category
+                       Math.LinearMap.Asserted
   -- other-modules:       
   other-extensions:    FlexibleInstances, UndecidableInstances, FunctionalDependencies, TypeOperators, TypeFamilies
   build-depends:       base >=4.8 && <4.9,

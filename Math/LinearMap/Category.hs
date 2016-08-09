@@ -66,6 +66,8 @@ import Data.VectorSpace.Free
 import qualified Linear.Matrix as Mat
 import qualified Linear.Vector as Mat
 
+import Math.LinearMap.Asserted
+
 type Num' s = (Num s, VectorSpace s, Scalar s ~ s)
 type Num'' s = (Num' s, LinearSpace s)
 type Num''' s = (Num s, Scalar s ~ s, LSpace s)
