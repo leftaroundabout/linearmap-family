@@ -33,6 +33,7 @@ import qualified Prelude as Hask
 
 import Control.Category.Constrained.Prelude
 import Control.Arrow.Constrained
+import Data.Traversable.Constrained
 
 import Data.Coerce
 import Data.Type.Coercion
@@ -86,3 +87,29 @@ FreeLinFtor(V2)
 FreeLinFtor(V3)
 FreeLinFtor(V4)
 
+instance Traversable V0 V0 LinearFunction LinearFunction where
+  traverse (LinearFunction _)
+      = fmap (LinearFunction $ const V0) . pureUnit . LinearFunction (const ())
+  sequence = fmap (LinearFunction $ const V0) . pureUnit . LinearFunction (const ())
+instance Traversable V1 V1 LinearFunction LinearFunction where
+  traverse (LinearFunction f) = LinearFunction $ \(V1 x) -> fmap (LinearFunction V1) $ f x
+  sequence = LinearFunction $ \(V1 q) -> fmap (LinearFunction V1) $ q
+instance Traversable V2 V2 LinearFunction LinearFunction where
+  traverse (LinearFunction f) = LinearFunction $ \(V2 x y)
+               -> fzipWith (LinearFunction $ \(fx,fy) -> V2 fx fy) $ (f x, f y)
+  sequence = LinearFunction $ \(V2 p q) -> fzipWith (LinearFunction $ uncurry V2) $ (p,q)
+instance Traversable V3 V3 LinearFunction LinearFunction where
+  traverse (LinearFunction f) = LinearFunction $ \(V3 x y z)
+               -> fzipWith (LinearFunction $ \(fx,V2 fy fz) -> V3 fx fy fz)
+                       $ (f x, traverse (LinearFunction f) $ V2 y z)
+  sequence = LinearFunction $ \(V3 p q r)
+               -> fzipWith (LinearFunction $ \(sp,V2 sq sr) -> V3 sp sq sr)
+                       $ (p, getLinearFunction sequence $ V2 q r)
+instance Traversable V4 V4 LinearFunction LinearFunction where
+  traverse f = LinearFunction $ \(V4 x y z w)
+               -> fzipWith (LinearFunction $ \(V2 fx fy,V2 fz fw) -> V4 fx fy fz fw)
+                       $ ( traverse f $ (V2 x y), traverse f $ (V2 z w))
+  sequence = LinearFunction $ \(V4 p q r s)
+               -> fzipWith (LinearFunction $ \(V2 sp sq,V2 sr ss) -> V4 sp sq sr ss)
+                       $ ( getLinearFunction sequence $ V2 p q
+                         , getLinearFunction sequence $ V2 r s )
