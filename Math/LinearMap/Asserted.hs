@@ -39,6 +39,7 @@ import Data.Coerce
 import Data.Type.Coercion
 
 import Data.VectorSpace.Free
+import Math.VectorSpace.ZeroDimensional
 import qualified Linear.Matrix as Mat
 import qualified Linear.Vector as Mat
 

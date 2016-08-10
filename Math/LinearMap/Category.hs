@@ -164,18 +164,6 @@ class ( TensorSpace v, TensorSpace (DualVector v)
 
 
 
-data ZeroDim s = Origin
-instance Monoid (ZeroDim s) where
-  mempty = Origin
-  mappend Origin Origin = Origin
-
-instance AdditiveGroup (ZeroDim s) where
-  zeroV = Origin
-  Origin ^+^ Origin = Origin
-  negateV Origin = Origin
-instance VectorSpace (ZeroDim s) where
-  type Scalar (ZeroDim s) = s
-  _ *^ Origin = Origin
 instance Num' s => TensorSpace (ZeroDim s) where
   type TensorProduct (ZeroDim s) v = ZeroDim s
   zeroTensor = Tensor Origin
