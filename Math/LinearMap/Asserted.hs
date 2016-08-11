@@ -39,7 +39,6 @@ import Data.Coerce
 import Data.Type.Coercion
 
 import Data.VectorSpace.Free
-import Math.VectorSpace.ZeroDimensional
 import qualified Linear.Matrix as Mat
 import qualified Linear.Vector as Mat
 
@@ -74,13 +73,26 @@ scaleWith μ = LinearFunction (μ*^)
 scaleV :: VectorSpace v => v -> LinearFunction (Scalar v) v
 scaleV v = LinearFunction (*^v)
 
-const0 :: AdditiveGroup v => LinearFunction v v
+const0 :: AdditiveGroup w => LinearFunction v w
 const0 = LinearFunction (const zeroV)
 
+lNegateV :: AdditiveGroup w => LinearFunction w w
+lNegateV = LinearFunction negateV
+
+addV :: AdditiveGroup w => LinearFunction (w,w) w
+addV = LinearFunction $ uncurry (^+^)
+
+fmapScale :: (VectorSpace w, Functor f LinearFunction LinearFunction)
+               => f (Scalar w) -> LinearFunction w (f w)
+fmapScale v = LinearFunction $ \w -> fmap (scaleV w) $ v
 
 #define FreeLinFtor(V)                                  \
-instance Functor V LinearFunction LinearFunction where   \
-  fmap (LinearFunction f) = LinearFunction $ fmap f
+instance Functor V LinearFunction LinearFunction where { \
+  fmap (LinearFunction f) = LinearFunction $ fmap f };    \
+instance Monoidal V LinearFunction LinearFunction where {  \
+  pureUnit = LinearFunction pure;                           \
+  fzipWith (LinearFunction f)                                \
+      = LinearFunction . uncurry $ liftA2 (curry f) }
 
 FreeLinFtor(V0)
 FreeLinFtor(V1)
@@ -114,3 +126,25 @@ instance Traversable V4 V4 LinearFunction LinearFunction where
                -> fzipWith (LinearFunction $ \(V2 sp sq,V2 sr ss) -> V4 sp sq sr ss)
                        $ ( getLinearFunction sequence $ V2 p q
                          , getLinearFunction sequence $ V2 r s )
+
+
+
+
+type Bilinear v w y = LinearFunction v (LinearFunction w y)
+
+bilinearFunction :: (v -> w -> y) -> Bilinear v w y
+bilinearFunction f = LinearFunction $ LinearFunction . f
+
+flipBilin :: Bilinear v w y -> Bilinear w v y
+flipBilin (LinearFunction f) = LinearFunction
+     $ \w -> LinearFunction $ f >>> \(LinearFunction g) -> g w
+
+scale :: VectorSpace v => Bilinear (Scalar v) v v
+scale = LinearFunction $ \μ -> LinearFunction (μ*^)
+
+-- | @elacs ≡ 'flipBilin' 'scale'@.
+elacs :: VectorSpace v => Bilinear v (Scalar v) v
+elacs = LinearFunction $ \v -> LinearFunction (*^v)
+
+biConst0 :: AdditiveGroup v => Bilinear a b v
+biConst0 = LinearFunction $ const const0
