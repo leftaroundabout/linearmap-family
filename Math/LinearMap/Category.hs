@@ -77,6 +77,8 @@ class (VectorSpace v) => TensorSpace v where
   type TensorProduct v w :: *
   zeroTensor :: (LSpace w, Scalar w ~ Scalar v)
                 => v ⊗ w
+  toFlatTensor :: LinearFunction v (v ⊗ Scalar v)
+  fromFlatTensor :: LinearFunction (v ⊗ Scalar v) v
   addTensors :: (LSpace w, Scalar w ~ Scalar v)
                 => (v ⊗ w) -> (v ⊗ w) -> v ⊗ w
   subtractTensors :: (LSpace w, Scalar w ~ Scalar v)
@@ -158,7 +160,7 @@ class ( TensorSpace v, TensorSpace (DualVector v)
   blockVectSpan' = LinearFunction $ \w -> fmap (flipBilin tensorProduct $ w) $ id
   fmapTensor :: (LSpace w, LSpace x, Scalar w ~ Scalar v, Scalar x ~ Scalar v)
            => Bilinear (LinearFunction w x) (v⊗w) (v⊗x)
-  contractTensor :: (LinearSpace w, Scalar w ~ Scalar v)
+  contractTensor :: (LSpace w, Scalar w ~ Scalar v)
            => LinearFunction (v+>(v⊗w)) w
   applyLinear :: (LSpace w, Scalar w ~ Scalar v)
                 => Bilinear (v+>w) v w
@@ -170,6 +172,8 @@ class ( TensorSpace v, TensorSpace (DualVector v)
 instance Num' s => TensorSpace (ZeroDim s) where
   type TensorProduct (ZeroDim s) v = ZeroDim s
   zeroTensor = Tensor Origin
+  toFlatTensor = LinearFunction $ \Origin -> Tensor Origin
+  fromFlatTensor = LinearFunction $ \(Tensor Origin) -> Origin
   negateTensor = const0
   scaleTensor = biConst0
   addTensors (Tensor Origin) (Tensor Origin) = Tensor Origin
@@ -323,8 +327,8 @@ instance Num'' s => Morphism (LinearMap s) where
 instance Num'' s => PreArrow (LinearMap s) where
   (&&&) = curry $ arr fanoutBlocks
   terminal = zeroV
-  fst = lfstBlock id
-  snd = lsndBlock id
+  fst = lfstBlock $ id
+  snd = lsndBlock $ id
 instance Num' s => EnhancedCat (->) (LinearMap s) where
   arr m = arr $ applyLinear $ m
 instance Num' s => EnhancedCat LinearFunction (LinearMap s) where
@@ -339,8 +343,10 @@ instance TensorSpace ℝ where
   addTensors (Tensor v) (Tensor w) = Tensor $ v ^+^ w
   subtractTensors (Tensor v) (Tensor w) = Tensor $ v ^-^ w
   negateTensor = pretendLike Tensor lNegateV
+  toFlatTensor = follow Tensor
+  fromFlatTensor = flout Tensor
   tensorProduct = LinearFunction $ \μ -> follow Tensor . scaleWith μ
-  -- transposeTensor = toFlatTensor . flout Tensor
+  transposeTensor = toFlatTensor . flout Tensor
   coerceFmapTensorProduct _ Coercion = Coercion
 instance LinearSpace ℝ where
   type DualVector ℝ = ℝ
@@ -366,7 +372,10 @@ instance Num' s => TensorSpace (V s) where {                     \
   subtractTensors (Tensor m) (Tensor n) = Tensor $ liftA2 (^-^) m n; \
   negateTensor = pretendLike Tensor $ fmap lNegateV;                  \
   scaleTensor = LinearFunction $ \μ -> pretendLike Tensor $ fmap (scaleWith μ); \
+  toFlatTensor = follow Tensor; \
+  fromFlatTensor = flout Tensor; \
   tensorProduct = flipBilin $ LinearFunction $ \v -> follow Tensor . fmap (scaleV v); \
+  transposeTensor = LinearFunction (tp); \
   coerceFmapTensorProduct _ Coercion = Coercion };                  \
 instance Num' s => LinearSpace (V s) where {                  \
   type DualVector (V s) = V s;                                 \
@@ -378,6 +387,7 @@ instance Num' s => LinearSpace (V s) where {                  \
   fanoutBlocks = follow LinearMap  \
        . fzip . (flout LinearMap***flout LinearMap); \
   blockVectSpan = follow Tensor . LinearFunction (bspan);            \
+  fmapTensor = LinearFunction $ \f -> pretendLike Tensor $ fmap f; \
   contractTensor = LinearFunction (contraction) . flout LinearMap;      \
   applyLinear = bilinearFunction $ \(LV m)                        \
                   -> foldl' (^+^) zeroV . liftA2 (^*) m;           \
@@ -464,14 +474,17 @@ instance ∀ u v . ( LSpace u, LSpace v, Scalar u ~ Scalar v )
   zeroTensor = zeroTensor <⊕ zeroTensor
   scaleTensor = scaleTensor&&&scaleTensor >>> LinearFunction (
                         uncurry (***) >>> pretendLike Tensor )
+  negateTensor = pretendLike Tensor $ negateTensor *** negateTensor
   addTensors (Tensor (fu, fv)) (Tensor (fu', fv')) = (fu ^+^ fu') <⊕ (fv ^+^ fv')
   subtractTensors (Tensor (fu, fv)) (Tensor (fu', fv'))
           = (fu ^-^ fu') <⊕ (fv ^-^ fv')
-  -- negateTensor (Tensor (fu, fv)) = negateV fu <⊕ negateV fv
+  toFlatTensor = follow Tensor <<< toFlatTensor *** toFlatTensor
+  fromFlatTensor = flout Tensor >>> fromFlatTensor *** fromFlatTensor
   tensorProduct = LinearFunction $ \(u,v) ->
                     (tensorProduct$u) &&& (tensorProduct$v) >>> follow Tensor
   -- transposeTensor (Tensor (fu, fv)) = fmapTensor linearCoFst (transposeTensor fu)
   --                                ^+^ fmapTensor linearCoSnd (transposeTensor fv)
+  transposeTensor = flout Tensor >>> transposeTensor *** transposeTensor >>> fzip
   coerceFmapTensorProduct p cab = case
              ( coerceFmapTensorProduct (fst<$>p) cab
              , coerceFmapTensorProduct (snd<$>p) cab ) of
@@ -498,7 +511,12 @@ instance ∀ u v . ( LinearSpace u, LinearSpace (DualVector u), DualVector (Dual
   secondBlock = LinearFunction $ \(LinearMap (fu, fv))
           -> (secondBlock $ asLinearMap $ fu) ⊕ (secondBlock $ asLinearMap $ fv)
   fmapTensor = LinearFunction $ \f -> pretendLike Tensor $ (fmapTensor$f) *** (fmapTensor$f)
-  -- blockVectSpan w = fmapTensor _ (blockVectSpan w) <⊕ fmapTensor _ (blockVectSpan w)
+  blockVectSpan = (blockVectSpan >>> fmap lfstBlock) &&& (blockVectSpan >>> fmap lsndBlock)
+                     >>> follow Tensor -- w = fmapTensor _ (blockVectSpan w) <⊕ fmapTensor _ (blockVectSpan w)
+  contractTensor = flout LinearMap
+               >>>  contractTensor . fmap (fst . flout Tensor) . arr fromTensor
+                 ***contractTensor . fmap (snd . flout Tensor) . arr fromTensor
+               >>> addV
   applyLinear = LinearFunction $ \(LinearMap (fu, fv)) ->
            (applyLinear $ (asLinearMap $ fu)) *** (applyLinear $ (asLinearMap $ fv))
              >>> addV
@@ -507,12 +525,12 @@ instance ∀ u v . ( LinearSpace u, LinearSpace (DualVector u), DualVector (Dual
 
 lfstBlock :: ( LinearSpace u, LinearSpace v, LSpace w
              , Scalar u ~ Scalar v, Scalar v ~ Scalar w )
-          => (u+>w) -> (u,v)+>w
-lfstBlock f = f ⊕ zeroV
+          => LinearFunction (u+>w) ((u,v)+>w)
+lfstBlock = LinearFunction (⊕zeroV)
 lsndBlock :: ( LinearSpace u, LinearSpace v, LSpace w
             , Scalar u ~ Scalar v, Scalar v ~ Scalar w )
-          => (v+>w) -> (u,v)+>w
-lsndBlock f = zeroV ⊕ f
+          => LinearFunction (v+>w) ((u,v)+>w)
+lsndBlock = LinearFunction (zeroV⊕)
 
 
 -- | @(u+>(v⊗w)) -> (u+>v)⊗w@
@@ -533,6 +551,8 @@ instance ∀ s u v . ( Num'' s, LSpace u, LSpace v, Scalar u ~ s, Scalar v ~ s )
                        => TensorSpace (LinearMap s u v) where
   type TensorProduct (LinearMap s u v) w = TensorProduct (DualVector u) (Tensor s v w)
   zeroTensor = deferLinearMap $ zeroV
+  toFlatTensor = arr deferLinearMap . fmap toFlatTensor
+  fromFlatTensor = fmap fromFlatTensor . arr hasteLinearMap
   addTensors t₁ t₂ = deferLinearMap $ (hasteLinearMap$t₁) ^+^ (hasteLinearMap$t₂)
   subtractTensors t₁ t₂ = deferLinearMap $ (hasteLinearMap$t₁) ^-^ (hasteLinearMap$t₂)
   scaleTensor = LinearFunction $ \μ -> arr deferLinearMap . scaleWith μ . arr hasteLinearMap
@@ -686,13 +706,13 @@ instance ( SemiInner u, LSpace u, SemiInner v, LSpace v
          combineBaseis False forbidden (Node (i,du) bu' : abu, bv)
             | i`Set.member`forbidden  = combineBaseis False forbidden (abu, bv)
             | otherwise
-                 = Node (i, lfstBlock du)
+                 = Node (i, lfstBlock $ du)
                         (combineBaseis True (Set.insert i forbidden) (bu', bv))
                        : combineBaseis False forbidden (abu, bv)
          combineBaseis True forbidden (bu, Node (i,dv) bv' : abv)
             | i`Set.member`forbidden  = combineBaseis True forbidden (bu, abv)
             | otherwise
-                 = Node (i, lsndBlock dv)
+                 = Node (i, lsndBlock $ dv)
                         (combineBaseis False (Set.insert i forbidden) (bu, bv'))
                        : combineBaseis True forbidden (bu, abv)
          combineBaseis _ forbidden (bu, []) = combineBaseis False forbidden (bu,[])
@@ -868,10 +888,14 @@ instance (FiniteDimensional v, InnerSpace v, Scalar v ~ ℝ, Show v)
 instance (LSpace v, Scalar v ~ s)
             => Functor (Tensor s v) LinearFunction LinearFunction where
 --  fmap = fmapTensor_l
+instance (LSpace v, Scalar v ~ s)
+            => Monoidal (Tensor s v) LinearFunction LinearFunction where
 
 instance (LSpace v, Scalar v ~ s)
             => Functor (LinearMap s v) LinearFunction LinearFunction where
 --   fmap = composeLinear
+instance (LSpace v, Scalar v ~ s)
+            => Monoidal (LinearMap s v) LinearFunction LinearFunction where
 
 instance (TensorSpace v, Scalar v ~ s)
             => Functor (Tensor s v) Coercion Coercion where
