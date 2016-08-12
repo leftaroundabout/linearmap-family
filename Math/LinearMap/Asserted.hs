@@ -17,7 +17,7 @@
 {-# LANGUAGE Rank2Types                 #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE PatternSynonyms            #-}
-{-# LANGUAGE ViewPatterns               #-}
+{-# LANGUAGE TupleSections              #-}
 {-# LANGUAGE UnicodeSyntax              #-}
 {-# LANGUAGE CPP                        #-}
 {-# LANGUAGE TupleSections              #-}
@@ -86,6 +86,11 @@ fmapScale :: (VectorSpace w, Functor f LinearFunction LinearFunction)
                => f (Scalar w) -> LinearFunction w (f w)
 fmapScale v = LinearFunction $ \w -> fmap (scaleV w) $ v
 
+lCoFst :: (AdditiveGroup w) => LinearFunction v (v,w)
+lCoFst = LinearFunction (,zeroV)
+lCoSnd :: (AdditiveGroup v) => LinearFunction w (v,w)
+lCoSnd = LinearFunction (zeroV,)
+
 #define FreeLinFtor(V)                                  \
 instance Functor V LinearFunction LinearFunction where { \
   fmap (LinearFunction f) = LinearFunction $ fmap f };    \
@@ -145,6 +150,9 @@ scale = LinearFunction $ \μ -> LinearFunction (μ*^)
 -- | @elacs ≡ 'flipBilin' 'scale'@.
 elacs :: VectorSpace v => Bilinear v (Scalar v) v
 elacs = LinearFunction $ \v -> LinearFunction (*^v)
+
+inner :: InnerSpace v => Bilinear v v (Scalar v)
+inner = LinearFunction $ \v -> LinearFunction (v<.>)
 
 biConst0 :: AdditiveGroup v => Bilinear a b v
 biConst0 = LinearFunction $ const const0

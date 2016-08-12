@@ -114,14 +114,23 @@ class ( TensorSpace v, TensorSpace (DualVector v)
   type DualVector v :: *
  
   linearId :: v +> v
+  
   idTensor :: (Num'' (Scalar v), LinearSpace (DualVector v), v ~ DualVector (DualVector v))
                     => v ⊗ DualVector v
   idTensor = transposeTensor $ asTensor $ linearId
+  
+  sampleLinearFunction :: LSpace v => LinearFunction (LinearFunction v w) (v+>w)
+  sampleLinearFunction = LinearFunction $ \f -> fmap f $ id
+  
   coerceDoubleDual :: Coercion v (DualVector (DualVector v))
-  linearCoFst :: (LSpace w, Scalar w ~ Scalar v)
+  
+  linearCoFst :: (LSpace v, LSpace w, Scalar w ~ Scalar v)
                 => v +> (v,w)
-  linearCoSnd :: (LSpace w, Scalar w ~ Scalar v)
+  linearCoFst = sampleLinearFunction $ id &&& const0
+  linearCoSnd :: (LSpace v, LSpace w, Scalar w ~ Scalar v)
                 => v +> (w,v)
+  linearCoSnd = sampleLinearFunction $ const0 &&& id
+  
   fstBlock :: ( LSpace w, LSpace x, LSpace v
               , Scalar w ~ Scalar v, Scalar x ~ Scalar v )
      => LinearFunction (v+>(w,x)) (v+>w)
@@ -158,8 +167,10 @@ class ( TensorSpace v, TensorSpace (DualVector v)
   blockVectSpan' :: (LSpace v, LSpace w, Scalar v ~ Scalar w)
                   => LinearFunction w (v+>(v⊗w))
   blockVectSpan' = LinearFunction $ \w -> fmap (flipBilin tensorProduct $ w) $ id
+  
   fmapTensor :: (LSpace w, LSpace x, Scalar w ~ Scalar v, Scalar x ~ Scalar v)
            => Bilinear (LinearFunction w x) (v⊗w) (v⊗x)
+  
   contractTensor :: (LSpace w, Scalar w ~ Scalar v)
            => LinearFunction (v+>(v⊗w)) w
   applyLinear :: (LSpace w, Scalar w ~ Scalar v)
@@ -496,6 +507,8 @@ instance ∀ u v . ( LinearSpace u, LinearSpace (DualVector u), DualVector (Dual
   type DualVector (u,v) = (DualVector u, DualVector v)
   linearId = linearCoFst ⊕ linearCoSnd
   -- idTensor = fmapTensor linearCoFst idTensor <⊕ fmapTensor linearCoSnd idTensor
+  sampleLinearFunction = LinearFunction $ \f -> (sampleLinearFunction $ f . lCoFst)
+                                              ⊕ (sampleLinearFunction $ f . lCoSnd)
   coerceDoubleDual = Coercion
   linearCoFst = linearCoFst.linearCoFst ⊕ linearCoFst.linearCoSnd
   linearCoSnd = linearCoSnd.linearCoFst ⊕ linearCoSnd.linearCoSnd
@@ -741,8 +754,6 @@ class (LSpace v, LSpace (Scalar v)) => FiniteDimensional v where
   recomposeContraLinMap :: (LinearSpace w, Scalar w ~ Scalar v, Hask.Functor f)
            => (f (Scalar w) -> w) -> f (DualSpace v) -> v+>w
   
-  sampleLinearFunction :: (v -> w) -> v+>w
-  
 
 
 instance (Num''' s) => FiniteDimensional (ZeroDim s) where
@@ -750,14 +761,12 @@ instance (Num''' s) => FiniteDimensional (ZeroDim s) where
   recomposeEntire ZeroBasis l = (Origin, l)
   decomposeLinMap _ = (ZeroBasis, id)
   recomposeContraLinMap _ _ = LinearMap Origin
-  sampleLinearFunction _ = LinearMap Origin
   
 instance (Num''' s, LinearSpace s) => FiniteDimensional (V0 s) where
   data EntireBasis (V0 s) = V0Basis
   recomposeEntire V0Basis l = (V0, l)
   decomposeLinMap _ = (V0Basis, id)
   recomposeContraLinMap _ _ = LinearMap V0
-  sampleLinearFunction _ = LinearMap V0
   
 instance FiniteDimensional ℝ where
   data EntireBasis ℝ = RealsBasis
@@ -765,7 +774,6 @@ instance FiniteDimensional ℝ where
   recomposeEntire RealsBasis (μ:cs) = (μ, cs)
   decomposeLinMap (LinearMap v) = (RealsBasis, (v:))
   recomposeContraLinMap fw = LinearMap . fw . fmap ($1)
-  sampleLinearFunction f = LinearMap $ f 1
 
 #define FreeFiniteDimensional(V, VB, take, give)          \
 instance (Num''' s, LSpace s)                              \
@@ -774,7 +782,6 @@ instance (Num''' s, LSpace s)                              \
   recomposeEntire _ (take:cs) = (give, cs);                   \
   recomposeEntire b cs = recomposeEntire b $ cs ++ [0];        \
   decomposeLinMap (LinearMap m) = (VB, (toList m ++));          \
-  sampleLinearFunction f = LinearMap $ fmap f Mat.identity;      \
   recomposeContraLinMap fw mv = LinearMap $ (\v -> fw $ fmap ($v) mv) <$> Mat.identity }
 FreeFiniteDimensional(V1, V1Basis, c₀         , V1 c₀         )
 FreeFiniteDimensional(V2, V2Basis, c₀:c₁      , V2 c₀ c₁      )
@@ -799,8 +806,6 @@ instance ( FiniteDimensional u, LinearSpace (DualVector u), DualVector (DualVect
                (fmap (\(LinearMap (v', _)) -> asLinearMap $ v') dds)
           ⊕ recomposeContraLinMap fw
                (fmap (\(LinearMap (_, v')) -> asLinearMap $ v') dds)
-  sampleLinearFunction f = sampleLinearFunction (f . (,zeroV))
-                         ⊕ sampleLinearFunction (f . (zeroV,))
   
 deriving instance (Show (EntireBasis u), Show (EntireBasis v))
                     => Show (EntireBasis (u,v))
@@ -830,19 +835,20 @@ pseudoInverse m = recomposeContraLinMap (fst . recomposeEntire mbas) v's
 
 -- | The <https://en.wikipedia.org/wiki/Riesz_representation_theorem Riesz representation theorem>
 --   provides an isomorphism between a Hilbert space and its (continuous) dual space.
-riesz :: (FiniteDimensional v, InnerSpace v) => DualSpace v -> v
-riesz dv = fst . recomposeEntire bas $ compos []
- where (bas, compos) = decomposeLinMap dv
+riesz :: (FiniteDimensional v, InnerSpace v) => LinearFunction (DualSpace v) v
+riesz = LinearFunction $ \dv ->
+       let (bas, compos) = decomposeLinMap dv
+       in fst . recomposeEntire bas $ compos []
 
-coRiesz :: (FiniteDimensional v, InnerSpace v) => v -> DualSpace v
-coRiesz v = sampleLinearFunction (v<.>)
+coRiesz :: (LSpace v, InnerSpace v) => LinearFunction v (DualSpace v)
+coRiesz = sampleLinearFunction . inner
 
 -- | Functions are generally a pain to display, but since linear functionals
 --   in a Hilbert space can be represented by /vectors/ in that space,
 --   this can be used for implementing a 'Show' instance.
 showsPrecAsRiesz :: (FiniteDimensional v, InnerSpace v, Show v)
                       => Int -> DualSpace v -> ShowS
-showsPrecAsRiesz p dv = showParen (p>9) $ ("coRiesz "++) . showsPrec 10 (riesz dv)
+showsPrecAsRiesz p dv = showParen (p>0) $ ("coRiesz$"++) . showsPrec 10 (riesz$dv)
 
 instance Show (LinearMap ℝ (V0 ℝ) ℝ) where showsPrec = showsPrecAsRiesz
 instance Show (LinearMap ℝ (V1 ℝ) ℝ) where showsPrec = showsPrecAsRiesz
@@ -858,31 +864,32 @@ infixl 7 .<
 --   provided mostly to lay out matrix definitions neatly.
 (.<) :: (FiniteDimensional v, InnerSpace v, HasBasis w, Scalar v ~ Scalar w)
            => Basis w -> v -> v+>w
-bw .< v = sampleLinearFunction (\v' -> recompose [(bw, v<.>v')])
+bw .< v = sampleLinearFunction $ LinearFunction $ \v' -> recompose [(bw, v<.>v')]
 
 instance Show (LinearMap s v (V0 s)) where
   show _ = "zeroV"
 instance (FiniteDimensional v, InnerSpace v, Scalar v ~ ℝ, Show v)
               => Show (LinearMap ℝ v (V1 ℝ)) where
-  showsPrec p m = showParen (p>6) $ ("ex ×< "++) . showsPrec 7 (riesz $ coRiesz (V1 1) . m)
+  showsPrec p m = showParen (p>6) $ ("ex ×< "++)
+                       . showsPrec 7 (riesz $ (coRiesz$(V1 1)) . m)
 instance (FiniteDimensional v, InnerSpace v, Scalar v ~ ℝ, Show v)
               => Show (LinearMap ℝ v (V2 ℝ)) where
   showsPrec p m = showParen (p>6)
-              $ ("ex.<"++) . showsPrec 7 (riesz $ coRiesz (V2 1 0) . m)
-         . (" ^+^ ey.<"++) . showsPrec 7 (riesz $ coRiesz (V2 0 1) . m)
+              $ ("ex.<"++) . showsPrec 7 (riesz $ (coRiesz$V2 1 0) . m)
+         . (" ^+^ ey.<"++) . showsPrec 7 (riesz $ (coRiesz$V2 0 1) . m)
 instance (FiniteDimensional v, InnerSpace v, Scalar v ~ ℝ, Show v)
               => Show (LinearMap ℝ v (V3 ℝ)) where
   showsPrec p m = showParen (p>6)
-              $ ("ex.<"++) . showsPrec 7 (riesz $ coRiesz (V3 1 0 0) . m)
-         . (" ^+^ ey.<"++) . showsPrec 7 (riesz $ coRiesz (V3 0 1 0) . m)
-         . (" ^+^ ez.<"++) . showsPrec 7 (riesz $ coRiesz (V3 0 0 1) . m)
+              $ ("ex.<"++) . showsPrec 7 (riesz $ (coRiesz$V3 1 0 0) . m)
+         . (" ^+^ ey.<"++) . showsPrec 7 (riesz $ (coRiesz$V3 0 1 0) . m)
+         . (" ^+^ ez.<"++) . showsPrec 7 (riesz $ (coRiesz$V3 0 0 1) . m)
 instance (FiniteDimensional v, InnerSpace v, Scalar v ~ ℝ, Show v)
               => Show (LinearMap ℝ v (V4 ℝ)) where
   showsPrec p m = showParen (p>6)
-              $ ("ex.<"++) . showsPrec 7 (riesz $ coRiesz (V4 1 0 0 0) . m)
-         . (" ^+^ ey.<"++) . showsPrec 7 (riesz $ coRiesz (V4 0 1 0 0) . m)
-         . (" ^+^ ez.<"++) . showsPrec 7 (riesz $ coRiesz (V4 0 0 1 0) . m)
-         . (" ^+^ ew.<"++) . showsPrec 7 (riesz $ coRiesz (V4 0 0 0 1) . m)
+              $ ("ex.<"++) . showsPrec 7 (riesz $ (coRiesz$V4 1 0 0 0) . m)
+         . (" ^+^ ey.<"++) . showsPrec 7 (riesz $ (coRiesz$V4 0 1 0 0) . m)
+         . (" ^+^ ez.<"++) . showsPrec 7 (riesz $ (coRiesz$V4 0 0 1 0) . m)
+         . (" ^+^ ew.<"++) . showsPrec 7 (riesz $ (coRiesz$V4 0 0 0 1) . m)
 
 
 instance (LSpace v, Scalar v ~ s)
