@@ -556,7 +556,7 @@ lassocTensor = Coercion
 rassocTensor :: Coercion (Tensor s (Tensor s u v) w) (Tensor s u (Tensor s v w))
 rassocTensor = Coercion
 
-instance ∀ s u v . ( Num'' s, LSpace u, LSpace v, Scalar u ~ s, Scalar v ~ s )
+instance ∀ s u v . ( Num''' s, LSpace u, LSpace v, Scalar u ~ s, Scalar v ~ s )
                        => TensorSpace (LinearMap s u v) where
   type TensorProduct (LinearMap s u v) w = TensorProduct (DualVector u) (Tensor s v w)
   zeroTensor = deferLinearMap $ zeroV
@@ -591,6 +591,14 @@ coCurryLinearMap = Coercion
 coUncurryLinearMap :: Coercion (LinearMap s u (Tensor s v w)) (LinearMap s (LinearMap s v u) w)
 coUncurryLinearMap = Coercion
 
+curryLinearMap :: (Num''' s, LSpace u, Scalar u ~ s)
+           => Coercion (LinearMap s (Tensor s u v) w) (LinearMap s u (LinearMap s v w))
+curryLinearMap = fmap fromTensor . fromTensor . rassocTensor . asTensor
+
+uncurryLinearMap :: (Num''' s, LSpace u, Scalar u ~ s)
+           => Coercion (LinearMap s u (LinearMap s v w)) (LinearMap s (Tensor s u v) w)
+uncurryLinearMap = fromTensor . lassocTensor . asTensor . fmap asTensor
+
 instance ∀ s u v . (Num''' s, LSpace u, LSpace v, Scalar u ~ s, Scalar v ~ s)
                        => LinearSpace (LinearMap s u v) where
   type DualVector (LinearMap s u v) = LinearMap s v u
@@ -611,7 +619,7 @@ instance ∀ s u v . (Num''' s, LSpace u, LSpace v, Scalar u ~ s, Scalar v ~ s)
   contractTensor' = contractTensor . fmap (contractTensor' . arr (fmap coCurryLinearMap))
                        . arr hasteLinearMap
 
-instance ∀ s u v . (LSpace u, LSpace v, Scalar u ~ s, Scalar v ~ s)
+instance ∀ s u v . (Num''' s, LSpace u, LSpace v, Scalar u ~ s, Scalar v ~ s)
                        => TensorSpace (Tensor s u v) where
   type TensorProduct (Tensor s u v) w = TensorProduct u (Tensor s v w)
   zeroTensor = lassocTensor $ zeroTensor
@@ -631,9 +639,29 @@ instance ∀ s u v . (LSpace u, LSpace v, Scalar u ~ s, Scalar v ~ s)
                                (TensorProduct u (Tensor s v b))
          cftlp _ c = coerceFmapTensorProduct ([]::[u])
                                              (fmap c :: Coercion (v⊗a) (v⊗b))
-instance ∀ s u v . (Num'' s, LSpace u, LSpace v, Scalar u ~ s, Scalar v ~ s)
+instance ∀ s u v . (Num''' s, LSpace u, LSpace v, Scalar u ~ s, Scalar v ~ s)
                        => LinearSpace (Tensor s u v) where
   type DualVector (Tensor s u v) = Tensor s (DualVector u) (DualVector v)
+  linearId = uncurryLinearMap $ fmap (fmap transposeTensor . blockVectSpan') $ id
+  coerceDoubleDual = Coercion
+  fanoutBlocks = arr uncurryLinearMap <<< fzipWith fzip
+               <<< arr curryLinearMap *** arr curryLinearMap
+  blockVectSpan = arr lassocTensor . arr (fmap $ fmap uncurryLinearMap)
+           . fmap (transposeTensor . arr deferLinearMap) . blockVectSpan
+                   . arr deferLinearMap . fmap transposeTensor . blockVectSpan'
+  applyLinear = LinearFunction $ \f -> contractTensor'
+                     . fmap (applyLinear$curryLinearMap$f) . transposeTensor
+  fmapTensor = LinearFunction $ \f
+                -> arr lassocTensor <<< fmap (fmap f) <<< arr rassocTensor
+  composeLinear = bilinearFunction $ \f g
+        -> uncurryLinearMap $ fmap (fmap $ applyLinear $ f) $ (curryLinearMap$g)
+  contractTensor = contractTensor
+      . fmap (transposeTensor . contractTensor
+                 . fmap (arr rassocTensor . transposeTensor . arr rassocTensor))
+                       . arr curryLinearMap
+  contractTensor' = contractTensor . fmap transposeTensor . contractTensor'
+                 . fmap (arr (curryLinearMap . hasteLinearMap) . transposeTensor)
+                       . arr rassocTensor
 
 
 
