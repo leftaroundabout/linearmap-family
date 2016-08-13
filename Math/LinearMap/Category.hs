@@ -143,8 +143,6 @@ class ( TensorSpace v, TensorSpace (DualVector v)
                , Scalar w ~ Scalar v, Scalar x ~ Scalar v )
      => LinearFunction (v+>(w,x)) (v+>w, v+>x)
   sepBlocks = fstBlock &&& sndBlock
-  -- rcFst :: (u +> v) +> ((u,w) +> v)
-  -- rcSnd :: (w +> v) +> ((u,w) +> v)
   fanoutBlocks :: ( LSpace w, LSpace x
                   , Scalar w ~ Scalar v, Scalar x ~ Scalar v )
      => LinearFunction (v+>w, v+>x) (v+>(w,x))
@@ -152,16 +150,11 @@ class ( TensorSpace v, TensorSpace (DualVector v)
                 , Scalar w ~ Scalar v, Scalar x ~ Scalar v )
      => LinearFunction (v+>w) (v+>(w,x))
   firstBlock = fanoutBlocks . (id &&& const0)
-  -- firstBlock_l :: ( LinearSpace w, LinearSpace x
-  --                     , Scalar w ~ Scalar v, Scalar x ~ Scalar v )
-  --          => (x+>v) +> (x +> (v,w))
   secondBlock :: ( LSpace w, LSpace x
                  , Scalar w ~ Scalar v, Scalar x ~ Scalar v )
            => LinearFunction (v+>x) (v+>(w,x))
   secondBlock = fanoutBlocks . (const0 &&& id)
-  -- secondBlock_l :: ( LinearSpace w, LinearSpace x
-  --                     , Scalar w ~ Scalar v, Scalar x ~ Scalar v )
-  --          => (x+>v) +> (x +> (w,v))
+  
   blockVectSpan :: (LSpace w, Scalar w ~ Scalar v)
            => LinearFunction w (v⊗(v+>w))
   blockVectSpan' :: (LSpace v, LSpace w, Scalar v ~ Scalar w)
@@ -173,6 +166,8 @@ class ( TensorSpace v, TensorSpace (DualVector v)
   
   contractTensor :: (LSpace w, Scalar w ~ Scalar v)
            => LinearFunction (v+>(v⊗w)) w
+  contractTensor' :: (LSpace w, Scalar w ~ Scalar v)
+           => LinearFunction (v⊗(v+>w)) w
   applyLinear :: (LSpace w, Scalar w ~ Scalar v)
                 => Bilinear (v+>w) v w
   composeLinear :: ( LSpace w, LSpace x
@@ -180,7 +175,7 @@ class ( TensorSpace v, TensorSpace (DualVector v)
            => Bilinear (w+>x) (v+>w) (v+>x)
 
 
-instance Num' s => TensorSpace (ZeroDim s) where
+instance Num''' s => TensorSpace (ZeroDim s) where
   type TensorProduct (ZeroDim s) v = ZeroDim s
   zeroTensor = Tensor Origin
   toFlatTensor = LinearFunction $ \Origin -> Tensor Origin
@@ -192,7 +187,7 @@ instance Num' s => TensorSpace (ZeroDim s) where
   tensorProduct = biConst0
   transposeTensor = const0
   coerceFmapTensorProduct _ Coercion = Coercion
-instance Num' s => LinearSpace (ZeroDim s) where
+instance Num''' s => LinearSpace (ZeroDim s) where
   type DualVector (ZeroDim s) = ZeroDim s
   linearId = LinearMap Origin
   idTensor = Tensor Origin
@@ -201,15 +196,12 @@ instance Num' s => LinearSpace (ZeroDim s) where
   linearCoSnd = LinearMap Origin
   fstBlock = const0
   sndBlock = const0
-  -- rcFst = LinearMap Origin
-  -- rcSnd = LinearMap Origin
   fanoutBlocks = const0
   firstBlock = const0
-  -- firstBlock_l = LinearMap Origin
   secondBlock = const0
-  -- secondBlock_l = LinearMap Origin
   fmapTensor = biConst0
   contractTensor = const0
+  contractTensor' = const0
   blockVectSpan = const0
   applyLinear = biConst0
   composeLinear = biConst0
@@ -326,23 +318,23 @@ instance Category (LinearMap s) where
   type Object (LinearMap s) v = (LSpace v, Scalar v ~ s)
   id = linearId
   (.) = arr . arr composeLinear
-instance Num'' s => Cartesian (LinearMap s) where
+instance Num''' s => Cartesian (LinearMap s) where
   type UnitObject (LinearMap s) = ZeroDim s
   swap = linearCoSnd ⊕ linearCoFst
   attachUnit = linearCoFst
   detachUnit = fst
   regroup = linearCoFst . linearCoFst ⊕ (linearCoFst . linearCoSnd ⊕ linearCoSnd)
   regroup' = (linearCoFst ⊕ linearCoSnd . linearCoFst) ⊕ linearCoSnd . linearCoSnd
-instance Num'' s => Morphism (LinearMap s) where
+instance Num''' s => Morphism (LinearMap s) where
   f *** g = (firstBlock$f) ⊕ (secondBlock$g)
-instance Num'' s => PreArrow (LinearMap s) where
+instance Num''' s => PreArrow (LinearMap s) where
   (&&&) = curry $ arr fanoutBlocks
   terminal = zeroV
   fst = lfstBlock $ id
   snd = lsndBlock $ id
-instance Num' s => EnhancedCat (->) (LinearMap s) where
+instance Num''' s => EnhancedCat (->) (LinearMap s) where
   arr m = arr $ applyLinear $ m
-instance Num' s => EnhancedCat LinearFunction (LinearMap s) where
+instance Num''' s => EnhancedCat LinearFunction (LinearMap s) where
   arr m = applyLinear $ m
 
 type ℝ = Double
@@ -367,10 +359,9 @@ instance LinearSpace ℝ where
   linearCoFst = LinearMap (1, zeroV)
   linearCoSnd = LinearMap (zeroV, 1)
   fanoutBlocks = follow LinearMap . (flout LinearMap***flout LinearMap)
-  -- firstBlock_l = LinearMap $ fmapTensor  
   fmapTensor = LinearFunction $ pretendLike Tensor
-   -- where Tensor vtx = blockVectSpan x
   contractTensor = flout Tensor . flout LinearMap
+  contractTensor' = flout LinearMap . flout Tensor
   blockVectSpan = follow Tensor . follow LinearMap
   applyLinear = elacs . flout LinearMap
   composeLinear = LinearFunction $ \f -> follow LinearMap . arr f . flout LinearMap
@@ -399,7 +390,8 @@ instance Num' s => LinearSpace (V s) where {                  \
        . fzip . (flout LinearMap***flout LinearMap); \
   blockVectSpan = follow Tensor . LinearFunction (bspan);            \
   fmapTensor = LinearFunction $ \f -> pretendLike Tensor $ fmap f; \
-  contractTensor = LinearFunction (contraction) . flout LinearMap;      \
+  contractTensor = LinearFunction (contraction) . arr Coercion;      \
+  contractTensor' = LinearFunction (contraction) . arr Coercion;      \
   applyLinear = bilinearFunction $ \(LV m)                        \
                   -> foldl' (^+^) zeroV . liftA2 (^*) m;           \
   composeLinear = LinearFunction $ \f -> pretendLike LV $  \
@@ -419,7 +411,7 @@ FreeLinearSpace( V1
                , \w -> V1 (LinearMap $ V1 w)
                , \w -> LinearMap $ V1 (Tensor $ V1 w)
                , LinearMap . V1 . blockVectSpan $ V1 1
-               , \(V1 (Tensor (V1 w))) -> w )
+               , \(V1 (V1 w)) -> w )
 FreeLinearSpace( V2
                , LinearMap
                , \(Tensor (V2 w₀ w₁)) -> w₀⊗V2 1 0
@@ -431,8 +423,8 @@ FreeLinearSpace( V2
                                       (Tensor $ V2 zeroV w)
                , LinearMap $ V2 (blockVectSpan $ V2 1 0)
                                 (blockVectSpan $ V2 0 1)
-               , \(V2 (Tensor (V2 w₀ _))
-                      (Tensor (V2 _ w₁))) -> w₀^+^w₁ )
+               , \(V2 (V2 w₀ _)
+                      (V2 _ w₁)) -> w₀^+^w₁ )
 FreeLinearSpace( V3
                , LinearMap
                , \(Tensor (V3 w₀ w₁ w₂)) -> w₀⊗V3 1 0 0
@@ -448,9 +440,9 @@ FreeLinearSpace( V3
                , LinearMap $ V3 (blockVectSpan $ V3 1 0 0)
                                 (blockVectSpan $ V3 0 1 0)
                                 (blockVectSpan $ V3 0 0 1)
-               , \(V3 (Tensor (V3 w₀ _ _))
-                      (Tensor (V3 _ w₁ _))
-                      (Tensor (V3 _ _ w₂))) -> w₀^+^w₁^+^w₂ )
+               , \(V3 (V3 w₀ _ _)
+                      (V3 _ w₁ _)
+                      (V3 _ _ w₂)) -> w₀^+^w₁^+^w₂ )
 FreeLinearSpace( V4
                , LinearMap
                , \(Tensor (V4 w₀ w₁ w₂ w₃)) -> w₀⊗V4 1 0 0 0
@@ -470,10 +462,10 @@ FreeLinearSpace( V4
                                 (blockVectSpan $ V4 0 1 0 0)
                                 (blockVectSpan $ V4 0 0 1 0)
                                 (blockVectSpan $ V4 0 0 0 1)
-               , \(V4 (Tensor (V4 w₀ _ _ _))
-                      (Tensor (V4 _ w₁ _ _))
-                      (Tensor (V4 _ _ w₂ _))
-                      (Tensor (V4 _ _ _ w₃))) -> w₀^+^w₁^+^w₂^+^w₃ )
+               , \(V4 (V4 w₀ _ _ _)
+                      (V4 _ w₁ _ _)
+                      (V4 _ _ w₂ _)
+                      (V4 _ _ _ w₃)) -> w₀^+^w₁^+^w₂^+^w₃ )
 
 
 
@@ -525,10 +517,14 @@ instance ∀ u v . ( LinearSpace u, LinearSpace (DualVector u), DualVector (Dual
           -> (secondBlock $ asLinearMap $ fu) ⊕ (secondBlock $ asLinearMap $ fv)
   fmapTensor = LinearFunction $ \f -> pretendLike Tensor $ (fmapTensor$f) *** (fmapTensor$f)
   blockVectSpan = (blockVectSpan >>> fmap lfstBlock) &&& (blockVectSpan >>> fmap lsndBlock)
-                     >>> follow Tensor -- w = fmapTensor _ (blockVectSpan w) <⊕ fmapTensor _ (blockVectSpan w)
+                     >>> follow Tensor
   contractTensor = flout LinearMap
                >>>  contractTensor . fmap (fst . flout Tensor) . arr fromTensor
                  ***contractTensor . fmap (snd . flout Tensor) . arr fromTensor
+               >>> addV
+  contractTensor' = flout Tensor
+               >>>  contractTensor' . fmap (arr fromTensor . fst . flout LinearMap)
+                 ***contractTensor' . fmap (arr fromTensor . snd . flout LinearMap)
                >>> addV
   applyLinear = LinearFunction $ \(LinearMap (fu, fv)) ->
            (applyLinear $ (asLinearMap $ fu)) *** (applyLinear $ (asLinearMap $ fv))
@@ -577,9 +573,9 @@ instance ∀ s u v . ( Num'' s, LSpace u, LSpace v, Scalar u ~ s, Scalar v ~ s )
           >>> transposeTensor        --  (w ⊗ v) ⊗ u'
           >>> arr rassocTensor       --  w ⊗ (v ⊗ u')
           >>> fmap transposeTensor   --  w ⊗ (u' ⊗ v)
-          >>> fmap (arr fromTensor)  --  w ⊗ (u +> v)
+          >>> arr (fmap fromTensor)  --  w ⊗ (u +> v)
   tensorProduct = LinearFunction $ \t -> arr deferLinearMap
-        . (flipBilin composeLinear $ t) . blockVectSpan' -- fmap (flipBilin tensorProduct t)
+        . (flipBilin composeLinear $ t) . blockVectSpan'
   coerceFmapTensorProduct = cftlp
    where cftlp :: ∀ a b p . p (LinearMap s u v) -> Coercion a b
                    -> Coercion (TensorProduct (DualVector u) (Tensor s v a))
@@ -595,18 +591,46 @@ coCurryLinearMap = Coercion
 coUncurryLinearMap :: Coercion (LinearMap s u (Tensor s v w)) (LinearMap s (LinearMap s v u) w)
 coUncurryLinearMap = Coercion
 
-instance ∀ s u v . (Num'' s, LSpace u, LSpace v, Scalar u ~ s, Scalar v ~ s)
+instance ∀ s u v . (Num''' s, LSpace u, LSpace v, Scalar u ~ s, Scalar v ~ s)
                        => LinearSpace (LinearMap s u v) where
   type DualVector (LinearMap s u v) = LinearMap s v u
   linearId = coUncurryLinearMap $ fmap blockVectSpan $ id
   coerceDoubleDual = Coercion
+  fanoutBlocks = arr coUncurryLinearMap <<< fzipWith fzip
+               <<< arr coCurryLinearMap *** arr coCurryLinearMap
+  blockVectSpan = arr deferLinearMap
+                    . fmap (arr (fmap coUncurryLinearMap) . blockVectSpan)
+                               . blockVectSpan'
   applyLinear = bilinearFunction $ \f g -> contractTensor $ (coCurryLinearMap$f) . g
+  fmapTensor = LinearFunction $ \f
+                -> arr deferLinearMap <<< fmap (fmap f) <<< arr hasteLinearMap
   composeLinear = bilinearFunction $ \f g
         -> coUncurryLinearMap $ fmap (fmap $ applyLinear $ f) $ (coCurryLinearMap$g)
+  contractTensor = contractTensor . fmap (contractTensor' . arr (fmap hasteLinearMap))
+                       . arr coCurryLinearMap
+  contractTensor' = contractTensor . fmap (contractTensor' . arr (fmap coCurryLinearMap))
+                       . arr hasteLinearMap
 
 instance ∀ s u v . (LSpace u, LSpace v, Scalar u ~ s, Scalar v ~ s)
                        => TensorSpace (Tensor s u v) where
   type TensorProduct (Tensor s u v) w = TensorProduct u (Tensor s v w)
+  zeroTensor = lassocTensor $ zeroTensor
+  toFlatTensor = arr lassocTensor . fmap toFlatTensor
+  fromFlatTensor = fmap fromFlatTensor . arr rassocTensor
+  addTensors t₁ t₂ = lassocTensor $ (rassocTensor$t₁) ^+^ (rassocTensor$t₂)
+  subtractTensors t₁ t₂ = lassocTensor $ (rassocTensor$t₁) ^-^ (rassocTensor$t₂)
+  scaleTensor = LinearFunction $ \μ -> arr lassocTensor . scaleWith μ . arr rassocTensor
+  negateTensor = arr lassocTensor . lNegateV . arr rassocTensor
+  tensorProduct = flipBilin $ LinearFunction $ \w
+             -> arr lassocTensor . fmap (flipBilin tensorProduct $ w)
+  transposeTensor = fmap transposeTensor . arr rassocTensor
+                       . transposeTensor . fmap transposeTensor . arr rassocTensor
+  coerceFmapTensorProduct = cftlp
+   where cftlp :: ∀ a b p . p (Tensor s u v) -> Coercion a b
+                   -> Coercion (TensorProduct u (Tensor s v a))
+                               (TensorProduct u (Tensor s v b))
+         cftlp _ c = coerceFmapTensorProduct ([]::[u])
+                                             (fmap c :: Coercion (v⊗a) (v⊗b))
 instance ∀ s u v . (Num'' s, LSpace u, LSpace v, Scalar u ~ s, Scalar v ~ s)
                        => LinearSpace (Tensor s u v) where
   type DualVector (Tensor s u v) = Tensor s (DualVector u) (DualVector v)
@@ -666,9 +690,9 @@ cartesianDualBasisCandidates dvs abss vcas = go 0 sorted
        zeroAt 0 (_:l) = (-1/0):l
        zeroAt j (e:l) = e : zeroAt (j-1) l
 
-instance (Fractional' s, SemiInner s) => SemiInner (ZeroDim s) where
+instance (Fractional'' s, SemiInner s) => SemiInner (ZeroDim s) where
   dualBasisCandidates _ = []
-instance (Fractional' s, SemiInner s) => SemiInner (V0 s) where
+instance (Fractional'' s, SemiInner s) => SemiInner (V0 s) where
   dualBasisCandidates _ = []
 
 orthonormaliseDuals :: (SemiInner v, LSpace v, Fractional'' (Scalar v))

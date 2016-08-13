@@ -133,6 +133,8 @@ instance Traversable V4 V4 LinearFunction LinearFunction where
                          , getLinearFunction sequence $ V2 r s )
 
 
+instance Functor (LinearFunction w) LinearFunction LinearFunction where
+  fmap f = LinearFunction (f.)
 
 
 type Bilinear v w y = LinearFunction v (LinearFunction w y)
