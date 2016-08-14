@@ -92,6 +92,11 @@ class (VectorSpace v) => TensorSpace v where
                 => Bilinear v w (v ⊗ w)
   transposeTensor :: (LSpace w, Scalar w ~ Scalar v)
                 => (v ⊗ w) -+> (w ⊗ v)
+  fmapTensor :: (LSpace w, LSpace x, Scalar w ~ Scalar v, Scalar x ~ Scalar v)
+           => Bilinear (w -+> x) (v⊗w) (v⊗x)
+  fzipTensorWith :: ( LSpace u, LSpace w, LSpace x
+                    , Scalar u ~ Scalar v, Scalar w ~ Scalar v, Scalar x ~ Scalar v )
+           => Bilinear ((w,x) -+> u) (v⊗w, v⊗x) (v⊗u)
   coerceFmapTensorProduct :: Hask.Functor p
        => p v -> Coercion a b -> Coercion (TensorProduct v a) (TensorProduct v b)
 
@@ -161,9 +166,6 @@ class ( TensorSpace v, TensorSpace (DualVector v)
                   => w -+> (v+>(v⊗w))
   blockVectSpan' = LinearFunction $ \w -> fmap (flipBilin tensorProduct $ w) $ id
   
-  fmapTensor :: (LSpace w, LSpace x, Scalar w ~ Scalar v, Scalar x ~ Scalar v)
-           => Bilinear (w -+> x) (v⊗w) (v⊗x)
-  
   contractTensor :: (LSpace w, Scalar w ~ Scalar v)
            => (v+>(v⊗w)) -+> w
   contractTensor' :: (LSpace w, Scalar w ~ Scalar v)
@@ -186,6 +188,7 @@ instance Num''' s => TensorSpace (ZeroDim s) where
   subtractTensors (Tensor Origin) (Tensor Origin) = Tensor Origin
   tensorProduct = biConst0
   transposeTensor = const0
+  fmapTensor = biConst0
   coerceFmapTensorProduct _ Coercion = Coercion
 instance Num''' s => LinearSpace (ZeroDim s) where
   type DualVector (ZeroDim s) = ZeroDim s
@@ -199,7 +202,6 @@ instance Num''' s => LinearSpace (ZeroDim s) where
   fanoutBlocks = const0
   firstBlock = const0
   secondBlock = const0
-  fmapTensor = biConst0
   contractTensor = const0
   contractTensor' = const0
   blockVectSpan = const0
@@ -351,6 +353,7 @@ instance TensorSpace ℝ where
   fromFlatTensor = flout Tensor
   tensorProduct = LinearFunction $ \μ -> follow Tensor . scaleWith μ
   transposeTensor = toFlatTensor . flout Tensor
+  fmapTensor = LinearFunction $ pretendLike Tensor
   coerceFmapTensorProduct _ Coercion = Coercion
 instance LinearSpace ℝ where
   type DualVector ℝ = ℝ
@@ -360,7 +363,6 @@ instance LinearSpace ℝ where
   linearCoFst = LinearMap (1, zeroV)
   linearCoSnd = LinearMap (zeroV, 1)
   fanoutBlocks = follow LinearMap . (flout LinearMap***flout LinearMap)
-  fmapTensor = LinearFunction $ pretendLike Tensor
   contractTensor = flout Tensor . flout LinearMap
   contractTensor' = flout LinearMap . flout Tensor
   blockVectSpan = follow Tensor . follow LinearMap
@@ -380,6 +382,8 @@ instance Num''' s => TensorSpace (V s) where {                     \
   fromFlatTensor = flout Tensor; \
   tensorProduct = bilinearFunction $ \w v -> Tensor $ fmap (*^v) w; \
   transposeTensor = LinearFunction (tp); \
+  fmapTensor = bilinearFunction $       \
+          \(LinearFunction f) -> pretendLike Tensor $ fmap f; \
   coerceFmapTensorProduct _ Coercion = Coercion };                  \
 instance Num''' s => LinearSpace (V s) where {                  \
   type DualVector (V s) = V s;                                 \
@@ -391,8 +395,6 @@ instance Num''' s => LinearSpace (V s) where {                  \
   fanoutBlocks = LinearFunction $ LinearMap  \
        . uncurry (liftA2 (,)) . (getLinearMap***getLinearMap); \
   blockVectSpan = LinearFunction $ Tensor . (bspan);            \
-  fmapTensor = bilinearFunction $       \
-          \(LinearFunction f) -> pretendLike Tensor $ fmap f; \
   contractTensor = LinearFunction $ (contraction) . coerce . getLinearMap;      \
   contractTensor' = LinearFunction $ (contraction) . coerce . getTensorProduct;      \
   applyLinear = bilinearFunction $ \(LV m)                        \
@@ -488,9 +490,9 @@ instance ∀ u v . ( Num''' (Scalar v), LSpace u, LSpace v, Scalar u ~ Scalar v 
   fromFlatTensor = flout Tensor >>> fromFlatTensor *** fromFlatTensor
   tensorProduct = LinearFunction $ \(u,v) ->
                     (tensorProduct$u) &&& (tensorProduct$v) >>> follow Tensor
-  -- transposeTensor (Tensor (fu, fv)) = fmapTensor linearCoFst (transposeTensor fu)
-  --                                ^+^ fmapTensor linearCoSnd (transposeTensor fv)
   transposeTensor = flout Tensor >>> transposeTensor *** transposeTensor >>> fzip
+  fmapTensor = LinearFunction $
+           \f -> pretendLike Tensor $ (fmapTensor$f) *** (fmapTensor$f)
   coerceFmapTensorProduct p cab = case
              ( coerceFmapTensorProduct (fst<$>p) cab
              , coerceFmapTensorProduct (snd<$>p) cab ) of
@@ -518,7 +520,6 @@ instance ∀ u v . ( LinearSpace u, LinearSpace (DualVector u), DualVector (Dual
           -> (firstBlock $ asLinearMap $ fu) ⊕ (firstBlock $ asLinearMap $ fv)
   secondBlock = LinearFunction $ \(LinearMap (fu, fv))
           -> (secondBlock $ asLinearMap $ fu) ⊕ (secondBlock $ asLinearMap $ fv)
-  fmapTensor = LinearFunction $ \f -> pretendLike Tensor $ (fmapTensor$f) *** (fmapTensor$f)
   blockVectSpan = (blockVectSpan >>> fmap lfstBlock) &&& (blockVectSpan >>> fmap lsndBlock)
                      >>> follow Tensor
   contractTensor = flout LinearMap
@@ -579,6 +580,8 @@ instance ∀ s u v . ( Num''' s, LSpace u, LSpace v, Scalar u ~ s, Scalar v ~ s 
           >>> arr (fmap fromTensor)  --  w ⊗ (u +> v)
   tensorProduct = LinearFunction $ \t -> arr deferLinearMap
         . (flipBilin composeLinear $ t) . blockVectSpan'
+  fmapTensor = LinearFunction $ \f
+                -> arr deferLinearMap <<< fmap (fmap f) <<< arr hasteLinearMap
   coerceFmapTensorProduct = cftlp
    where cftlp :: ∀ a b p . p (LinearMap s u v) -> Coercion a b
                    -> Coercion (TensorProduct (DualVector u) (Tensor s v a))
@@ -613,8 +616,6 @@ instance ∀ s u v . (Num''' s, LSpace u, LSpace v, Scalar u ~ s, Scalar v ~ s)
                     . fmap (arr (fmap coUncurryLinearMap) . blockVectSpan)
                                . blockVectSpan'
   applyLinear = bilinearFunction $ \f g -> contractTensor $ (coCurryLinearMap$f) . g
-  fmapTensor = LinearFunction $ \f
-                -> arr deferLinearMap <<< fmap (fmap f) <<< arr hasteLinearMap
   composeLinear = bilinearFunction $ \f g
         -> coUncurryLinearMap $ fmap (fmap $ applyLinear $ f) $ (coCurryLinearMap$g)
   contractTensor = contractTensor . fmap (contractTensor' . arr (fmap hasteLinearMap))
@@ -636,6 +637,8 @@ instance ∀ s u v . (Num''' s, LSpace u, LSpace v, Scalar u ~ s, Scalar v ~ s)
              -> arr lassocTensor . fmap (flipBilin tensorProduct $ w)
   transposeTensor = fmap transposeTensor . arr rassocTensor
                        . transposeTensor . fmap transposeTensor . arr rassocTensor
+  fmapTensor = LinearFunction $ \f
+                -> arr lassocTensor <<< fmap (fmap f) <<< arr rassocTensor
   coerceFmapTensorProduct = cftlp
    where cftlp :: ∀ a b p . p (Tensor s u v) -> Coercion a b
                    -> Coercion (TensorProduct u (Tensor s v a))
@@ -654,8 +657,6 @@ instance ∀ s u v . (Num''' s, LSpace u, LSpace v, Scalar u ~ s, Scalar v ~ s)
                    . arr deferLinearMap . fmap transposeTensor . blockVectSpan'
   applyLinear = LinearFunction $ \f -> contractTensor'
                      . fmap (applyLinear$curryLinearMap$f) . transposeTensor
-  fmapTensor = LinearFunction $ \f
-                -> arr lassocTensor <<< fmap (fmap f) <<< arr rassocTensor
   composeLinear = bilinearFunction $ \f g
         -> uncurryLinearMap $ fmap (fmap $ applyLinear $ f) $ (curryLinearMap$g)
   contractTensor = contractTensor
@@ -953,12 +954,16 @@ instance (Num''' s, LSpace v, Scalar v ~ s)
   fmap f = fmapTensor $ f
 instance (Num''' s, LSpace v, Scalar v ~ s)
             => Monoidal (Tensor s v) (LinearFunction s) (LinearFunction s) where
+  pureUnit = const0
+  fzipWith f = fzipTensorWith $ f
 
 instance (Num''' s, LSpace v, Scalar v ~ s)
             => Functor (LinearMap s v) (LinearFunction s) (LinearFunction s) where
 --   fmap = composeLinear
 instance (Num''' s, LSpace v, Scalar v ~ s)
             => Monoidal (LinearMap s v) (LinearFunction s) (LinearFunction s) where
+  pureUnit = const0
+  fzipWith f = arr asTensor *** arr asTensor >>> fzipWith f >>> arr fromTensor
 
 instance (Num''' s, TensorSpace v, Scalar v ~ s)
             => Functor (Tensor s v) Coercion Coercion where
