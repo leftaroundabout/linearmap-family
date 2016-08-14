@@ -41,103 +41,65 @@ import Data.Type.Coercion
 import Data.VectorSpace.Free
 import qualified Linear.Matrix as Mat
 import qualified Linear.Vector as Mat
+import Math.VectorSpace.ZeroDimensional
 
 
 
 
-newtype LinearFunction v w = LinearFunction { getLinearFunction :: v -> w }
+newtype LinearFunction s v w = LinearFunction { getLinearFunction :: v -> w }
 
 
 
-instance Category LinearFunction where
-  id = LinearFunction id
-  LinearFunction f . LinearFunction g = LinearFunction $ f.g
-instance Cartesian LinearFunction where
-  swap = LinearFunction swap
-  attachUnit = LinearFunction attachUnit; detachUnit = LinearFunction detachUnit
-  regroup = LinearFunction regroup; regroup' = LinearFunction regroup'
-instance Morphism LinearFunction where
-  LinearFunction f***LinearFunction g = LinearFunction $ f***g
-instance PreArrow LinearFunction where
-  LinearFunction f&&&LinearFunction g = LinearFunction $ f&&&g
-  fst = LinearFunction fst; snd = LinearFunction snd
-  terminal = LinearFunction terminal
-instance EnhancedCat (->) LinearFunction where
-  arr = getLinearFunction
-instance EnhancedCat LinearFunction Coercion where
-  arr = LinearFunction . coerceWith
 
-scaleWith :: VectorSpace v => Scalar v -> LinearFunction v v
+linearFunction :: VectorSpace w => (v->w) -> LinearFunction (Scalar v) v w
+linearFunction = LinearFunction
+
+scaleWith :: (VectorSpace v, Scalar v ~ s) => s -> LinearFunction s v v
 scaleWith μ = LinearFunction (μ*^)
 
-scaleV :: VectorSpace v => v -> LinearFunction (Scalar v) v
+scaleV :: (VectorSpace v, Scalar v ~ s) => v -> LinearFunction s s v
 scaleV v = LinearFunction (*^v)
 
-const0 :: AdditiveGroup w => LinearFunction v w
+const0 :: AdditiveGroup w => LinearFunction s v w
 const0 = LinearFunction (const zeroV)
 
-lNegateV :: AdditiveGroup w => LinearFunction w w
+lNegateV :: AdditiveGroup w => LinearFunction s w w
 lNegateV = LinearFunction negateV
 
-addV :: AdditiveGroup w => LinearFunction (w,w) w
+addV :: AdditiveGroup w => LinearFunction s (w,w) w
 addV = LinearFunction $ uncurry (^+^)
 
-fmapScale :: (VectorSpace w, Functor f LinearFunction LinearFunction)
-               => f (Scalar w) -> LinearFunction w (f w)
+instance AdditiveGroup w => AdditiveGroup (LinearFunction s v w) where
+  zeroV = const0
+  LinearFunction f ^+^ LinearFunction g = LinearFunction $ \x -> f x ^+^ g x
+  LinearFunction f ^-^ LinearFunction g = LinearFunction $ \x -> f x ^-^ g x
+  negateV (LinearFunction f) = LinearFunction $ negateV . f
+instance VectorSpace w => VectorSpace (LinearFunction s v w) where
+  type Scalar (LinearFunction s v w) = Scalar w
+  μ *^ LinearFunction f = LinearFunction $ (μ*^) . f
+
+fmapScale :: ( VectorSpace w, Scalar w ~ s, VectorSpace s, Scalar s ~ s
+             , Functor f (LinearFunction s) (LinearFunction s)
+             , Object (LinearFunction s) s
+             , Object (LinearFunction s) w
+             , Object (LinearFunction s) (f s)
+             , Object (LinearFunction s) (f w)
+             , EnhancedCat (->) (LinearFunction s)
+             , VectorSpace (f w), Scalar (f w) ~ s
+             , VectorSpace (f s), Scalar (f s) ~ s )
+               => f s -> LinearFunction s w (f w)
 fmapScale v = LinearFunction $ \w -> fmap (scaleV w) $ v
 
-lCoFst :: (AdditiveGroup w) => LinearFunction v (v,w)
+lCoFst :: (AdditiveGroup w) => LinearFunction s v (v,w)
 lCoFst = LinearFunction (,zeroV)
-lCoSnd :: (AdditiveGroup v) => LinearFunction w (v,w)
+lCoSnd :: (AdditiveGroup v) => LinearFunction s w (v,w)
 lCoSnd = LinearFunction (zeroV,)
 
-#define FreeLinFtor(V)                                  \
-instance Functor V LinearFunction LinearFunction where { \
-  fmap (LinearFunction f) = LinearFunction $ fmap f };    \
-instance Monoidal V LinearFunction LinearFunction where {  \
-  pureUnit = LinearFunction pure;                           \
-  fzipWith (LinearFunction f)                                \
-      = LinearFunction . uncurry $ liftA2 (curry f) }
-
-FreeLinFtor(V0)
-FreeLinFtor(V1)
-FreeLinFtor(V2)
-FreeLinFtor(V3)
-FreeLinFtor(V4)
-
-instance Traversable V0 V0 LinearFunction LinearFunction where
-  traverse (LinearFunction _)
-      = fmap (LinearFunction $ const V0) . pureUnit . LinearFunction (const ())
-  sequence = fmap (LinearFunction $ const V0) . pureUnit . LinearFunction (const ())
-instance Traversable V1 V1 LinearFunction LinearFunction where
-  traverse (LinearFunction f) = LinearFunction $ \(V1 x) -> fmap (LinearFunction V1) $ f x
-  sequence = LinearFunction $ \(V1 q) -> fmap (LinearFunction V1) $ q
-instance Traversable V2 V2 LinearFunction LinearFunction where
-  traverse (LinearFunction f) = LinearFunction $ \(V2 x y)
-               -> fzipWith (LinearFunction $ \(fx,fy) -> V2 fx fy) $ (f x, f y)
-  sequence = LinearFunction $ \(V2 p q) -> fzipWith (LinearFunction $ uncurry V2) $ (p,q)
-instance Traversable V3 V3 LinearFunction LinearFunction where
-  traverse (LinearFunction f) = LinearFunction $ \(V3 x y z)
-               -> fzipWith (LinearFunction $ \(fx,V2 fy fz) -> V3 fx fy fz)
-                       $ (f x, traverse (LinearFunction f) $ V2 y z)
-  sequence = LinearFunction $ \(V3 p q r)
-               -> fzipWith (LinearFunction $ \(sp,V2 sq sr) -> V3 sp sq sr)
-                       $ (p, getLinearFunction sequence $ V2 q r)
-instance Traversable V4 V4 LinearFunction LinearFunction where
-  traverse f = LinearFunction $ \(V4 x y z w)
-               -> fzipWith (LinearFunction $ \(V2 fx fy,V2 fz fw) -> V4 fx fy fz fw)
-                       $ ( traverse f $ (V2 x y), traverse f $ (V2 z w))
-  sequence = LinearFunction $ \(V4 p q r s)
-               -> fzipWith (LinearFunction $ \(V2 sp sq,V2 sr ss) -> V4 sp sq sr ss)
-                       $ ( getLinearFunction sequence $ V2 p q
-                         , getLinearFunction sequence $ V2 r s )
 
 
-instance Functor (LinearFunction w) LinearFunction LinearFunction where
-  fmap f = LinearFunction (f.)
+type v-+>w = LinearFunction (Scalar w) v w
 
-
-type Bilinear v w y = LinearFunction v (LinearFunction w y)
+type Bilinear v w y = LinearFunction (Scalar v) v (LinearFunction (Scalar v) w y)
 
 bilinearFunction :: (v -> w -> y) -> Bilinear v w y
 bilinearFunction f = LinearFunction $ LinearFunction . f
