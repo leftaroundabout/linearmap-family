@@ -65,6 +65,9 @@ import Data.Type.Coercion
 import Data.VectorSpace.Free
 import qualified Linear.Matrix as Mat
 import qualified Linear.Vector as Mat
+import qualified Linear.Metric as Mat
+import Linear (_x, _y, _z, _w)
+import Control.Lens ((^.))
 
 import Math.LinearMap.Asserted
 import Math.VectorSpace.ZeroDimensional
@@ -127,6 +130,12 @@ class ( TensorSpace v, TensorSpace (DualVector v)
                              => (v-+>w) -+> (v+>w)
   sampleLinearFunction = LinearFunction $ \f -> fmap f $ id
   
+  toLinearForm :: LSpace v => DualVector v -+> (v+>Scalar v)
+  toLinearForm = toFlatTensor >>> arr fromTensor
+  
+  fromLinearForm :: LSpace v => (v+>Scalar v) -+> DualVector v
+  fromLinearForm = arr asTensor >>> fromFlatTensor
+  
   coerceDoubleDual :: Coercion v (DualVector (DualVector v))
   
   linearCoFst :: (LSpace v, LSpace w, Num''' (Scalar v), Scalar w ~ Scalar v)
@@ -170,6 +179,14 @@ class ( TensorSpace v, TensorSpace (DualVector v)
            => (v+>(v⊗w)) -+> w
   contractTensor' :: (LSpace w, Scalar w ~ Scalar v)
            => (v⊗(v+>w)) -+> w
+  contractTensorWith :: (LSpace w, Scalar w ~ Scalar v)
+           => Bilinear (v⊗w) (DualVector w) v
+  contractLinearMapAgainst :: (LSpace w, Scalar w ~ Scalar v)
+           => Bilinear (v+>w) (w+>v) (Scalar v)
+  
+  applyDualVector :: LSpace v
+                => Bilinear (DualVector v) v (Scalar v)
+  
   applyLinear :: (LSpace w, Scalar w ~ Scalar v)
                 => Bilinear (v+>w) v w
   composeLinear :: ( LSpace w, LSpace x
@@ -189,11 +206,13 @@ instance Num''' s => TensorSpace (ZeroDim s) where
   tensorProduct = biConst0
   transposeTensor = const0
   fmapTensor = biConst0
+  fzipTensorWith = biConst0
   coerceFmapTensorProduct _ Coercion = Coercion
 instance Num''' s => LinearSpace (ZeroDim s) where
   type DualVector (ZeroDim s) = ZeroDim s
   linearId = LinearMap Origin
   idTensor = Tensor Origin
+  fromLinearForm = const0
   coerceDoubleDual = Coercion
   linearCoFst = LinearMap Origin
   linearCoSnd = LinearMap Origin
@@ -204,7 +223,10 @@ instance Num''' s => LinearSpace (ZeroDim s) where
   secondBlock = const0
   contractTensor = const0
   contractTensor' = const0
+  contractTensorWith = biConst0
+  contractLinearMapAgainst = biConst0
   blockVectSpan = const0
+  applyDualVector = biConst0
   applyLinear = biConst0
   composeLinear = biConst0
 
@@ -354,22 +376,28 @@ instance TensorSpace ℝ where
   tensorProduct = LinearFunction $ \μ -> follow Tensor . scaleWith μ
   transposeTensor = toFlatTensor . flout Tensor
   fmapTensor = LinearFunction $ pretendLike Tensor
+  fzipTensorWith = LinearFunction
+                   $ \f -> follow Tensor <<< f <<< flout Tensor *** flout Tensor
   coerceFmapTensorProduct _ Coercion = Coercion
 instance LinearSpace ℝ where
   type DualVector ℝ = ℝ
   linearId = LinearMap 1
   idTensor = Tensor 1
+  fromLinearForm = flout LinearMap
   coerceDoubleDual = Coercion
   linearCoFst = LinearMap (1, zeroV)
   linearCoSnd = LinearMap (zeroV, 1)
   fanoutBlocks = follow LinearMap . (flout LinearMap***flout LinearMap)
   contractTensor = flout Tensor . flout LinearMap
   contractTensor' = flout LinearMap . flout Tensor
+  contractTensorWith = flout Tensor >>> applyDualVector
+  contractLinearMapAgainst = flout LinearMap >>> flipBilin applyLinear
   blockVectSpan = follow Tensor . follow LinearMap
+  applyDualVector = scale
   applyLinear = elacs . flout LinearMap
   composeLinear = LinearFunction $ \f -> follow LinearMap . arr f . flout LinearMap
 
-#define FreeLinearSpace(V, LV, tp, tpl, bspan, tenspl, dspan, contraction)                                  \
+#define FreeLinearSpace(V, LV, tp, bspan, tenspl, dspan, contraction, contraaction)                                  \
 instance Num''' s => TensorSpace (V s) where {                     \
   type TensorProduct (V s) w = V w;                               \
   zeroTensor = Tensor $ pure zeroV;                                \
@@ -384,12 +412,16 @@ instance Num''' s => TensorSpace (V s) where {                     \
   transposeTensor = LinearFunction (tp); \
   fmapTensor = bilinearFunction $       \
           \(LinearFunction f) -> pretendLike Tensor $ fmap f; \
+  fzipTensorWith = bilinearFunction $ \
+          \(LinearFunction f) (Tensor vw, Tensor vx) \
+                  -> Tensor $ liftA2 (curry f) vw vx; \
   coerceFmapTensorProduct _ Coercion = Coercion };                  \
 instance Num''' s => LinearSpace (V s) where {                  \
   type DualVector (V s) = V s;                                 \
   linearId = LV Mat.identity;                                   \
   idTensor = Tensor Mat.identity; \
   coerceDoubleDual = Coercion; \
+  fromLinearForm = flout LinearMap; \
   linearCoFst = LV $ fmap (,zeroV) Mat.identity;                 \
   linearCoSnd = LV $ fmap (zeroV,) Mat.identity;                  \
   fanoutBlocks = LinearFunction $ LinearMap  \
@@ -397,6 +429,10 @@ instance Num''' s => LinearSpace (V s) where {                  \
   blockVectSpan = LinearFunction $ Tensor . (bspan);            \
   contractTensor = LinearFunction $ (contraction) . coerce . getLinearMap;      \
   contractTensor' = LinearFunction $ (contraction) . coerce . getTensorProduct;      \
+  contractTensorWith = bilinearFunction $ \
+             \(Tensor wv) dw -> fmap (arr $ applyDualVector $ dw) wv;      \
+  contractLinearMapAgainst = bilinearFunction $ getLinearMap >>> (contraaction); \
+  applyDualVector = bilinearFunction Mat.dot;           \
   applyLinear = bilinearFunction $ \(LV m)                        \
                   -> foldl' (^+^) zeroV . liftA2 (^*) m;           \
   composeLinear = bilinearFunction $   \
@@ -404,24 +440,23 @@ instance Num''' s => LinearSpace (V s) where {                  \
 FreeLinearSpace( V0
                , LinearMap
                , \(Tensor V0) -> zeroV
-               , V0
                , \_ -> V0
                , \_ -> LinearMap V0
                , LinearMap V0
-               , \V0 -> zeroV )
+               , \V0 -> zeroV
+               , \V0 _ -> 0 )
 FreeLinearSpace( V1
                , LinearMap
                , \(Tensor (V1 w₀)) -> w₀⊗V1 1
-               , V1 undefined
                , \w -> V1 (LinearMap $ V1 w)
                , \w -> LinearMap $ V1 (Tensor $ V1 w)
                , LinearMap . V1 . blockVectSpan $ V1 1
-               , \(V1 (V1 w)) -> w )
+               , \(V1 (V1 w)) -> w
+               , \(V1 x) f -> (f$x)^._x )
 FreeLinearSpace( V2
                , LinearMap
                , \(Tensor (V2 w₀ w₁)) -> w₀⊗V2 1 0
                                      ^+^ w₁⊗V2 0 1
-               , V2 undefined undefined
                , \w -> V2 (LinearMap $ V2 w zeroV)
                           (LinearMap $ V2 zeroV w)
                , \w -> LinearMap $ V2 (Tensor $ V2 w zeroV)
@@ -429,13 +464,13 @@ FreeLinearSpace( V2
                , LinearMap $ V2 (blockVectSpan $ V2 1 0)
                                 (blockVectSpan $ V2 0 1)
                , \(V2 (V2 w₀ _)
-                      (V2 _ w₁)) -> w₀^+^w₁ )
+                      (V2 _ w₁)) -> w₀^+^w₁
+               , \(V2 x y) f -> (f$x)^._x + (f$y)^._y )
 FreeLinearSpace( V3
                , LinearMap
                , \(Tensor (V3 w₀ w₁ w₂)) -> w₀⊗V3 1 0 0
                                         ^+^ w₁⊗V3 0 1 0
                                         ^+^ w₂⊗V3 0 0 1
-               , V3 undefined undefined undefined
                , \w -> V3 (LinearMap $ V3 w zeroV zeroV)
                           (LinearMap $ V3 zeroV w zeroV)
                           (LinearMap $ V3 zeroV zeroV w)
@@ -447,14 +482,14 @@ FreeLinearSpace( V3
                                 (blockVectSpan $ V3 0 0 1)
                , \(V3 (V3 w₀ _ _)
                       (V3 _ w₁ _)
-                      (V3 _ _ w₂)) -> w₀^+^w₁^+^w₂ )
+                      (V3 _ _ w₂)) -> w₀^+^w₁^+^w₂
+               , \(V3 x y z) f -> (f$x)^._x + (f$y)^._y + (f$z)^._z )
 FreeLinearSpace( V4
                , LinearMap
                , \(Tensor (V4 w₀ w₁ w₂ w₃)) -> w₀⊗V4 1 0 0 0
                                            ^+^ w₁⊗V4 0 1 0 0
                                            ^+^ w₂⊗V4 0 0 1 0
                                            ^+^ w₃⊗V4 0 0 0 1
-               , V4 undefined undefined undefined undefined
                , \w -> V4 (LinearMap $ V4 w zeroV zeroV zeroV)
                           (LinearMap $ V4 zeroV w zeroV zeroV)
                           (LinearMap $ V4 zeroV zeroV w zeroV)
@@ -470,7 +505,8 @@ FreeLinearSpace( V4
                , \(V4 (V4 w₀ _ _ _)
                       (V4 _ w₁ _ _)
                       (V4 _ _ w₂ _)
-                      (V4 _ _ _ w₃)) -> w₀^+^w₁^+^w₂^+^w₃ )
+                      (V4 _ _ _ w₃)) -> w₀^+^w₁^+^w₂^+^w₃
+               , \(V4 x y z w) f -> (f$x)^._x + (f$y)^._y + (f$z)^._z + (f$w)^._w )
 
 
 
@@ -493,6 +529,10 @@ instance ∀ u v . ( Num''' (Scalar v), LSpace u, LSpace v, Scalar u ~ Scalar v 
   transposeTensor = flout Tensor >>> transposeTensor *** transposeTensor >>> fzip
   fmapTensor = LinearFunction $
            \f -> pretendLike Tensor $ (fmapTensor$f) *** (fmapTensor$f)
+  fzipTensorWith = bilinearFunction
+               $ \f (Tensor (uw, vw), Tensor (ux, vx))
+                      -> Tensor ( (fzipTensorWith$f)$(uw,ux)
+                                , (fzipTensorWith$f)$(vw,vx) )
   coerceFmapTensorProduct p cab = case
              ( coerceFmapTensorProduct (fst<$>p) cab
              , coerceFmapTensorProduct (snd<$>p) cab ) of
@@ -530,6 +570,13 @@ instance ∀ u v . ( LinearSpace u, LinearSpace (DualVector u), DualVector (Dual
                >>>  contractTensor' . fmap (arr fromTensor . fst . flout LinearMap)
                  ***contractTensor' . fmap (arr fromTensor . snd . flout LinearMap)
                >>> addV
+  contractTensorWith = LinearFunction $ \(Tensor (fu, fv))
+                          -> (contractTensorWith$fu) &&& (contractTensorWith$fv)
+  contractLinearMapAgainst = flout LinearMap >>> bilinearFunction
+                     (\(mu,mv) f -> ((contractLinearMapAgainst$fromTensor$mu)$(fst.f))
+                                  + ((contractLinearMapAgainst$fromTensor$mv)$(snd.f)) )
+  applyDualVector = LinearFunction $ \(du,dv)
+                      -> (applyDualVector$du) *** (applyDualVector$dv) >>> addV
   applyLinear = LinearFunction $ \(LinearMap (fu, fv)) ->
            (applyLinear $ (asLinearMap $ fu)) *** (applyLinear $ (asLinearMap $ fv))
              >>> addV
@@ -582,6 +629,9 @@ instance ∀ s u v . ( Num''' s, LSpace u, LSpace v, Scalar u ~ s, Scalar v ~ s 
         . (flipBilin composeLinear $ t) . blockVectSpan'
   fmapTensor = LinearFunction $ \f
                 -> arr deferLinearMap <<< fmap (fmap f) <<< arr hasteLinearMap
+  fzipTensorWith = LinearFunction $ \f
+                -> arr deferLinearMap <<< fzipWith (fzipWith f)
+                     <<< arr hasteLinearMap *** arr hasteLinearMap
   coerceFmapTensorProduct = cftlp
    where cftlp :: ∀ a b p . p (LinearMap s u v) -> Coercion a b
                    -> Coercion (TensorProduct (DualVector u) (Tensor s v a))
@@ -616,12 +666,18 @@ instance ∀ s u v . (Num''' s, LSpace u, LSpace v, Scalar u ~ s, Scalar v ~ s)
                     . fmap (arr (fmap coUncurryLinearMap) . blockVectSpan)
                                . blockVectSpan'
   applyLinear = bilinearFunction $ \f g -> contractTensor $ (coCurryLinearMap$f) . g
+  applyDualVector = contractLinearMapAgainst
   composeLinear = bilinearFunction $ \f g
         -> coUncurryLinearMap $ fmap (fmap $ applyLinear $ f) $ (coCurryLinearMap$g)
   contractTensor = contractTensor . fmap (contractTensor' . arr (fmap hasteLinearMap))
                        . arr coCurryLinearMap
   contractTensor' = contractTensor . fmap (contractTensor' . arr (fmap coCurryLinearMap))
                        . arr hasteLinearMap
+  contractTensorWith = arr hasteLinearMap >>> bilinearFunction (\l dw
+                          -> fmap (flipBilin contractTensorWith $ dw) $ l )
+  contractLinearMapAgainst = arr coCurryLinearMap >>> bilinearFunction (\l f
+                          -> (contractLinearMapAgainst . fmap transposeTensor $ l)
+                                $ (uncurryLinearMap$f) )
 
 instance ∀ s u v . (Num''' s, LSpace u, LSpace v, Scalar u ~ s, Scalar v ~ s)
                        => TensorSpace (Tensor s u v) where
@@ -639,6 +695,9 @@ instance ∀ s u v . (Num''' s, LSpace u, LSpace v, Scalar u ~ s, Scalar v ~ s)
                        . transposeTensor . fmap transposeTensor . arr rassocTensor
   fmapTensor = LinearFunction $ \f
                 -> arr lassocTensor <<< fmap (fmap f) <<< arr rassocTensor
+  fzipTensorWith = LinearFunction $ \f
+                -> arr lassocTensor <<< fzipWith (fzipWith f)
+                     <<< arr rassocTensor *** arr rassocTensor
   coerceFmapTensorProduct = cftlp
    where cftlp :: ∀ a b p . p (Tensor s u v) -> Coercion a b
                    -> Coercion (TensorProduct u (Tensor s v a))
@@ -657,6 +716,9 @@ instance ∀ s u v . (Num''' s, LSpace u, LSpace v, Scalar u ~ s, Scalar v ~ s)
                    . arr deferLinearMap . fmap transposeTensor . blockVectSpan'
   applyLinear = LinearFunction $ \f -> contractTensor'
                      . fmap (applyLinear$curryLinearMap$f) . transposeTensor
+  applyDualVector = bilinearFunction $ \f t
+                          -> (contractLinearMapAgainst $ (fromTensor$f))
+                               $ (arr asLinearMap . transposeTensor $ t)
   composeLinear = bilinearFunction $ \f g
         -> uncurryLinearMap $ fmap (fmap $ applyLinear $ f) $ (curryLinearMap$g)
   contractTensor = contractTensor
@@ -666,6 +728,11 @@ instance ∀ s u v . (Num''' s, LSpace u, LSpace v, Scalar u ~ s, Scalar v ~ s)
   contractTensor' = contractTensor . fmap transposeTensor . contractTensor'
                  . fmap (arr (curryLinearMap . hasteLinearMap) . transposeTensor)
                        . arr rassocTensor
+  contractTensorWith = arr rassocTensor >>> bilinearFunction (\l dw
+                          -> fmap (flipBilin contractTensorWith $ dw) $ l )
+  contractLinearMapAgainst = arr curryLinearMap >>> bilinearFunction (\l f
+                          -> (contractLinearMapAgainst $ l)
+                                $ (arr coUncurryLinearMap . fmap transposeTensor $ f) )
 
 
 
@@ -1008,9 +1075,39 @@ instance (LSpace w, Scalar w ~ s)
   fmap f = LinearFunction (f.)
 
 
+deferLinearFn :: Coercion (LinearFunction s u (Tensor s v w))
+                          (Tensor s (LinearFunction s u v) w)
+deferLinearFn = Coercion
+
+hasteLinearFn :: Coercion (Tensor s (LinearFunction s u v) w)
+                          (LinearFunction s u (Tensor s v w))
+hasteLinearFn = Coercion
+
+
 instance (LSpace u, LSpace v, Scalar u ~ s, Scalar v ~ s)
      => TensorSpace (LinearFunction s u v) where
   type TensorProduct (LinearFunction s u v) w = LinearFunction s u (Tensor s v w)
+  zeroTensor = deferLinearFn $ const0
+  toFlatTensor = arr deferLinearFn . fmap toFlatTensor
+  fromFlatTensor = fmap fromFlatTensor . arr hasteLinearFn
+  addTensors t s = deferLinearFn $ (hasteLinearFn$t)^+^(hasteLinearFn$s)
+  subtractTensors t s = deferLinearFn $ (hasteLinearFn$t)^-^(hasteLinearFn$s)
+  scaleTensor = LinearFunction $ \μ -> arr deferLinearFn . scaleWith μ . arr hasteLinearFn
+  negateTensor = arr deferLinearFn . lNegateV . arr hasteLinearFn
+  tensorProduct = flipBilin $ LinearFunction $
+                   \w -> arr deferLinearFn . fmap (flipBilin tensorProduct $ w)
+  transposeTensor = arr hasteLinearFn >>> LinearFunction tp
+   where tp f = fmap (LinearFunction $ \dw -> (flipBilin contractTensorWith$dw) . f)
+                          $ idTensor
+  fmapTensor = bilinearFunction $ \f g
+                -> deferLinearFn $ fmap f . (hasteLinearFn$g)
+  coerceFmapTensorProduct = cftpLf
+   where cftpLf :: ∀ s u v a b p . TensorSpace v
+            => p (LinearFunction s u v) -> Coercion a b
+                  -> Coercion (LinearFunction s u (Tensor s v a))
+                              (LinearFunction s u (Tensor s v b))
+         cftpLf p c = case coerceFmapTensorProduct ([]::[v]) c of
+                        Coercion -> Coercion
 
 instance (LSpace u, LSpace v, Scalar u ~ s, Scalar v ~ s)
      => LinearSpace (LinearFunction s u v) where
