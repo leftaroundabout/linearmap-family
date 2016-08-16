@@ -104,38 +104,6 @@ class ( TensorSpace v, TensorSpace (DualVector v)
   
   coerceDoubleDual :: Coercion v (DualVector (DualVector v))
   
-  linearCoFst :: (LSpace v, LSpace w, Num''' (Scalar v), Scalar w ~ Scalar v)
-                => v +> (v,w)
-  linearCoFst = sampleLinearFunction $ id &&& const0
-  linearCoSnd :: (LSpace v, LSpace w, Num''' (Scalar v), Scalar w ~ Scalar v)
-                => v +> (w,v)
-  linearCoSnd = sampleLinearFunction $ const0 &&& id
-  
-  fstBlock :: ( LSpace w, LSpace x, LSpace v, Num''' (Scalar v)
-              , Scalar w ~ Scalar v, Scalar x ~ Scalar v )
-     => (v+>(w,x)) -+> (v+>w)
-  fstBlock = fmap fst
-  sndBlock :: ( LSpace w, LSpace x, LSpace v, Num''' (Scalar v)
-              , Scalar w ~ Scalar v, Scalar x ~ Scalar v )
-     => (v+>(w,x)) -+> (v+>x)
-  sndBlock = fmap snd
-  sepBlocks :: ( LSpace w, LSpace x, LSpace v, Num''' (Scalar v)
-               , Scalar w ~ Scalar v, Scalar x ~ Scalar v )
-     => (v+>(w,x)) -+> (v+>w, v+>x)
-  sepBlocks = fstBlock &&& sndBlock
-  fanoutBlocks :: ( LSpace v, LSpace w, LSpace x
-                  , Scalar w ~ Scalar v, Scalar x ~ Scalar v )
-     => (v+>w, v+>x) -+> (v+>(w,x))
-  fanoutBlocks = (arr asTensor***arr asTensor) >>> fzip >>> arr fromTensor
-  firstBlock :: ( LSpace v, LSpace w, LSpace x
-                , Scalar w ~ Scalar v, Scalar x ~ Scalar v )
-     => (v+>w) -+> (v+>(w,x))
-  firstBlock = fanoutBlocks . (id &&& const0)
-  secondBlock :: ( LSpace v, LSpace w, LSpace x
-                 , Scalar w ~ Scalar v, Scalar x ~ Scalar v )
-           => (v+>x) -+> (v+>(w,x))
-  secondBlock = fanoutBlocks . (const0 &&& id)
-  
   blockVectSpan :: (LSpace w, Scalar w ~ Scalar v)
            => w -+> (v⊗(v+>w))
   blockVectSpan' :: (LSpace v, LSpace w, Num''' (Scalar v), Scalar v ~ Scalar w)
@@ -192,13 +160,6 @@ instance Num''' s => LinearSpace (ZeroDim s) where
   idTensor = Tensor Origin
   fromLinearForm = const0
   coerceDoubleDual = Coercion
-  linearCoFst = LinearMap Origin
-  linearCoSnd = LinearMap Origin
-  fstBlock = const0
-  sndBlock = const0
-  fanoutBlocks = const0
-  firstBlock = const0
-  secondBlock = const0
   contractTensorMap = const0
   contractMapTensor = const0
   contractTensorWith = biConst0
@@ -294,18 +255,18 @@ instance Category (LinearMap s) where
   (.) = arr . arr composeLinear
 instance Num''' s => Cartesian (LinearMap s) where
   type UnitObject (LinearMap s) = ZeroDim s
-  swap = linearCoSnd ⊕ linearCoFst
-  attachUnit = linearCoFst
+  swap = (fmap (const0&&&id) $ id) ⊕ (fmap (id&&&const0) $ id)
+  attachUnit = fmap (id&&&const0) $ id
   detachUnit = fst
-  regroup = linearCoFst . linearCoFst ⊕ (linearCoFst . linearCoSnd ⊕ linearCoSnd)
-  regroup' = (linearCoFst ⊕ linearCoSnd . linearCoFst) ⊕ linearCoSnd . linearCoSnd
+  regroup = sampleLinearFunction $ LinearFunction regroup
+  regroup' = sampleLinearFunction $ LinearFunction regroup'
 instance Num''' s => Morphism (LinearMap s) where
-  f *** g = (firstBlock$f) ⊕ (secondBlock$g)
+  f *** g = (fmap (id&&&const0) $ f) ⊕ (fmap (const0&&&id) $ g)
 instance Num''' s => PreArrow (LinearMap s) where
-  (&&&) = curry $ arr fanoutBlocks
+  f &&& g = fromTensor $ (fzipTensorWith$id) $ (asTensor $ f, asTensor $ g)
   terminal = zeroV
-  fst = lfstBlock $ id
-  snd = lsndBlock $ id
+  fst = sampleLinearFunction $ fst
+  snd = sampleLinearFunction $ snd
 instance Num''' s => EnhancedCat (->) (LinearMap s) where
   arr m = arr $ applyLinear $ m
 instance Num''' s => EnhancedCat (LinearFunction s) (LinearMap s) where
@@ -346,24 +307,11 @@ instance ∀ u v . ( LinearSpace u, LinearSpace (DualVector u), DualVector (Dual
                  , Scalar u ~ Scalar v, Num''' (Scalar u) )
                        => LinearSpace (u,v) where
   type DualVector (u,v) = (DualVector u, DualVector v)
-  linearId = linearCoFst ⊕ linearCoSnd
+  linearId = (fmap (id&&&const0) $ id) ⊕ (fmap (const0&&&id) $ id)
   -- idTensor = fmapTensor linearCoFst idTensor <⊕ fmapTensor linearCoSnd idTensor
   sampleLinearFunction = LinearFunction $ \f -> (sampleLinearFunction $ f . lCoFst)
                                               ⊕ (sampleLinearFunction $ f . lCoSnd)
   coerceDoubleDual = Coercion
-  linearCoFst = linearCoFst.linearCoFst ⊕ linearCoFst.linearCoSnd
-  linearCoSnd = linearCoSnd.linearCoFst ⊕ linearCoSnd.linearCoSnd
-  sepBlocks = LinearFunction $ \(LinearMap (fu, fv)) ->
-                 let (fuw,fux) = sepBlocks $ asLinearMap $ fu
-                     (fvw,fvx) = sepBlocks $ asLinearMap $ fv
-                 in (fuw ⊕ fvw, fux ⊕ fvx)
-  fanoutBlocks = LinearFunction $ \(LinearMap (fu, fv), LinearMap (gu, gv))
-             -> (fanoutBlocks $ (asLinearMap $ fu, asLinearMap $ gu))
-                ⊕ (fanoutBlocks $ (asLinearMap $ fv, asLinearMap $ gv))
-  firstBlock = LinearFunction $ \(LinearMap (fu, fv))
-          -> (firstBlock $ asLinearMap $ fu) ⊕ (firstBlock $ asLinearMap $ fv)
-  secondBlock = LinearFunction $ \(LinearMap (fu, fv))
-          -> (secondBlock $ asLinearMap $ fu) ⊕ (secondBlock $ asLinearMap $ fv)
   blockVectSpan = (blockVectSpan >>> fmap lfstBlock) &&& (blockVectSpan >>> fmap lsndBlock)
                      >>> follow Tensor
   contractTensorMap = flout LinearMap
@@ -470,8 +418,6 @@ instance ∀ s u v . (Num''' s, LSpace u, LSpace v, Scalar u ~ s, Scalar v ~ s)
   type DualVector (LinearMap s u v) = LinearMap s v u
   linearId = coUncurryLinearMap $ fmap blockVectSpan $ id
   coerceDoubleDual = Coercion
-  fanoutBlocks = arr coUncurryLinearMap <<< fzipWith fzip
-               <<< arr coCurryLinearMap *** arr coCurryLinearMap
   blockVectSpan = arr deferLinearMap
                     . fmap (arr (fmap coUncurryLinearMap) . blockVectSpan)
                                . blockVectSpan'
@@ -519,8 +465,6 @@ instance ∀ s u v . (Num''' s, LSpace u, LSpace v, Scalar u ~ s, Scalar v ~ s)
   type DualVector (Tensor s u v) = Tensor s (DualVector u) (DualVector v)
   linearId = uncurryLinearMap $ fmap (fmap transposeTensor . blockVectSpan') $ id
   coerceDoubleDual = Coercion
-  fanoutBlocks = arr uncurryLinearMap <<< fzipWith fzip
-               <<< arr curryLinearMap *** arr curryLinearMap
   blockVectSpan = arr lassocTensor . arr (fmap $ fmap uncurryLinearMap)
            . fmap (transposeTensor . arr deferLinearMap) . blockVectSpan
                    . arr deferLinearMap . fmap transposeTensor . blockVectSpan'

@@ -70,9 +70,6 @@ instance LinearSpace ℝ where
   idTensor = Tensor 1
   fromLinearForm = flout LinearMap
   coerceDoubleDual = Coercion
-  linearCoFst = LinearMap (1, zeroV)
-  linearCoSnd = LinearMap (zeroV, 1)
-  fanoutBlocks = follow LinearMap . (flout LinearMap***flout LinearMap)
   contractTensorMap = flout Tensor . flout LinearMap
   contractMapTensor = flout LinearMap . flout Tensor
   contractTensorWith = flout Tensor >>> applyDualVector
@@ -107,10 +104,6 @@ instance Num''' s => LinearSpace (V s) where {                  \
   idTensor = Tensor Mat.identity; \
   coerceDoubleDual = Coercion; \
   fromLinearForm = flout LinearMap; \
-  linearCoFst = LV $ fmap (,zeroV) Mat.identity;                 \
-  linearCoSnd = LV $ fmap (zeroV,) Mat.identity;                  \
-  fanoutBlocks = LinearFunction $ LinearMap  \
-       . uncurry (liftA2 (,)) . (getLinearMap***getLinearMap); \
   blockVectSpan = LinearFunction $ Tensor . (bspan);            \
   contractTensorMap = LinearFunction $ (contraction) . coerce . getLinearMap;      \
   contractMapTensor = LinearFunction $ (contraction) . coerce . getTensorProduct;      \
