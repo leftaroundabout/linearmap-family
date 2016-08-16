@@ -20,7 +20,8 @@ library
   exposed-modules:     Math.LinearMap.Category
                        Math.LinearMap.Asserted
                        Math.VectorSpace.ZeroDimensional
-  -- other-modules:       
+  other-modules:       Math.LinearMap.Category.Class
+                       Math.LinearMap.Category.Instances
   other-extensions:    FlexibleInstances, UndecidableInstances, FunctionalDependencies, TypeOperators, TypeFamilies
   build-depends:       base >=4.8 && <4.9,
                        vector-space >=0.10 && <0.11,
