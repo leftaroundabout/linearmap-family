@@ -16,11 +16,12 @@
 {-# LANGUAGE FlexibleInstances    #-}
 {-# LANGUAGE FlexibleContexts     #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE ScopedTypeVariables  #-}
+{-# LANGUAGE UnicodeSyntax        #-}
 
 module Math.LinearMap.Category (
             -- * Linear maps
               LinearMap (..), (+>)()
-            , DualSpace
             , (⊕), (>+<)
             -- * Solving linear equations
             , (\$), pseudoInverse
@@ -32,7 +33,7 @@ module Math.LinearMap.Category (
             -- ** Finite baseis
             , FiniteDimensional (..)
             -- * Utility
-            , riesz, coRiesz, showsPrecAsRiesz, (.<)
+            , DualSpace, riesz, coRiesz, showsPrecAsRiesz, (.<)
             , Num', Fractional'
             ) where
 
@@ -61,6 +62,7 @@ import Data.VectorSpace.Free
 import Math.VectorSpace.ZeroDimensional
 import qualified Linear.Matrix as Mat
 import qualified Linear.Vector as Mat
+import Control.Lens ((^.))
 
 
 
@@ -72,7 +74,7 @@ import qualified Linear.Vector as Mat
 --   infinite-dimensional space.
 -- 
 --   Of course, this also works for spaces which are already finite-dimensional themselves.
-class (LinearSpace v, LinearSpace (Scalar v)) => SemiInner v where
+class LSpace v => SemiInner v where
   -- | Lazily enumerate choices of a basis of functionals that can be made dual
   --   to the given vectors, in order of preference (which roughly means, large in
   --   the normal direction.) I.e., if the vector @𝑣@ is assigned early to the
@@ -85,14 +87,14 @@ class (LinearSpace v, LinearSpace (Scalar v)) => SemiInner v where
   -- 
   --   For simple finite-dimensional array-vectors, you can easily define this
   --   method using 'cartesianDualBasisCandidates'.
-  dualBasisCandidates :: [(Int,v)] -> Forest (Int, v +> Scalar v)
+  dualBasisCandidates :: [(Int,v)] -> Forest (Int, DualVector v)
 
 cartesianDualBasisCandidates
-     :: [v+>Scalar v]   -- ^ Set of canonical basis functionals.
+     :: [DualVector v]  -- ^ Set of canonical basis functionals.
      -> (v -> [ℝ])      -- ^ Decompose a vector in /absolute value/ components.
                         --   the list indices should correspond to those in
                         --   the functional list.
-     -> ([(Int,v)] -> Forest (Int, v +> Scalar v))
+     -> ([(Int,v)] -> Forest (Int, DualVector v))
                         -- ^ Suitable definition of 'dualBasisCandidates'.
 cartesianDualBasisCandidates dvs abss vcas = go 0 sorted
  where sorted = sortBy (comparing $ negate . snd . snd)
@@ -117,15 +119,19 @@ instance (Fractional'' s, SemiInner s) => SemiInner (ZeroDim s) where
 instance (Fractional'' s, SemiInner s) => SemiInner (V0 s) where
   dualBasisCandidates _ = []
 
-orthonormaliseDuals :: (SemiInner v, LSpace v, Fractional'' (Scalar v))
-                          => [(v, DualSpace v)] -> [(v,DualSpace v)]
-orthonormaliseDuals [] = []
-orthonormaliseDuals ((v,v'₀):ws) = (v,v') : [(w, w' ^-^ (w'$v)*^v') | (w,w')<-wssys]
- where wssys = orthonormaliseDuals ws
-       v'₁ = foldl' (\v'i (w,w') -> v'i ^-^ (v'i$w)*^w') v'₀ wssys
-       v' = v'₁ ^/ (v'₁$v)
+(<.>^) :: LSpace v => DualVector v -> v -> Scalar v
+f<.>^v = (applyDualVector$f)$v
 
-dualBasis :: (SemiInner v, LSpace v, Fractional'' (Scalar v)) => [v] -> [DualSpace v]
+orthonormaliseDuals :: (SemiInner v, LSpace v, Fractional'' (Scalar v))
+                          => [(v, DualVector v)] -> [(v,DualVector v)]
+orthonormaliseDuals [] = []
+orthonormaliseDuals ((v,v'₀):ws)
+          = (v,v') : [(w, w' ^-^ (w'<.>^v)*^v') | (w,w')<-wssys]
+ where wssys = orthonormaliseDuals ws
+       v'₁ = foldl' (\v'i (w,w') -> v'i ^-^ (v'i<.>^w)*^w') v'₀ wssys
+       v' = v'₁ ^/ (v'₁<.>^v)
+
+dualBasis :: (SemiInner v, LSpace v, Fractional'' (Scalar v)) => [v] -> [DualVector v]
 dualBasis vs = snd <$> orthonormaliseDuals (zip' vsIxed candidates)
  where zip' ((i,v):vs) ((j,v'):ds)
         | i<j   = zip' vs ((j,v'):ds)
@@ -138,40 +144,42 @@ dualBasis vs = snd <$> orthonormaliseDuals (zip' vsIxed candidates)
        vsIxed = zip [0..] vs
 
 instance SemiInner ℝ where
-  dualBasisCandidates = fmap ((`Node`[]) . second (LinearMap . recip))
+  dualBasisCandidates = fmap ((`Node`[]) . second recip)
                 . sortBy (comparing $ negate . abs . snd)
                 . filter ((/=0) . snd)
 
 instance (Fractional'' s, Ord s, SemiInner s) => SemiInner (V1 s) where
-  dualBasisCandidates = fmap ((`Node`[]) . second (LinearMap . recip))
+  dualBasisCandidates = fmap ((`Node`[]) . second recip)
                 . sortBy (comparing $ negate . abs . snd)
                 . filter ((/=0) . snd)
 
 #define FreeSemiInner(V, sabs) \
-instance SemiInner (V) where {      \
-  dualBasisCandidates                \
-     = cartesianDualBasisCandidates (LinearMap <$> Mat.basis) (fmap sabs . toList) }
+instance SemiInner (V) where {  \
+  dualBasisCandidates            \
+     = cartesianDualBasisCandidates Mat.basis (fmap sabs . toList) }
 FreeSemiInner(V2 ℝ, abs)
 FreeSemiInner(V3 ℝ, abs)
 FreeSemiInner(V4 ℝ, abs)
 
-instance ( SemiInner u, LSpace u, SemiInner v, LSpace v
-         , LSpace (Scalar v), Scalar u ~ Scalar v
-         ) => SemiInner (u,v) where
+instance ∀ u v . ( SemiInner u, SemiInner v, Scalar u ~ Scalar v ) => SemiInner (u,v) where
   dualBasisCandidates = fmap (\(i,(u,v))->((i,u),(i,v))) >>> unzip
               >>> dualBasisCandidates *** dualBasisCandidates
               >>> combineBaseis False mempty
-   where combineBaseis _ _ ([], []) = []
+   where combineBaseis :: Bool -> Set Int
+                 -> ( Forest (Int, DualVector u)
+                    , Forest (Int, DualVector v) )
+                   -> Forest (Int, (DualVector u, DualVector v))
+         combineBaseis _ _ ([], []) = []
          combineBaseis False forbidden (Node (i,du) bu' : abu, bv)
             | i`Set.member`forbidden  = combineBaseis False forbidden (abu, bv)
             | otherwise
-                 = Node (i, lfstBlock $ du)
+                 = Node (i, (du, zeroV))
                         (combineBaseis True (Set.insert i forbidden) (bu', bv))
                        : combineBaseis False forbidden (abu, bv)
          combineBaseis True forbidden (bu, Node (i,dv) bv' : abv)
             | i`Set.member`forbidden  = combineBaseis True forbidden (bu, abv)
             | otherwise
-                 = Node (i, lsndBlock $ dv)
+                 = Node (i, (zeroV, dv))
                         (combineBaseis False (Set.insert i forbidden) (bu, bv'))
                        : combineBaseis True forbidden (bu, abv)
          combineBaseis _ forbidden (bu, []) = combineBaseis False forbidden (bu,[])
@@ -198,7 +206,7 @@ class (LSpace v, LSpace (Scalar v)) => FiniteDimensional v where
   recomposeEntire :: EntireBasis v -> [Scalar v] -> (v, [Scalar v])
   
   recomposeContraLinMap :: (LinearSpace w, Scalar w ~ Scalar v, Hask.Functor f)
-           => (f (Scalar w) -> w) -> f (DualSpace v) -> v+>w
+           => (f (Scalar w) -> w) -> f (DualVector v) -> v+>w
   
 
 
@@ -219,7 +227,7 @@ instance FiniteDimensional ℝ where
   recomposeEntire RealsBasis [] = (0, [])
   recomposeEntire RealsBasis (μ:cs) = (μ, cs)
   decomposeLinMap (LinearMap v) = (RealsBasis, (v:))
-  recomposeContraLinMap fw = LinearMap . fw . fmap ($1)
+  recomposeContraLinMap fw = LinearMap . fw
 
 #define FreeFiniteDimensional(V, VB, take, give)          \
 instance (Num''' s, LSpace s)                              \
@@ -228,7 +236,7 @@ instance (Num''' s, LSpace s)                              \
   recomposeEntire _ (take:cs) = (give, cs);                   \
   recomposeEntire b cs = recomposeEntire b $ cs ++ [0];        \
   decomposeLinMap (LinearMap m) = (VB, (toList m ++));          \
-  recomposeContraLinMap fw mv = LinearMap $ (\v -> fw $ fmap ($v) mv) <$> Mat.identity }
+  recomposeContraLinMap fw mv = LinearMap $ (\v -> fw $ fmap (<.>^v) mv) <$> Mat.identity }
 FreeFiniteDimensional(V1, V1Basis, c₀         , V1 c₀         )
 FreeFiniteDimensional(V2, V2Basis, c₀:c₁      , V2 c₀ c₁      )
 FreeFiniteDimensional(V3, V3Basis, c₀:c₁:c₂   , V3 c₀ c₁ c₂   )
@@ -248,10 +256,8 @@ instance ( FiniteDimensional u, LinearSpace (DualVector u), DualVector (DualVect
                         (u, coefs') -> case recomposeEntire bv coefs' of
                          (v, coefs'') -> ((u,v), coefs'')
   recomposeContraLinMap fw dds
-         = recomposeContraLinMap fw 
-               (fmap (\(LinearMap (v', _)) -> asLinearMap $ v') dds)
-          ⊕ recomposeContraLinMap fw
-               (fmap (\(LinearMap (_, v')) -> asLinearMap $ v') dds)
+         = recomposeContraLinMap fw (fst<$>dds)
+          ⊕ recomposeContraLinMap fw (snd<$>dds)
   
 deriving instance (Show (EntireBasis u), Show (EntireBasis v))
                     => Show (EntireBasis (u,v))
@@ -266,7 +272,7 @@ infixr 0 \$
 (\$) :: ( FiniteDimensional u, FiniteDimensional v, SemiInner v
         , Scalar u ~ Scalar v, Fractional' (Scalar v) )
           => (u+>v) -> v -> u
-(\$) m = fst . \v -> recomposeEntire mbas [v' $ v | v' <- v's]
+(\$) m = fst . \v -> recomposeEntire mbas [v'<.>^v | v' <- v's]
  where v's = dualBasis $ mdecomp []
        (mbas, mdecomp) = decomposeLinMap m
     
@@ -281,20 +287,27 @@ pseudoInverse m = recomposeContraLinMap (fst . recomposeEntire mbas) v's
 
 -- | The <https://en.wikipedia.org/wiki/Riesz_representation_theorem Riesz representation theorem>
 --   provides an isomorphism between a Hilbert space and its (continuous) dual space.
-riesz :: (FiniteDimensional v, InnerSpace v) => DualSpace v -+> v
+riesz :: (FiniteDimensional v, InnerSpace v) => DualVector v -+> v
 riesz = LinearFunction $ \dv ->
-       let (bas, compos) = decomposeLinMap dv
+       let (bas, compos) = decomposeLinMap $ sampleLinearFunction $ applyDualVector $ dv
        in fst . recomposeEntire bas $ compos []
 
-coRiesz :: (LSpace v, Num''' (Scalar v), InnerSpace v) => v -+> DualSpace v
-coRiesz = sampleLinearFunction . inner
+sRiesz :: (FiniteDimensional v, InnerSpace v) => DualSpace v -+> v
+sRiesz = LinearFunction $ \dv ->
+       let (bas, compos) = decomposeLinMap $ dv
+       in fst . recomposeEntire bas $ compos []
+
+coRiesz :: (LSpace v, Num''' (Scalar v), InnerSpace v) => v -+> DualVector v
+coRiesz = fromFlatTensor . arr asTensor . sampleLinearFunction . inner
 
 -- | Functions are generally a pain to display, but since linear functionals
 --   in a Hilbert space can be represented by /vectors/ in that space,
 --   this can be used for implementing a 'Show' instance.
-showsPrecAsRiesz :: (FiniteDimensional v, InnerSpace v, Show v)
+showsPrecAsRiesz :: ( FiniteDimensional v, InnerSpace v, Show v
+                    , HasBasis (Scalar v), Basis (Scalar v) ~ () )
                       => Int -> DualSpace v -> ShowS
-showsPrecAsRiesz p dv = showParen (p>0) $ ("coRiesz$"++) . showsPrec 10 (riesz$dv)
+showsPrecAsRiesz p dv = showParen (p>0) $ ("().<"++)
+            . showsPrec 7 (sRiesz$dv)
 
 instance Show (LinearMap ℝ (V0 ℝ) ℝ) where showsPrec = showsPrecAsRiesz
 instance Show (LinearMap ℝ (V1 ℝ) ℝ) where showsPrec = showsPrecAsRiesz
@@ -317,26 +330,26 @@ instance Show (LinearMap s v (V0 s)) where
   show _ = "zeroV"
 instance (FiniteDimensional v, InnerSpace v, Scalar v ~ ℝ, Show v)
               => Show (LinearMap ℝ v (V1 ℝ)) where
-  showsPrec p m = showParen (p>6) $ ("ex ×< "++)
-                       . showsPrec 7 (riesz $ (coRiesz$(V1 1)) . m)
+  showsPrec p m = showParen (p>6) $ ("ex .< "++)
+                       . showsPrec 7 (sRiesz $ fmap (LinearFunction (^._x)) $ m)
 instance (FiniteDimensional v, InnerSpace v, Scalar v ~ ℝ, Show v)
               => Show (LinearMap ℝ v (V2 ℝ)) where
   showsPrec p m = showParen (p>6)
-              $ ("ex.<"++) . showsPrec 7 (riesz $ (coRiesz$V2 1 0) . m)
-         . (" ^+^ ey.<"++) . showsPrec 7 (riesz $ (coRiesz$V2 0 1) . m)
+              $ ("ex.<"++) . showsPrec 7 (sRiesz $ fmap (LinearFunction (^._x)) $ m)
+         . (" ^+^ ey.<"++) . showsPrec 7 (sRiesz $ fmap (LinearFunction (^._y)) $ m)
 instance (FiniteDimensional v, InnerSpace v, Scalar v ~ ℝ, Show v)
               => Show (LinearMap ℝ v (V3 ℝ)) where
   showsPrec p m = showParen (p>6)
-              $ ("ex.<"++) . showsPrec 7 (riesz $ (coRiesz$V3 1 0 0) . m)
-         . (" ^+^ ey.<"++) . showsPrec 7 (riesz $ (coRiesz$V3 0 1 0) . m)
-         . (" ^+^ ez.<"++) . showsPrec 7 (riesz $ (coRiesz$V3 0 0 1) . m)
+              $ ("ex.<"++) . showsPrec 7 (sRiesz $ fmap (LinearFunction (^._x)) $ m)
+         . (" ^+^ ey.<"++) . showsPrec 7 (sRiesz $ fmap (LinearFunction (^._y)) $ m)
+         . (" ^+^ ez.<"++) . showsPrec 7 (sRiesz $ fmap (LinearFunction (^._z)) $ m)
 instance (FiniteDimensional v, InnerSpace v, Scalar v ~ ℝ, Show v)
               => Show (LinearMap ℝ v (V4 ℝ)) where
   showsPrec p m = showParen (p>6)
-              $ ("ex.<"++) . showsPrec 7 (riesz $ (coRiesz$V4 1 0 0 0) . m)
-         . (" ^+^ ey.<"++) . showsPrec 7 (riesz $ (coRiesz$V4 0 1 0 0) . m)
-         . (" ^+^ ez.<"++) . showsPrec 7 (riesz $ (coRiesz$V4 0 0 1 0) . m)
-         . (" ^+^ ew.<"++) . showsPrec 7 (riesz $ (coRiesz$V4 0 0 0 1) . m)
+              $ ("ex.<"++) . showsPrec 7 (sRiesz $ fmap (LinearFunction (^._x)) $ m)
+         . (" ^+^ ey.<"++) . showsPrec 7 (sRiesz $ fmap (LinearFunction (^._y)) $ m)
+         . (" ^+^ ez.<"++) . showsPrec 7 (sRiesz $ fmap (LinearFunction (^._z)) $ m)
+         . (" ^+^ ew.<"++) . showsPrec 7 (sRiesz $ fmap (LinearFunction (^._w)) $ m)
 
 
 

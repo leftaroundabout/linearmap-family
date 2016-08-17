@@ -205,7 +205,7 @@ type v +> w = LinearMap (Scalar v) v w
 type v ⊗ w = Tensor (Scalar v) v w
 
 type LSpace' v = ( LinearSpace v, LinearSpace (Scalar v)
-                , LinearSpace (DualVector v), DualVector (DualVector v) ~ v )
+                 , LinearSpace (DualVector v), DualVector (DualVector v) ~ v )
 type LSpace v = (LSpace' v, Num''' (Scalar v))
 
 instance (LSpace v, LSpace w, Scalar v~s, Scalar w~s)
