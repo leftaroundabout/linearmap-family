@@ -217,7 +217,7 @@ instance (LSpace v, LSpace w, Scalar v~s, Scalar w~s)
 instance (LSpace v, LSpace w, Scalar v~s, Scalar w~s)
                => VectorSpace (LinearMap s v w) where
   type Scalar (LinearMap s v w) = s
-  (*^) μ = undefined -- (fromTensor$) . scaleTensor μ . (asTensor$)
+  μ*^v = arr fromTensor . (scaleTensor$μ) . arr asTensor $ v
 
 instance (LSpace v, LSpace w, Scalar v~s, Scalar w~s)
                => AdditiveGroup (Tensor s v w) where
