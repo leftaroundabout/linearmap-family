@@ -188,6 +188,19 @@ FreeLinearSpace( V4
 
 
 
+instance (Num''' n, TensorProduct (DualVector n) n ~ n) => Num (LinearMap n n n) where
+  LinearMap n + LinearMap m = LinearMap $ n + m
+  LinearMap n - LinearMap m = LinearMap $ n - m
+  LinearMap n * LinearMap m = LinearMap $ n * m
+  abs (LinearMap n) = LinearMap $ abs n
+  signum (LinearMap n) = LinearMap $ signum n
+  fromInteger = LinearMap . fromInteger
+   
+instance (Fractional'' n, TensorProduct (DualVector n) n ~ n)
+                           => Fractional (LinearMap n n n) where
+  LinearMap n / LinearMap m = LinearMap $ n / m
+  recip (LinearMap n) = LinearMap $ recip n
+  fromRational = LinearMap . fromRational
 
   
 

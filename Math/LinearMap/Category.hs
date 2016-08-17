@@ -21,20 +21,29 @@
 
 module Math.LinearMap.Category (
             -- * Linear maps
+            -- ** Tensor implementation
               LinearMap (..), (+>)()
             , (⊕), (>+<)
+            -- ** Function implementation
+            , LinearFunction (..), (-+>)(), Bilinear
             -- * Solving linear equations
             , (\$), pseudoInverse
             -- * The classes of suitable vector spaces
-            -- ** General linear maps
+            -- ** Tensor products
+            , TensorSpace
+            -- ** Functionals linear maps
             , LinearSpace (..)
             -- ** Orthonormal systems
             , SemiInner (..), cartesianDualBasisCandidates
             -- ** Finite baseis
             , FiniteDimensional (..)
             -- * Utility
+            -- ** Linear primitives
+            , addV, scale, inner, flipBilin, bilinearFunction
+            -- ** Hilbert space operations
             , DualSpace, riesz, coRiesz, showsPrecAsRiesz, (.<)
-            , Num', Fractional'
+            -- ** Constraints on types of scalars
+            , Num', Num'', Num''', Fractional', Fractional''
             ) where
 
 import Math.LinearMap.Category.Class
