@@ -51,7 +51,7 @@ import Math.LinearMap.Category.Instances
 import Math.LinearMap.Asserted
 
 import Data.Tree (Tree(..), Forest)
-import Data.List (sortBy, foldl')
+import Data.List (sortBy, foldl', mapAccumL)
 import qualified Data.Set as Set
 import Data.Set (Set)
 import Data.Ord (comparing)
@@ -360,5 +360,27 @@ instance (FiniteDimensional v, InnerSpace v, Scalar v ~ ℝ, Show v)
          . (" ^+^ ez.<"++) . showsPrec 7 (sRiesz $ fmap (LinearFunction (^._z)) $ m)
          . (" ^+^ ew.<"++) . showsPrec 7 (sRiesz $ fmap (LinearFunction (^._w)) $ m)
 
+
+
+
+newtype Metric v = Metric { getMetricFn :: v -+> DualVector v }
+
+approxEigenSystem :: LSpace v
+      => Metric v        -- ^ The notion of orthonormality.
+      -> v               -- ^ Starting vector for the process.
+      -> Int             -- ^ Maximum number of Arnoldi steps.
+      -> (v-+>v)         -- ^ Operator to calculate the eigensystem of.
+      -> [(v, Scalar v)] -- ^ Eigenvector approximations with corresponding eigenvalues.
+approxEigenSystem (Metric m) v₀ nmax f = undefined
+ where arnoldi = go v₀ nmax []
+        where go v j l
+                  | j>=nmax    = l
+                  | mv'²>0     = go (f$v') (j+1) $ (
+                  | otherwise  = l
+               where (vred,lnu) = mapAccumL redu v l
+                      where redu vr (w,hw) = (vr ^-^ w^*ovw, (w,ovw:hw))
+                             where ovw = (m$vr)<.>^w
+                     v' = m $ vred
+                     mv'² = (m$v')<.>v'
 
 
