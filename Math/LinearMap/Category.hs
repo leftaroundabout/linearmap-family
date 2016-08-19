@@ -51,7 +51,7 @@ import Math.LinearMap.Category.Instances
 import Math.LinearMap.Asserted
 
 import Data.Tree (Tree(..), Forest)
-import Data.List (sortBy, foldl', mapAccumL)
+import Data.List (sortBy, foldl')
 import qualified Data.Set as Set
 import Data.Set (Set)
 import Data.Ord (comparing)
@@ -365,22 +365,52 @@ instance (FiniteDimensional v, InnerSpace v, Scalar v ~ ℝ, Show v)
 
 newtype Metric v = Metric { getMetricFn :: v -+> DualVector v }
 
-approxEigenSystem :: LSpace v
-      => Metric v        -- ^ The notion of orthonormality.
-      -> v               -- ^ Starting vector for the process.
-      -> Int             -- ^ Maximum number of Arnoldi steps.
-      -> (v-+>v)         -- ^ Operator to calculate the eigensystem of.
-      -> [(v, Scalar v)] -- ^ Eigenvector approximations with corresponding eigenvalues.
-approxEigenSystem (Metric m) v₀ nmax f = undefined
- where arnoldi = go v₀ nmax []
-        where go v j l
-                  | j>=nmax    = l
-                  | mv'²>0     = go (f$v') (j+1) $ (
-                  | otherwise  = l
-               where (vred,lnu) = mapAccumL redu v l
-                      where redu vr (w,hw) = (vr ^-^ w^*ovw, (w,ovw:hw))
-                             where ovw = (m$vr)<.>^w
-                     v' = m $ vred
-                     mv'² = (m$v')<.>v'
+data OrthonormalSystem v = OrthonormalSystem {
+      orthonormalityMetric :: Metric v
+    , orthonormalVectors :: [v]
+    }
+
+orthonormaliseFussily :: (LSpace v, RealFloat (Scalar v))
+                           => Metric v -> [v] -> [v]
+orthonormaliseFussily (Metric m) = go []
+ where go _ [] = []
+       go ws (v₀:vs)
+         | mvd > 1/4  = let v = vd^/sqrt mvd
+                        in v : go (v:ws) vs
+         | otherwise  = go ws vs
+        where vd = foldl' (\v w -> v ^-^ w^*((m$v)<.>^w)) v₀ ws
+              mvd = (m$vd)<.>^vd
+
+
+data Eigenvector v = Eigenvector {
+      ev_Eigenvalue :: Scalar v -- ^ The eigenvalue @λ@.
+    , ev_Eigenvector :: v       -- ^ Normalised vector @v@ that gets mapped to a multiple, namely:
+    , ev_FunctionApplied :: v   -- ^ @f $ v ≡ λ *^ v @.
+    , ev_Deviation :: v         -- ^ Deviation of these two supposedly equivalent expressions.
+    , ev_Badness :: Scalar v    -- ^ Norm of the deviation.
+    }
+
+refineEigenSystem :: (LSpace v, RealFloat (Scalar v))
+      => Metric v           -- ^ The notion of orthonormality.
+      -> (v-+>v)            -- ^ Operator to calculate the eigensystem of.
+                            --   Must be Hermitian WRT the scalar product
+                            --   defined by the given metric.
+      -> v                  -- ^ Starting vector for the power method.
+      -> [[Eigenvector v]]  -- ^ Sequence of ever more accurate approximations
+                            --   to the eigensystem of the operator.
+refineEigenSystem (Metric m) f = iterate (map asEV
+                                           . orthonormaliseFussily (Metric m)
+                                           . newSys)
+                                         . pure . asEV
+ where newSys [] = []
+       newSys (Eigenvector λ v fv dv ε : evs) = fv^/λ : dv^/ε : newSys evs
+       asEV v = Eigenvector λ v fv dv ε
+        where λ = v'<.>^fv
+              ε = magn dv
+              fv = f $ v
+              dv = v^*λ ^-^ fv
+              v' = m $ v
+       magnSq v = (m$v)<.>^v
+       magn = sqrt . magnSq
 
 
