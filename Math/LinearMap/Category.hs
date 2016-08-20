@@ -18,6 +18,7 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE ScopedTypeVariables  #-}
 {-# LANGUAGE UnicodeSyntax        #-}
+{-# LANGUAGE TupleSections        #-}
 
 module Math.LinearMap.Category (
             -- * Linear maps
@@ -212,6 +213,9 @@ class (LSpace v, LSpace (Scalar v)) => FiniteDimensional v where
   --   need to contain any information, since all vectors will anyway be represented in
   --   that same basis.
   data EntireBasis v :: *
+
+  someBasis :: EntireBasis v
+  enumerateBasis :: EntireBasis v -> [v]
   
   -- | Split up a linear map in “column vectors” WRT some suitable basis.
   decomposeLinMap :: (v+>w) -> (EntireBasis v, [w]->[w])
@@ -225,27 +229,35 @@ class (LSpace v, LSpace (Scalar v)) => FiniteDimensional v where
 
 instance (Num''' s) => FiniteDimensional (ZeroDim s) where
   data EntireBasis (ZeroDim s) = ZeroBasis
+  someBasis = ZeroBasis
+  enumerateBasis ZeroBasis = []
   recomposeEntire ZeroBasis l = (Origin, l)
   decomposeLinMap _ = (ZeroBasis, id)
   recomposeContraLinMap _ _ = LinearMap Origin
   
 instance (Num''' s, LinearSpace s) => FiniteDimensional (V0 s) where
   data EntireBasis (V0 s) = V0Basis
+  someBasis = V0Basis
+  enumerateBasis V0Basis = []
   recomposeEntire V0Basis l = (V0, l)
   decomposeLinMap _ = (V0Basis, id)
   recomposeContraLinMap _ _ = LinearMap V0
   
 instance FiniteDimensional ℝ where
   data EntireBasis ℝ = RealsBasis
+  someBasis = RealsBasis
+  enumerateBasis RealsBasis = [1]
   recomposeEntire RealsBasis [] = (0, [])
   recomposeEntire RealsBasis (μ:cs) = (μ, cs)
   decomposeLinMap (LinearMap v) = (RealsBasis, (v:))
   recomposeContraLinMap fw = LinearMap . fw
 
-#define FreeFiniteDimensional(V, VB, take, give)          \
-instance (Num''' s, LSpace s)                              \
-            => FiniteDimensional (V s) where {              \
-  data EntireBasis (V s) = VB;                               \
+#define FreeFiniteDimensional(V, VB, take, give)        \
+instance (Num''' s, LSpace s)                            \
+            => FiniteDimensional (V s) where {            \
+  data EntireBasis (V s) = VB;                             \
+  someBasis = VB;                                           \
+  enumerateBasis VB = toList Mat.identity;                   \
   recomposeEntire _ (take:cs) = (give, cs);                   \
   recomposeEntire b cs = recomposeEntire b $ cs ++ [0];        \
   decomposeLinMap (LinearMap m) = (VB, (toList m ++));          \
@@ -262,6 +274,12 @@ instance ( FiniteDimensional u, LinearSpace (DualVector u), DualVector (DualVect
          , Scalar u ~ Scalar v, Fractional' (Scalar v) )
             => FiniteDimensional (u,v) where
   data EntireBasis (u,v) = TupleBasis !(EntireBasis u) !(EntireBasis v)
+  someBasis = TupleBasis someBasis someBasis
+  enumerateBasis (TupleBasis bx by)
+           = interleave ((,zeroV)<$>enumerateBasis bx) ((zeroV,)<$>enumerateBasis by)
+   where interleave [] ys = ys
+         interleave xs [] = xs
+         interleave (x:xs) (y:ys) = x : y : interleave xs ys
   decomposeLinMap (LinearMap (fu, fv))
        = case (decomposeLinMap (asLinearMap$fu), decomposeLinMap (asLinearMap$fv)) of
          ((bu, du), (bv, dv)) -> (TupleBasis bu bv, du . dv)
