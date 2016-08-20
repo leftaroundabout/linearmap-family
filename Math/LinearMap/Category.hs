@@ -26,8 +26,12 @@ module Math.LinearMap.Category (
             , (⊕), (>+<)
             -- ** Function implementation
             , LinearFunction (..), (-+>)(), Bilinear
+            -- ** Hermitian
+            , Metric, euclideanMetric
             -- * Solving linear equations
             , (\$), pseudoInverse
+            -- * Eigenvalue problems
+            , Eigenvector(..), refineEigenSystem
             -- * The classes of suitable vector spaces
             -- ** Tensor products
             , TensorSpace
@@ -363,7 +367,11 @@ instance (FiniteDimensional v, InnerSpace v, Scalar v ~ ℝ, Show v)
 
 
 
+-- | A positive definite symmetric bilinear form.
 newtype Metric v = Metric { getMetricFn :: v -+> DualVector v }
+
+euclideanMetric :: (LSpace v, InnerSpace v, DualVector v ~ v) => Metric v
+euclideanMetric = Metric id
 
 data OrthonormalSystem v = OrthonormalSystem {
       orthonormalityMetric :: Metric v
@@ -383,12 +391,13 @@ orthonormaliseFussily (Metric m) = go []
 
 
 data Eigenvector v = Eigenvector {
-      ev_Eigenvalue :: Scalar v -- ^ The eigenvalue @λ@.
+      ev_Eigenvalue :: Scalar v -- ^ The estimated eigenvalue @λ@.
     , ev_Eigenvector :: v       -- ^ Normalised vector @v@ that gets mapped to a multiple, namely:
     , ev_FunctionApplied :: v   -- ^ @f $ v ≡ λ *^ v @.
     , ev_Deviation :: v         -- ^ Deviation of these two supposedly equivalent expressions.
-    , ev_Badness :: Scalar v    -- ^ Norm of the deviation.
+    , ev_Badness :: Scalar v    -- ^ Norm of the deviation, normalised by the eigenvalue.
     }
+deriving instance (Show v, Show (Scalar v)) => Show (Eigenvector v)
 
 refineEigenSystem :: (LSpace v, RealFloat (Scalar v))
       => Metric v           -- ^ The notion of orthonormality.
@@ -396,21 +405,26 @@ refineEigenSystem :: (LSpace v, RealFloat (Scalar v))
                             --   Must be Hermitian WRT the scalar product
                             --   defined by the given metric.
       -> v                  -- ^ Starting vector for the power method.
-      -> [[Eigenvector v]]  -- ^ Sequence of ever more accurate approximations
+      -> [[Eigenvector v]]  -- ^ Infinite sequence of ever more accurate approximations
                             --   to the eigensystem of the operator.
 refineEigenSystem (Metric m) f = iterate (map asEV
                                            . orthonormaliseFussily (Metric m)
                                            . newSys)
-                                         . pure . asEV
+                                         . pure . asEV . normalise
  where newSys [] = []
-       newSys (Eigenvector λ v fv dv ε : evs) = fv^/λ : dv^/ε : newSys evs
+       newSys (Eigenvector λ v fv dv ε : evs)
+         | ε>0        = case newSys evs of
+                         []     -> [fv^/λ, dv^*(λ/ε)]
+                         vn:vns -> fv^/λ : vn : dv^*(abs λ/ε) : vns
+         | otherwise  = v : newSys evs
        asEV v = Eigenvector λ v fv dv ε
         where λ = v'<.>^fv
-              ε = magn dv
+              ε = magn dv / abs λ
               fv = f $ v
               dv = v^*λ ^-^ fv
               v' = m $ v
        magnSq v = (m$v)<.>^v
        magn = sqrt . magnSq
+       normalise v = v ^/ magn v
 
 
