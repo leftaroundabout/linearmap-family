@@ -31,7 +31,7 @@ module Math.LinearMap.Category (
             -- * Solving linear equations
             , (\$), pseudoInverse
             -- * Eigenvalue problems
-            , Eigenvector(..), constructEigenSystem
+            , Eigenvector(..), roughEigenSystem, constructEigenSystem
             -- * The classes of suitable vector spaces
             -- ** Tensor products
             , TensorSpace
@@ -449,7 +449,7 @@ roughEigenSystem :: (FiniteDimensional v, RealFloat (Scalar v))
 roughEigenSystem me f = go fBas 0 [[]]
  where go [] _ (evs:_) = evs
        go (v:vs) fpε (evs:evss)
-         | metric me vPerp > fpε  = case evss of
+         | metricSq me vPerp > fpε  = case evss of
              []       -> let evss' = constructEigenSystem me (arr f) vPerp
                          in go vs (orthonormalityError me $ ev_Eigenvector<$>head evss')
                                    evss'
