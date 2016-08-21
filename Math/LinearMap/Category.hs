@@ -31,7 +31,7 @@ module Math.LinearMap.Category (
             -- * Solving linear equations
             , (\$), pseudoInverse
             -- * Eigenvalue problems
-            , Eigenvector(..), refineEigenSystem
+            , Eigenvector(..), constructEigenSystem
             -- * The classes of suitable vector spaces
             -- ** Tensor products
             , TensorSpace
@@ -373,6 +373,17 @@ newtype Metric v = Metric { getMetricFn :: v -+> DualVector v }
 euclideanMetric :: (LSpace v, InnerSpace v, DualVector v ~ v) => Metric v
 euclideanMetric = Metric id
 
+infixl 6 ^%
+(^%) :: (LSpace v, Floating (Scalar v)) => v -> Metric v -> v
+v ^% Metric m = v ^/ sqrt ((m$v)<.>^v)
+
+metricSq :: LSpace v => Metric v -> v -> Scalar v
+metricSq (Metric m) v = (m$v)<.>^v
+
+metric :: (LSpace v, Floating (Scalar v)) => Metric v -> v -> Scalar v
+metric m = sqrt . metricSq m
+
+
 data OrthonormalSystem v = OrthonormalSystem {
       orthonormalityMetric :: Metric v
     , orthonormalVectors :: [v]
@@ -380,14 +391,19 @@ data OrthonormalSystem v = OrthonormalSystem {
 
 orthonormaliseFussily :: (LSpace v, RealFloat (Scalar v))
                            => Metric v -> [v] -> [v]
-orthonormaliseFussily (Metric m) = go []
+orthonormaliseFussily me = go []
  where go _ [] = []
        go ws (v₀:vs)
          | mvd > 1/4  = let v = vd^/sqrt mvd
                         in v : go (v:ws) vs
          | otherwise  = go ws vs
-        where vd = foldl' (\v w -> v ^-^ w^*((m$v)<.>^w)) v₀ ws
-              mvd = (m$vd)<.>^vd
+        where vd = orthogonalComplementProj me ws $ v₀
+              mvd = metricSq me vd
+
+orthogonalComplementProj :: LSpace v => Metric v -> [v] -> (v-+>v)
+orthogonalComplementProj (Metric m) ws = LinearFunction $ \v₀
+             -> foldl' (\v w -> v ^-^ w^*((m$v)<.>^w)) v₀ ws
+
 
 
 data Eigenvector v = Eigenvector {
@@ -399,7 +415,7 @@ data Eigenvector v = Eigenvector {
     }
 deriving instance (Show v, Show (Scalar v)) => Show (Eigenvector v)
 
-refineEigenSystem :: (LSpace v, RealFloat (Scalar v))
+constructEigenSystem :: (LSpace v, RealFloat (Scalar v))
       => Metric v           -- ^ The notion of orthonormality.
       -> (v-+>v)            -- ^ Operator to calculate the eigensystem of.
                             --   Must be Hermitian WRT the scalar product
@@ -407,10 +423,10 @@ refineEigenSystem :: (LSpace v, RealFloat (Scalar v))
       -> v                  -- ^ Starting vector for the power method.
       -> [[Eigenvector v]]  -- ^ Infinite sequence of ever more accurate approximations
                             --   to the eigensystem of the operator.
-refineEigenSystem (Metric m) f = iterate (map asEV
+constructEigenSystem me@(Metric m) f = iterate (map asEV
                                            . orthonormaliseFussily (Metric m)
                                            . newSys)
-                                         . pure . asEV . normalise
+                                         . pure . asEV . (^%me)
  where newSys [] = []
        newSys (Eigenvector λ v fv dv ε : evs)
          | ε>0        = case newSys evs of
@@ -419,12 +435,29 @@ refineEigenSystem (Metric m) f = iterate (map asEV
          | otherwise  = v : newSys evs
        asEV v = Eigenvector λ v fv dv ε
         where λ = v'<.>^fv
-              ε = magn dv / abs λ
+              ε = metric me dv / abs λ
               fv = f $ v
               dv = v^*λ ^-^ fv
               v' = m $ v
-       magnSq v = (m$v)<.>^v
-       magn = sqrt . magnSq
-       normalise v = v ^/ magn v
 
 
+
+roughEigenSystem :: (FiniteDimensional v, RealFloat (Scalar v))
+        => Metric v
+        -> (v+>v)
+        -> [Eigenvector v]
+roughEigenSystem me f = go fBas 0 [[]]
+ where go [] _ (evs:_) = evs
+       go (v:vs) fpε (evs:evss)
+         | metric me vPerp > fpε  = case evss of
+             []       -> let evss' = constructEigenSystem me (arr f) vPerp
+                         in go vs (orthonormalityError me $ ev_Eigenvector<$>head evss')
+                                   evss'
+             evs':_   -> go (v:vs) (orthonormalityError me $ ev_Eigenvector<$>evs') evss
+         | otherwise              = go vs fpε (evs:evss)
+        where vPerp = orthogonalComplementProj me (ev_Eigenvector<$>evs) $ v
+       fBas = (^%me) <$> snd (decomposeLinMap f) []
+
+
+orthonormalityError :: LSpace v => Metric v -> [v] -> Scalar v
+orthonormalityError me vs = metricSq me $ orthogonalComplementProj me vs $ sumV vs
