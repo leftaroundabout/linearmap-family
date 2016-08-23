@@ -26,8 +26,11 @@ module Math.LinearMap.Category (
             , (⊕), (>+<)
             -- ** Function implementation
             , LinearFunction (..), (-+>)(), Bilinear
-            -- ** Hermitian
-            , Metric, euclideanMetric
+            -- ** Metrics
+            , Metric, applyMetric, metric, euclideanMetric
+            , spanMetric, metricSpanningSystem
+            -- *** Utility
+            , densifyMetric
             -- * Solving linear equations
             , (\$), pseudoInverse
             -- * Eigenvalue problems
@@ -386,11 +389,23 @@ instance (FiniteDimensional v, InnerSpace v, Scalar v ~ ℝ, Show v)
 spanMetric :: LSpace v => [DualVector v] -> Metric v
 spanMetric dvs = Metric . LinearFunction $ \v -> sumV [dv ^* (dv<.>^v) | dv <- dvs]
 
--- | A positive definite symmetric bilinear form.
-newtype Metric v = Metric { getMetricFn :: v -+> DualVector v }
+spanVariance :: LSpace v => [v] -> Variance v
+spanVariance = spanMetric
 
+-- | A positive definite symmetric bilinear form.
+newtype Metric v = Metric { applyMetric :: v -+> DualVector v }
+
+type Variance v = Metric (DualVector v)
+
+-- | The canonical standard metric on Hilbert spaces.
 euclideanMetric :: (LSpace v, InnerSpace v, DualVector v ~ v) => Metric v
 euclideanMetric = Metric id
+
+-- | The metric induced from the (arbirtrary) choice of basis in a finite space.
+--   Only use this in contexts where you merely need /some/ metric, but don't
+--   care if it might be biased in some unnatural way.
+adhocMetric :: FiniteDimensional v => Metric v
+adhocMetric = Metric uncanonicallyToDual
 
 infixl 6 ^%
 (^%) :: (LSpace v, Floating (Scalar v)) => v -> Metric v -> v
@@ -402,6 +417,11 @@ metricSq (Metric m) v = (m$v)<.>^v
 metric :: (LSpace v, Floating (Scalar v)) => Metric v -> v -> Scalar v
 metric m = sqrt . metricSq m
 
+-- | `spanMetric` / `spanVariance` are inefficient if the number of vectors
+--   is similar to the dimension of the space. Use this function to optimise
+--   the underlying operator to a dense matrix representation.
+densifyMetric :: LSpace v => Metric v -> Metric v
+densifyMetric (Metric m) = Metric . arr $ sampleLinearFunction $ m
 
 data OrthonormalSystem v = OrthonormalSystem {
       orthonormalityMetric :: Metric v
@@ -492,7 +512,7 @@ orthonormalityError me vs = metricSq me $ orthogonalComplementProj me vs $ sumV 
 
 metricSpanningSystem :: (FiniteDimensional v, IEEE (Scalar v))
                => Metric v -> [DualVector v]
-metricSpanningSystem me@(Metric m) = scaleup <$> roughEigenSystem me m'
+metricSpanningSystem me@(Metric m) = scaleup <$> roughEigenSystem adhocMetric m'
  where m' = sampleLinearFunction $ uncanonicallyFromDual . m
        scaleup (Eigenvector λ _ fv _ _)
          | λ>0       = uncanonicallyToDual $ fv^/sqrt λ
