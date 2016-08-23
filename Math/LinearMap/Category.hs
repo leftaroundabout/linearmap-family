@@ -68,7 +68,7 @@ import Data.Basis
 import Prelude ()
 import qualified Prelude as Hask
 
-import Control.Category.Constrained.Prelude
+import Control.Category.Constrained.Prelude hiding ((^))
 import Control.Arrow.Constrained
 
 import Data.VectorSpace.Free
@@ -221,6 +221,13 @@ class (LSpace v, LSpace (Scalar v)) => FiniteDimensional v where
   recomposeContraLinMap :: (LinearSpace w, Scalar w ~ Scalar v, Hask.Functor f)
            => (f (Scalar w) -> w) -> f (DualVector v) -> v+>w
   
+  -- | The existance of a finite basis gives us an isomorphism between a space
+  --   and its dual space. Note that this isomorphism is not natural (i.e. it
+  --   depence on the actual choice of basis, unlike everything else in this
+  --   library).
+  uncanonicallyFromDual :: DualVector v -+> v
+  uncanonicallyToDual :: v -+> DualVector v
+  
 
 
 instance (Num''' s) => FiniteDimensional (ZeroDim s) where
@@ -228,12 +235,16 @@ instance (Num''' s) => FiniteDimensional (ZeroDim s) where
   recomposeEntire ZeroBasis l = (Origin, l)
   decomposeLinMap _ = (ZeroBasis, id)
   recomposeContraLinMap _ _ = LinearMap Origin
+  uncanonicallyFromDual = id
+  uncanonicallyToDual = id
   
 instance (Num''' s, LinearSpace s) => FiniteDimensional (V0 s) where
   data EntireBasis (V0 s) = V0Basis
   recomposeEntire V0Basis l = (V0, l)
   decomposeLinMap _ = (V0Basis, id)
   recomposeContraLinMap _ _ = LinearMap V0
+  uncanonicallyFromDual = id
+  uncanonicallyToDual = id
   
 instance FiniteDimensional ℝ where
   data EntireBasis ℝ = RealsBasis
@@ -241,11 +252,15 @@ instance FiniteDimensional ℝ where
   recomposeEntire RealsBasis (μ:cs) = (μ, cs)
   decomposeLinMap (LinearMap v) = (RealsBasis, (v:))
   recomposeContraLinMap fw = LinearMap . fw
+  uncanonicallyFromDual = id
+  uncanonicallyToDual = id
 
-#define FreeFiniteDimensional(V, VB, take, give)          \
-instance (Num''' s, LSpace s)                              \
-            => FiniteDimensional (V s) where {              \
-  data EntireBasis (V s) = VB;                               \
+#define FreeFiniteDimensional(V, VB, take, give)        \
+instance (Num''' s, LSpace s)                            \
+            => FiniteDimensional (V s) where {            \
+  data EntireBasis (V s) = VB;                             \
+  uncanonicallyFromDual = id;                               \
+  uncanonicallyToDual = id;                                  \
   recomposeEntire _ (take:cs) = (give, cs);                   \
   recomposeEntire b cs = recomposeEntire b $ cs ++ [0];        \
   decomposeLinMap (LinearMap m) = (VB, (toList m ++));          \
@@ -271,6 +286,8 @@ instance ( FiniteDimensional u, LinearSpace (DualVector u), DualVector (DualVect
   recomposeContraLinMap fw dds
          = recomposeContraLinMap fw (fst<$>dds)
           ⊕ recomposeContraLinMap fw (snd<$>dds)
+  uncanonicallyFromDual = uncanonicallyFromDual *** uncanonicallyFromDual
+  uncanonicallyToDual = uncanonicallyToDual *** uncanonicallyToDual
   
 deriving instance (Show (EntireBasis u), Show (EntireBasis v))
                     => Show (EntireBasis (u,v))
@@ -365,7 +382,8 @@ instance (FiniteDimensional v, InnerSpace v, Scalar v ~ ℝ, Show v)
          . (" ^+^ ew.<"++) . showsPrec 7 (sRiesz $ fmap (LinearFunction (^._w)) $ m)
 
 
-
+spanMetric :: LSpace v => [DualVector v] -> Metric v
+spanMetric dvs = Metric . LinearFunction $ \v -> sumV [dv ^* (dv<.>^v) | dv <- dvs]
 
 -- | A positive definite symmetric bilinear form.
 newtype Metric v = Metric { getMetricFn :: v -+> DualVector v }
@@ -411,19 +429,20 @@ data Eigenvector v = Eigenvector {
     , ev_Eigenvector :: v       -- ^ Normalised vector @v@ that gets mapped to a multiple, namely:
     , ev_FunctionApplied :: v   -- ^ @f $ v ≡ λ *^ v @.
     , ev_Deviation :: v         -- ^ Deviation of these two supposedly equivalent expressions.
-    , ev_Badness :: Scalar v    -- ^ Norm of the deviation, normalised by the eigenvalue.
+    , ev_Badness :: Scalar v    -- ^ Squared norm of the deviation, normalised by the eigenvalue.
     }
 deriving instance (Show v, Show (Scalar v)) => Show (Eigenvector v)
 
 constructEigenSystem :: (LSpace v, RealFloat (Scalar v))
       => Metric v           -- ^ The notion of orthonormality.
+      -> Scalar v           -- ^ Error bound for deviations from eigen-ness.
       -> (v-+>v)            -- ^ Operator to calculate the eigensystem of.
                             --   Must be Hermitian WRT the scalar product
                             --   defined by the given metric.
       -> [v]                -- ^ Starting vector(s) for the power method.
       -> [[Eigenvector v]]  -- ^ Infinite sequence of ever more accurate approximations
                             --   to the eigensystem of the operator.
-constructEigenSystem me@(Metric m) f = iterate (
+constructEigenSystem me@(Metric m) ε₀ f = iterate (
                                              sortBy (comparing $
                                                negate . abs . ev_Eigenvalue)
                                            . map asEV
@@ -432,13 +451,14 @@ constructEigenSystem me@(Metric m) f = iterate (
                                          . map (asEV . (^%me))
  where newSys [] = []
        newSys (Eigenvector λ v fv dv ε : evs)
-         | ε>0        = case newSys evs of
-                         []     -> [fv^/λ, dv^*(λ/ε)]
-                         vn:vns -> fv^/λ : vn : dv^*(abs λ/ε) : vns
-         | otherwise  = v : newSys evs
+         | ε>ε₀       = case newSys evs of
+                         []     -> [fv^/λ, dv^*(sqrt $ λ^2/ε)]
+                         vn:vns -> fv^/λ : vn : dv^*(sqrt $ λ^2/ε) : vns
+         | ε>=0       = v : newSys evs
+         | otherwise  = newSys evs
        asEV v = Eigenvector λ v fv dv ε
         where λ = v'<.>^fv
-              ε = metric me dv / abs λ
+              ε = metricSq me dv / (λ^2 + ε₀)
               fv = f $ v
               dv = v^*λ ^-^ fv
               v' = m $ v
@@ -457,7 +477,7 @@ roughEigenSystem me f = go fBas 0 0 [[]]
              evs':_ | length evs' > oldDim
                -> go (v:vs) (length evs)
                        (orthonormalityError me $ ev_Eigenvector<$>evs') evss
-             _ -> let evss' = constructEigenSystem me (arr f)
+             _ -> let evss' = constructEigenSystem me fpε (arr f)
                                 $ map ev_Eigenvector (head $ evss++[evs]) ++ [vPerp]
                   in go vs (length evs)
                          (orthonormalityError me $ ev_Eigenvector<$>head evss')
@@ -469,3 +489,18 @@ roughEigenSystem me f = go fBas 0 0 [[]]
 
 orthonormalityError :: LSpace v => Metric v -> [v] -> Scalar v
 orthonormalityError me vs = metricSq me $ orthogonalComplementProj me vs $ sumV vs
+
+
+metricSpanningSystem :: (FiniteDimensional v, RealFloat (Scalar v))
+               => Metric v -> [DualVector v]
+metricSpanningSystem me@(Metric m) = scaleup <$> roughEigenSystem me m'
+ where m' = sampleLinearFunction $ uncanonicallyFromDual . m
+       scaleup (Eigenvector λ _ fv _ _)
+         | λ>0       = uncanonicallyToDual $ fv^/sqrt λ
+       
+
+
+
+(^) :: Num a => a -> Int -> a
+(^) = (Hask.^)
+
