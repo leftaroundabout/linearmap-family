@@ -77,6 +77,7 @@ import qualified Linear.Matrix as Mat
 import qualified Linear.Vector as Mat
 import Control.Lens ((^.))
 
+import Numeric.IEEE
 
 
 -- | 'SemiInner' is the class of vector spaces with finite subspaces in which
@@ -465,33 +466,31 @@ constructEigenSystem me@(Metric m) ε₀ f = iterate (
 
 
 
-roughEigenSystem :: (FiniteDimensional v, RealFloat (Scalar v))
+roughEigenSystem :: (FiniteDimensional v, IEEE (Scalar v))
         => Metric v
         -> (v+>v)
         -> [Eigenvector v]
-roughEigenSystem me f = go fBas 0 0 [[]]
- where go [] _ _ (_:evs:_) = evs
-       go [] _ _ (evs:_) = evs
-       go (v:vs) oldDim fpε (evs:evss)
+roughEigenSystem me f = go fBas 0 [[]]
+ where go [] _ (_:evs:_) = evs
+       go [] _ (evs:_) = evs
+       go (v:vs) oldDim (evs:evss)
          | metricSq me vPerp > fpε  = case evss of
              evs':_ | length evs' > oldDim
-               -> go (v:vs) (length evs)
-                       (orthonormalityError me $ ev_Eigenvector<$>evs') evss
+               -> go (v:vs) (length evs) evss
              _ -> let evss' = constructEigenSystem me fpε (arr f)
                                 $ map ev_Eigenvector (head $ evss++[evs]) ++ [vPerp]
-                  in go vs (length evs)
-                         (orthonormalityError me $ ev_Eigenvector<$>head evss')
-                                   evss'
-         | otherwise              = go vs oldDim fpε (evs:evss)
+                  in go vs (length evs) evss'
+         | otherwise              = go vs oldDim (evs:evss)
         where vPerp = orthogonalComplementProj me (ev_Eigenvector<$>evs) $ v
        fBas = (^%me) <$> snd (decomposeLinMap id) []
+       fpε = epsilon * 8
 
 
 orthonormalityError :: LSpace v => Metric v -> [v] -> Scalar v
 orthonormalityError me vs = metricSq me $ orthogonalComplementProj me vs $ sumV vs
 
 
-metricSpanningSystem :: (FiniteDimensional v, RealFloat (Scalar v))
+metricSpanningSystem :: (FiniteDimensional v, IEEE (Scalar v))
                => Metric v -> [DualVector v]
 metricSpanningSystem me@(Metric m) = scaleup <$> roughEigenSystem me m'
  where m' = sampleLinearFunction $ uncanonicallyFromDual . m
