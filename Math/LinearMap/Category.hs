@@ -420,13 +420,16 @@ constructEigenSystem :: (LSpace v, RealFloat (Scalar v))
       -> (v-+>v)            -- ^ Operator to calculate the eigensystem of.
                             --   Must be Hermitian WRT the scalar product
                             --   defined by the given metric.
-      -> v                  -- ^ Starting vector for the power method.
+      -> [v]                -- ^ Starting vector(s) for the power method.
       -> [[Eigenvector v]]  -- ^ Infinite sequence of ever more accurate approximations
                             --   to the eigensystem of the operator.
-constructEigenSystem me@(Metric m) f = iterate (map asEV
+constructEigenSystem me@(Metric m) f = iterate (
+                                             sortBy (comparing $
+                                               negate . abs . ev_Eigenvalue)
+                                           . map asEV
                                            . orthonormaliseFussily (Metric m)
                                            . newSys)
-                                         . pure . asEV . (^%me)
+                                         . map (asEV . (^%me))
  where newSys [] = []
        newSys (Eigenvector λ v fv dv ε : evs)
          | ε>0        = case newSys evs of
@@ -446,17 +449,22 @@ roughEigenSystem :: (FiniteDimensional v, RealFloat (Scalar v))
         => Metric v
         -> (v+>v)
         -> [Eigenvector v]
-roughEigenSystem me f = go fBas 0 [[]]
- where go [] _ (evs:_) = evs
-       go (v:vs) fpε (evs:evss)
+roughEigenSystem me f = go fBas 0 0 [[]]
+ where go [] _ _ (_:evs:_) = evs
+       go [] _ _ (evs:_) = evs
+       go (v:vs) oldDim fpε (evs:evss)
          | metricSq me vPerp > fpε  = case evss of
-             []       -> let evss' = constructEigenSystem me (arr f) vPerp
-                         in go vs (orthonormalityError me $ ev_Eigenvector<$>head evss')
+             evs':_ | length evs' > oldDim
+               -> go (v:vs) (length evs)
+                       (orthonormalityError me $ ev_Eigenvector<$>evs') evss
+             _ -> let evss' = constructEigenSystem me (arr f)
+                                $ map ev_Eigenvector (head $ evss++[evs]) ++ [vPerp]
+                  in go vs (length evs)
+                         (orthonormalityError me $ ev_Eigenvector<$>head evss')
                                    evss'
-             evs':_   -> go (v:vs) (orthonormalityError me $ ev_Eigenvector<$>evs') evss
-         | otherwise              = go vs fpε (evs:evss)
+         | otherwise              = go vs oldDim fpε (evs:evss)
         where vPerp = orthogonalComplementProj me (ev_Eigenvector<$>evs) $ v
-       fBas = (^%me) <$> snd (decomposeLinMap f) []
+       fBas = (^%me) <$> snd (decomposeLinMap id) []
 
 
 orthonormalityError :: LSpace v => Metric v -> [v] -> Scalar v
