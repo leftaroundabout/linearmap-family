@@ -46,6 +46,12 @@ import Math.VectorSpace.ZeroDimensional
 
 
 
+-- | A linear map, represented simply as a Haskell function tagged with
+--   the type of scalar with respect to which it is linear.
+--   You can always use a matrix-implemented linear mapping as the function
+--   (convert with 'Control.Arrow.Constrained.arr'), but many (sparse)
+--   linear mappings can actually be calculated much more efficiently
+--   if you don't represent them with any matrix / tensor product.
 newtype LinearFunction s v w = LinearFunction { getLinearFunction :: v -> w }
 
 
@@ -100,8 +106,14 @@ lCoSnd = LinearFunction (zeroV,)
 
 
 
+-- | Infix synonym of 'LinearFunction', without explicit mention of the scalar type.
 type v-+>w = LinearFunction (Scalar w) v w
 
+-- | A bilinear function is a linear function mapping to a linear function,
+--   or equivalently a 2-argument function that's linear in each argument
+--   independently.
+--   Note that this can /not/ be uncurried to a linear function with a tuple
+--   argument (this would not be linear but quadratic).
 type Bilinear v w y = LinearFunction (Scalar v) v (LinearFunction (Scalar v) w y)
 
 bilinearFunction :: (v -> w -> y) -> Bilinear v w y

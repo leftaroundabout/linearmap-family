@@ -69,6 +69,8 @@ class (VectorSpace v) => TensorSpace v where
   coerceFmapTensorProduct :: Hask.Functor p
        => p v -> Coercion a b -> Coercion (TensorProduct v a) (TensorProduct v b)
 
+infixl 7 ⊗
+
 (⊗) :: (LSpace v, LSpace w, Scalar w ~ Scalar v)
                 => v -> w -> v ⊗ w
 v⊗w = (tensorProduct $ v) $ w
@@ -170,20 +172,29 @@ instance Num''' s => LinearSpace (ZeroDim s) where
   composeLinear = biConst0
 
 
--- | The cartesian monoidal category of vector spaces over the field @s@
---   with linear maps as morphisms. This category is in maths called
---   <https://en.wikipedia.org/wiki/Category_of_modules#Example:_the_category_of_vector_spaces VectK>.
+-- | The tensor product between one space's dual space and another space is the
+-- space spanned by vector–dual-vector pairs, in
+-- <https://en.wikipedia.org/wiki/Bra%E2%80%93ket_notationa bra-ket notation>
+-- written as
 -- 
---   The common matrix operations are given by:
+-- @
+-- m = ∑ |w⟩⟨v|
+-- @
 -- 
---   * Identity matrix: 'Control.Category.Constrained.id'.
---   * Matrix addition: 'Data.AdditiveGroup.^+^' (linear maps form an ordinary vector space).
---   * Matrix-matrix multiplication: 'Control.Category.Constrained..'.
---   * Matrix-vector multiplication: 'Control.Arrow.Constrained.$'.
---   * Vertical matrix concatenation: 'Control.Arrow.Constrained.&&&'.
---   * Horizontal matrix concatenation: '⊕', aka '>+<'.
+-- Any linear mapping can be written as such a (possibly infinite) sum. The
+-- 'TensorProduct' data structure only stores the linear independent parts
+-- though; for simple finite-dimensional spaces this means e.g. @'LinearMap' ℝ ℝ³ ℝ³@
+-- effectively boils down to an ordinary matrix type, namely an array of
+-- column-vectors @|w⟩@.
+-- 
+-- (The @⟨v|@ dual-vectors are then simply assumed to come from the canonical basis.)
+-- 
+-- For bigger spaces, the tensor product may be implemented in a more efficient
+-- sparse structure; this can be defined in the 'TensorSpace' instance.
 newtype LinearMap s v w = LinearMap {getLinearMap :: TensorProduct (DualVector v) w}
 
+-- | Tensor products are mostly interesting because they can be used to implement
+--   linear mappings, but they also form a useful vector space on their own right.
 newtype Tensor s v w = Tensor {getTensorProduct :: TensorProduct v w}
 
 asTensor :: Coercion (LinearMap s v w) (Tensor s (DualVector v) w)
@@ -230,8 +241,6 @@ instance (LSpace v, LSpace w, Scalar v~s, Scalar w~s)
   type Scalar (Tensor s v w) = s
   μ*^t = (scaleTensor $ μ) $ t
   
-infixl 7 ⊗
-
 infixr 6 ⊕, >+<, <⊕
 
 (<⊕) :: (u⊗w) -> (v⊗w) -> (u,v)⊗w

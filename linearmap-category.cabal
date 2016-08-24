@@ -3,8 +3,29 @@
 
 name:                linearmap-category
 version:             0.1.0.0
-synopsis:            Linear maps as an associated type family of a vector-space class
--- description:         
+synopsis:            Native, complete, matrix-free linear algebra.
+description:         The term /numerical linear algebra/ is often used almost
+                     synonymous with /matrix modifications/. However, what's interesting
+                     for most applications are really just /points in some vector space/
+                     and linear mappings between them, not matrices (which represent
+                     points or mappings, but inherently depend on a particular choice
+                     of basis / coordinate system).
+                     .
+                     This library implements the crucial LA operations like solving
+                     linear equations and eigenvalue problems, without requiring
+                     that the vectors are represented in some particular basis. Apart
+                     from conceptual elegance (only operations that are actually
+                     geometrically sensible will typecheck – this is far stronger than
+                     just confirming that the dimensions match, as some other libraries
+                     do), this also opens up good optimisation possibilities: the
+                     vectors can be unboxed, use dedicated sparse compression, possibly
+                     carry out the computations on accelerated hardware (GPU etc.).
+                     The spaces can even be infinite-dimensional (e.g. function spaces).
+                     .
+                     The linear algebra algorithms in this package only require the
+                     vectors to support fundamental operations like addition, scalar
+                     products, double-dual-space coercion and tensor products; none of
+                     this requires a basis representation.
 homepage:            https://github.com/leftaroundabout/linearmap-family
 license:             GPL-3
 license-file:        LICENSE

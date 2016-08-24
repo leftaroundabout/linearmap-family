@@ -21,24 +21,37 @@
 
 module Math.LinearMap.Category (
             -- * Linear maps
-            -- ** Tensor implementation
-              LinearMap (..), (+>)()
-            , (⊕), (>+<)
+            -- $linmapIntro
+
             -- ** Function implementation
-            , LinearFunction (..), (-+>)(), Bilinear
-            -- ** Metrics
-            , Metric, applyMetric, metric, euclideanMetric
-            , spanMetric, metricSpanningSystem
-            -- *** Utility
+              LinearFunction (..), (-+>)(), Bilinear
+            -- ** Tensor implementation
+            , LinearMap (..), (+>)()
+            , (⊕), (>+<)
+            -- * Tensor spaces
+            , Tensor (..), (⊗)(), (⊗)
+            -- * Metrics
+            -- $metricIntro
+            , Metric
+            , spanMetric
+            , euclideanMetric
+            , metric
+            , applyMetric
+            , metricSpanningSystem
+            -- ** Variances
+            , Variance, spanVariance
+            -- ** Utility
             , densifyMetric
             -- * Solving linear equations
             , (\$), pseudoInverse
             -- * Eigenvalue problems
-            , Eigenvector(..), roughEigenSystem, constructEigenSystem
+            , constructEigenSystem
+            , roughEigenSystem
+            , Eigenvector(..)
             -- * The classes of suitable vector spaces
             -- ** Tensor products
-            , TensorSpace
-            -- ** Functionals linear maps
+            , TensorSpace (..)
+            -- ** Functionals / linear maps
             , LinearSpace (..)
             -- ** Orthonormal systems
             , SemiInner (..), cartesianDualBasisCandidates
@@ -49,8 +62,8 @@ module Math.LinearMap.Category (
             , addV, scale, inner, flipBilin, bilinearFunction
             -- ** Hilbert space operations
             , DualSpace, riesz, coRiesz, showsPrecAsRiesz, (.<)
-            -- ** Constraints on types of scalars
-            , Num', Num'', Num''', Fractional', Fractional''
+            -- ** Constraints synonyms
+            , LSpace, Num', Num'', Num''', Fractional', Fractional''
             ) where
 
 import Math.LinearMap.Category.Class
@@ -81,6 +94,32 @@ import qualified Linear.Vector as Mat
 import Control.Lens ((^.))
 
 import Numeric.IEEE
+
+-- $linmapIntro
+-- This library deals with linear functions, i.e. functions @f :: v -> w@
+-- that fulfill
+-- 
+-- @
+--   f $ μ 'Data.VectorSpace.^*' u 'Data.AdditiveGroup.^+^' v ≡ μ ^* f u ^+^ f v    ∀ μ :: 'Scalar' v
+-- @
+-- 
+-- Such functions form a cartesian monoidal category (in maths called 
+-- <https://en.wikipedia.org/wiki/Category_of_modules#Example:_the_category_of_vector_spaces VectK>).
+-- This is implemented by 'Control.Arrow.Constrained.PreArrow', which is the
+-- preferred interface for dealing with these mappings. The basic
+-- “matrix operations” are then:
+-- 
+-- * Identity matrix: 'Control.Category.Constrained.id'
+-- * Matrix addition: 'Data.AdditiveGroup.^+^' (linear maps form an ordinary vector space)
+-- * Matrix-matrix multiplication: 'Control.Category.Constrained.<<<'
+--     (or '>>>' or 'Control.Category.Constrained..')
+-- * Matrix-vector multiplication: 'Control.Arrow.Constrained.$'
+-- * Vertical matrix concatenation: 'Control.Arrow.Constrained.&&&'
+-- * Horizontal matrix concatenation: '⊕' (aka '>+<')
+-- 
+-- But linear mappings need not necessarily be implemented as matrices:
+
+
 
 
 -- | 'SemiInner' is the class of vector spaces with finite subspaces in which
@@ -220,14 +259,17 @@ class (LSpace v, LSpace (Scalar v)) => FiniteDimensional v where
   -- | Split up a linear map in “column vectors” WRT some suitable basis.
   decomposeLinMap :: (v+>w) -> (EntireBasis v, [w]->[w])
   
+  -- | Assemble a vector from coefficients in some basis. Return any excess coefficients.
   recomposeEntire :: EntireBasis v -> [Scalar v] -> (v, [Scalar v])
   
+  -- | Given a function that interprets a coefficient-container as a vector representation,
+  --   build a linear function mapping to that space.
   recomposeContraLinMap :: (LinearSpace w, Scalar w ~ Scalar v, Hask.Functor f)
            => (f (Scalar w) -> w) -> f (DualVector v) -> v+>w
   
   -- | The existance of a finite basis gives us an isomorphism between a space
   --   and its dual space. Note that this isomorphism is not natural (i.e. it
-  --   depence on the actual choice of basis, unlike everything else in this
+  --   depends on the actual choice of basis, unlike everything else in this
   --   library).
   uncanonicallyFromDual :: DualVector v -+> v
   uncanonicallyToDual :: v -+> DualVector v
@@ -386,6 +428,32 @@ instance (FiniteDimensional v, InnerSpace v, Scalar v ~ ℝ, Show v)
          . (" ^+^ ew.<"++) . showsPrec 7 (sRiesz $ fmap (LinearFunction (^._w)) $ m)
 
 
+-- $metricIntro
+-- A metric is a way to quantify the length/magnitude of different vectors,
+-- even if they point in different directions. (Actually we're talkin about a /norm/
+-- here: a metric rather quantifies how far away two points are; but any
+-- translation-invariant metric on a vector space boils down to a norm on
+-- difference vectors.)
+-- 
+-- In an 'InnerSpace', a metric is always given by the scalar product,
+-- but there are spaces without a canonical scalar product (or situations
+-- in which this scalar product does not give the metric you want). Hence,
+-- we let the functions like 'constructEigenSystem', which depend on a norm
+-- for orthonormalisation, accept a 'Metric' as an extra argument instead of
+-- requiring 'InnerSpace'.
+
+-- | A norm defined by
+-- 
+-- @
+-- ‖v‖ = √(∑ᵢ ⟨dᵢ|v⟩²)
+-- @
+-- 
+-- for some dual vectors @dᵢ@. Note that this only really generates a norm/metric if
+-- these form a complete basis of the dual space, otherwise it will merely be
+-- a /seminorm/.
+-- 
+-- If the @dᵢ@ are an orthonormal system, you get the 'euclideanMetric' (in
+-- an inefficient form).
 spanMetric :: LSpace v => [DualVector v] -> Metric v
 spanMetric dvs = Metric . LinearFunction $ \v -> sumV [dv ^* (dv<.>^v) | dv <- dvs]
 
@@ -393,11 +461,15 @@ spanVariance :: LSpace v => [v] -> Variance v
 spanVariance = spanMetric
 
 -- | A positive definite symmetric bilinear form.
-newtype Metric v = Metric { applyMetric :: v -+> DualVector v }
+newtype Metric v = Metric {
+    applyMetric :: v -+> DualVector v
+     -- ^ Partially apply a norm, yielding a dual vector
+     --   (i.e. a linear form that accepts the second argument).
+  }
 
 type Variance v = Metric (DualVector v)
 
--- | The canonical standard metric on Hilbert spaces.
+-- | The canonical standard metric on inner-product / Hilbert spaces.
 euclideanMetric :: (LSpace v, InnerSpace v, DualVector v ~ v) => Metric v
 euclideanMetric = Metric id
 
@@ -411,9 +483,12 @@ infixl 6 ^%
 (^%) :: (LSpace v, Floating (Scalar v)) => v -> Metric v -> v
 v ^% Metric m = v ^/ sqrt ((m$v)<.>^v)
 
+-- | The squared-norm. More efficient than 'metric' because that needs to take
+--   the square root.
 metricSq :: LSpace v => Metric v -> v -> Scalar v
 metricSq (Metric m) v = (m$v)<.>^v
 
+-- | Use a 'Metric' to measure the length / norm of a vector.
 metric :: (LSpace v, Floating (Scalar v)) => Metric v -> v -> Scalar v
 metric m = sqrt . metricSq m
 
@@ -454,6 +529,12 @@ data Eigenvector v = Eigenvector {
     }
 deriving instance (Show v, Show (Scalar v)) => Show (Eigenvector v)
 
+-- | Lazily compute the eigenbasis of a linear map. The algorithm is essentially
+--   a hybrid of Lanczos/Arnoldi style Krylov-spanning and QR-diagonalisation,
+--   but we don't separate these steps but /interleave/ them at each operation.
+--   The size of the eigen-subbasis increases with each step until the space's
+--   dimesion is reached. (But the algorithm can also be used for
+--   infinite-dimensional spaces.)
 constructEigenSystem :: (LSpace v, RealFloat (Scalar v))
       => Metric v           -- ^ The notion of orthonormality.
       -> Scalar v           -- ^ Error bound for deviations from eigen-ness.
@@ -486,6 +567,12 @@ constructEigenSystem me@(Metric m) ε₀ f = iterate (
 
 
 
+-- | Find a system of vectors that approximate the eigensytem, in the sense that:
+--   each true eigenvalue is represented by an approximate one, and that is closer
+--   to the true value than all the other approximate EVs.
+-- 
+--   This function does not make any guarantees as to how well a single eigenvalue
+--   is approximated, though.
 roughEigenSystem :: (FiniteDimensional v, IEEE (Scalar v))
         => Metric v
         -> (v+>v)
