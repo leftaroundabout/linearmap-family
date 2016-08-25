@@ -30,18 +30,19 @@ module Math.LinearMap.Category (
             , (⊕), (>+<)
             -- * Tensor spaces
             , Tensor (..), (⊗)(), (⊗)
-            -- * Metrics
+            -- * Norms
             -- $metricIntro
-            , Metric
-            , spanMetric
-            , euclideanMetric
-            , metric
-            , applyMetric
-            , metricSpanningSystem
+            , Norm(..)
+            , spanNorm
+            , euclideanNorm
+            , (|$|)
+            , normSq
+            , (<$|)
+            , normSpanningSystem
             -- ** Variances
             , Variance, spanVariance
             -- ** Utility
-            , densifyMetric
+            , densifyNorm
             -- * Solving linear equations
             , (\$), pseudoInverse
             -- * Eigenvalue problems
@@ -429,17 +430,14 @@ instance (FiniteDimensional v, InnerSpace v, Scalar v ~ ℝ, Show v)
 
 
 -- $metricIntro
--- A metric is a way to quantify the length/magnitude of different vectors,
--- even if they point in different directions. (Actually we're talkin about a /norm/
--- here: a metric rather quantifies how far away two points are; but any
--- translation-invariant metric on a vector space boils down to a norm on
--- difference vectors.)
+-- A norm is a way to quantify the magnitude of different vectors,
+-- even if they point in different directions.
 -- 
--- In an 'InnerSpace', a metric is always given by the scalar product,
+-- In an 'InnerSpace', a norm is always given by the scalar product,
 -- but there are spaces without a canonical scalar product (or situations
 -- in which this scalar product does not give the metric you want). Hence,
 -- we let the functions like 'constructEigenSystem', which depend on a norm
--- for orthonormalisation, accept a 'Metric' as an extra argument instead of
+-- for orthonormalisation, accept a 'Norm' as an extra argument instead of
 -- requiring 'InnerSpace'.
 
 -- | A norm defined by
@@ -452,59 +450,72 @@ instance (FiniteDimensional v, InnerSpace v, Scalar v ~ ℝ, Show v)
 -- these form a complete basis of the dual space, otherwise it will merely be
 -- a /seminorm/.
 -- 
--- If the @dᵢ@ are an orthonormal system, you get the 'euclideanMetric' (in
+-- If the @dᵢ@ are an orthonormal system, you get the 'euclideanNorm' (in
 -- an inefficient form).
-spanMetric :: LSpace v => [DualVector v] -> Metric v
-spanMetric dvs = Metric . LinearFunction $ \v -> sumV [dv ^* (dv<.>^v) | dv <- dvs]
+spanNorm :: LSpace v => [DualVector v] -> Norm v
+spanNorm dvs = Norm . LinearFunction $ \v -> sumV [dv ^* (dv<.>^v) | dv <- dvs]
 
 spanVariance :: LSpace v => [v] -> Variance v
-spanVariance = spanMetric
+spanVariance = spanNorm
 
 -- | A positive definite symmetric bilinear form.
-newtype Metric v = Metric {
-    applyMetric :: v -+> DualVector v
-     -- ^ Partially apply a norm, yielding a dual vector
-     --   (i.e. a linear form that accepts the second argument).
+newtype Norm v = Norm {
+    applyNorm :: v -+> DualVector v
   }
 
-type Variance v = Metric (DualVector v)
+type Variance v = Norm (DualVector v)
 
 -- | The canonical standard metric on inner-product / Hilbert spaces.
-euclideanMetric :: (LSpace v, InnerSpace v, DualVector v ~ v) => Metric v
-euclideanMetric = Metric id
+euclideanNorm :: (LSpace v, InnerSpace v, DualVector v ~ v) => Norm v
+euclideanNorm = Norm id
 
--- | The metric induced from the (arbirtrary) choice of basis in a finite space.
---   Only use this in contexts where you merely need /some/ metric, but don't
+-- | The norm induced from the (arbirtrary) choice of basis in a finite space.
+--   Only use this in contexts where you merely need /some/ norm, but don't
 --   care if it might be biased in some unnatural way.
-adhocMetric :: FiniteDimensional v => Metric v
-adhocMetric = Metric uncanonicallyToDual
+adhocNorm :: FiniteDimensional v => Norm v
+adhocNorm = Norm uncanonicallyToDual
 
 infixl 6 ^%
-(^%) :: (LSpace v, Floating (Scalar v)) => v -> Metric v -> v
-v ^% Metric m = v ^/ sqrt ((m$v)<.>^v)
+(^%) :: (LSpace v, Floating (Scalar v)) => v -> Norm v -> v
+v ^% Norm m = v ^/ sqrt ((m$v)<.>^v)
 
--- | The squared-norm. More efficient than 'metric' because that needs to take
+
+infixr 0 <$|, |$|
+-- | “Partially apply” a norm, yielding a dual vector
+--   (i.e. a linear form that accepts the second argument of the scalar product).
+-- 
+-- @
+-- (euclideanNorm '<$|' v) '<.>^' w  ≡  v '<.>' w
+-- @
+(<$|) :: LSpace v => Norm v -> v -> DualVector v
+Norm m <$| v = m $ v
+
+-- | The squared norm. More efficient than '|$|' because that needs to take
 --   the square root.
-metricSq :: LSpace v => Metric v -> v -> Scalar v
-metricSq (Metric m) v = (m$v)<.>^v
+normSq :: LSpace v => Norm v -> v -> Scalar v
+normSq (Norm m) v = (m$v)<.>^v
 
--- | Use a 'Metric' to measure the length / norm of a vector.
-metric :: (LSpace v, Floating (Scalar v)) => Metric v -> v -> Scalar v
-metric m = sqrt . metricSq m
+-- | Use a 'Norm' to measure the length / norm of a vector.
+-- 
+-- @
+-- euclideanNorm |$| v  ≡  √(v '<.>' v)
+-- @
+(|$|) :: (LSpace v, Floating (Scalar v)) => Norm v -> v -> Scalar v
+(|$|) m = sqrt . normSq m
 
--- | `spanMetric` / `spanVariance` are inefficient if the number of vectors
+-- | `spanNorm` / `spanVariance` are inefficient if the number of vectors
 --   is similar to the dimension of the space. Use this function to optimise
 --   the underlying operator to a dense matrix representation.
-densifyMetric :: LSpace v => Metric v -> Metric v
-densifyMetric (Metric m) = Metric . arr $ sampleLinearFunction $ m
+densifyNorm :: LSpace v => Norm v -> Norm v
+densifyNorm (Norm m) = Norm . arr $ sampleLinearFunction $ m
 
 data OrthonormalSystem v = OrthonormalSystem {
-      orthonormalityMetric :: Metric v
+      orthonormalityNorm :: Norm v
     , orthonormalVectors :: [v]
     }
 
 orthonormaliseFussily :: (LSpace v, RealFloat (Scalar v))
-                           => Metric v -> [v] -> [v]
+                           => Norm v -> [v] -> [v]
 orthonormaliseFussily me = go []
  where go _ [] = []
        go ws (v₀:vs)
@@ -512,10 +523,10 @@ orthonormaliseFussily me = go []
                         in v : go (v:ws) vs
          | otherwise  = go ws vs
         where vd = orthogonalComplementProj me ws $ v₀
-              mvd = metricSq me vd
+              mvd = normSq me vd
 
-orthogonalComplementProj :: LSpace v => Metric v -> [v] -> (v-+>v)
-orthogonalComplementProj (Metric m) ws = LinearFunction $ \v₀
+orthogonalComplementProj :: LSpace v => Norm v -> [v] -> (v-+>v)
+orthogonalComplementProj (Norm m) ws = LinearFunction $ \v₀
              -> foldl' (\v w -> v ^-^ w^*((m$v)<.>^w)) v₀ ws
 
 
@@ -536,7 +547,7 @@ deriving instance (Show v, Show (Scalar v)) => Show (Eigenvector v)
 --   dimesion is reached. (But the algorithm can also be used for
 --   infinite-dimensional spaces.)
 constructEigenSystem :: (LSpace v, RealFloat (Scalar v))
-      => Metric v           -- ^ The notion of orthonormality.
+      => Norm v           -- ^ The notion of orthonormality.
       -> Scalar v           -- ^ Error bound for deviations from eigen-ness.
       -> (v-+>v)            -- ^ Operator to calculate the eigensystem of.
                             --   Must be Hermitian WRT the scalar product
@@ -544,11 +555,11 @@ constructEigenSystem :: (LSpace v, RealFloat (Scalar v))
       -> [v]                -- ^ Starting vector(s) for the power method.
       -> [[Eigenvector v]]  -- ^ Infinite sequence of ever more accurate approximations
                             --   to the eigensystem of the operator.
-constructEigenSystem me@(Metric m) ε₀ f = iterate (
+constructEigenSystem me@(Norm m) ε₀ f = iterate (
                                              sortBy (comparing $
                                                negate . abs . ev_Eigenvalue)
                                            . map asEV
-                                           . orthonormaliseFussily (Metric m)
+                                           . orthonormaliseFussily (Norm m)
                                            . newSys)
                                          . map (asEV . (^%me))
  where newSys [] = []
@@ -560,7 +571,7 @@ constructEigenSystem me@(Metric m) ε₀ f = iterate (
          | otherwise  = newSys evs
        asEV v = Eigenvector λ v fv dv ε
         where λ = v'<.>^fv
-              ε = metricSq me dv / (λ^2 + ε₀)
+              ε = normSq me dv / (λ^2 + ε₀)
               fv = f $ v
               dv = v^*λ ^-^ fv
               v' = m $ v
@@ -574,14 +585,14 @@ constructEigenSystem me@(Metric m) ε₀ f = iterate (
 --   This function does not make any guarantees as to how well a single eigenvalue
 --   is approximated, though.
 roughEigenSystem :: (FiniteDimensional v, IEEE (Scalar v))
-        => Metric v
+        => Norm v
         -> (v+>v)
         -> [Eigenvector v]
 roughEigenSystem me f = go fBas 0 [[]]
  where go [] _ (_:evs:_) = evs
        go [] _ (evs:_) = evs
        go (v:vs) oldDim (evs:evss)
-         | metricSq me vPerp > fpε  = case evss of
+         | normSq me vPerp > fpε  = case evss of
              evs':_ | length evs' > oldDim
                -> go (v:vs) (length evs) evss
              _ -> let evss' = constructEigenSystem me fpε (arr f)
@@ -593,13 +604,13 @@ roughEigenSystem me f = go fBas 0 [[]]
        fpε = epsilon * 8
 
 
-orthonormalityError :: LSpace v => Metric v -> [v] -> Scalar v
-orthonormalityError me vs = metricSq me $ orthogonalComplementProj me vs $ sumV vs
+orthonormalityError :: LSpace v => Norm v -> [v] -> Scalar v
+orthonormalityError me vs = normSq me $ orthogonalComplementProj me vs $ sumV vs
 
 
-metricSpanningSystem :: (FiniteDimensional v, IEEE (Scalar v))
-               => Metric v -> [DualVector v]
-metricSpanningSystem me@(Metric m) = scaleup <$> roughEigenSystem adhocMetric m'
+normSpanningSystem :: (FiniteDimensional v, IEEE (Scalar v))
+               => Norm v -> [DualVector v]
+normSpanningSystem me@(Norm m) = scaleup <$> roughEigenSystem adhocNorm m'
  where m' = sampleLinearFunction $ uncanonicallyFromDual . m
        scaleup (Eigenvector λ _ fv _ _)
          | λ>0       = uncanonicallyToDual $ fv^/sqrt λ
