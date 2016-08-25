@@ -28,6 +28,9 @@ module Math.LinearMap.Category (
             -- ** Tensor implementation
             , LinearMap (..), (+>)()
             , (⊕), (>+<)
+            -- ** Dual vectors
+            -- $dualVectorIntro
+            , (<.>^)
             -- * Tensor spaces
             , Tensor (..), (⊗)(), (⊗)
             -- * Norms
@@ -50,9 +53,8 @@ module Math.LinearMap.Category (
             , roughEigenSystem
             , Eigenvector(..)
             -- * The classes of suitable vector spaces
-            -- ** Tensor products
+            , LSpace
             , TensorSpace (..)
-            -- ** Functionals / linear maps
             , LinearSpace (..)
             -- ** Orthonormal systems
             , SemiInner (..), cartesianDualBasisCandidates
@@ -63,8 +65,8 @@ module Math.LinearMap.Category (
             , addV, scale, inner, flipBilin, bilinearFunction
             -- ** Hilbert space operations
             , DualSpace, riesz, coRiesz, showsPrecAsRiesz, (.<)
-            -- ** Constraints synonyms
-            , LSpace, Num', Num'', Num''', Fractional', Fractional''
+            -- ** Constraints for scalars
+            , Num', Num'', Num''', Fractional', Fractional''
             ) where
 
 import Math.LinearMap.Category.Class
@@ -101,7 +103,7 @@ import Numeric.IEEE
 -- that fulfill
 -- 
 -- @
---   f $ μ 'Data.VectorSpace.^*' u 'Data.AdditiveGroup.^+^' v ≡ μ ^* f u ^+^ f v    ∀ μ :: 'Scalar' v
+-- f $ μ 'Data.VectorSpace.^*' u 'Data.AdditiveGroup.^+^' v ≡ μ ^* f u ^+^ f v    ∀ u,v :: v;  μ :: 'Scalar' v
 -- @
 -- 
 -- Such functions form a cartesian monoidal category (in maths called 
@@ -120,6 +122,56 @@ import Numeric.IEEE
 -- 
 -- But linear mappings need not necessarily be implemented as matrices:
 
+
+-- $dualVectorIntro
+-- A @'DualVector' v@ is a linear functional or
+-- <https://en.wikipedia.org/wiki/Linear_form linear form> on the vector space @v@,
+-- i.e. it is a linear function from the vector space into its scalar field.
+-- However, these functions form themselves a vector space, known as the dual space.
+-- In particular, the dual space of any 'InnerSpace' is isomorphic to the
+-- space itself.
+-- 
+-- (More precisely: the continuous dual space of a
+-- <https://en.wikipedia.org/wiki/Hilbert_space Hilbert space> is isomorphic to
+-- that Hilbert space itself; see the 'riesz' isomorphism.)
+-- 
+-- As a matter of fact, in many applications, no distinction is made between a
+-- space and its dual. Indeed, we have for the basic 'LinearSpace' instances
+-- @'DualVector' v ~ v@, and '<.>^' is simply defined as a scalar product.
+-- In this case, a general 'LinearMap' is just a tensor product / matrix.
+-- 
+-- However, scalar products are often not as natural as they are made to look:
+-- 
+-- * A scalar product is only preserved under orthogonal transformations.
+--   It is not preserved under scalings, and certainly not under general linear
+--   transformations. This is very important in applications such as relativity
+--   theory (here, people talk about /covariant/ vs /contravariant/ tensors),
+--   but also relevant for more mundane
+--   <http://hackage.haskell.org/package/manifolds manifolds> like /sphere surfaces/:
+--   on such a surface, the natural symmetry transformations do generally
+--   not preserve a scalar product you might define.
+-- 
+-- * There may be more than one meaningful scalar product. For instance,
+--   the <https://en.wikipedia.org/wiki/Sobolev_space Sobolev space> of weakly
+--   differentiable functions also permits the
+--   <https://en.wikipedia.org/wiki/Square-integrable_function 𝐿²> scalar product
+--   – each has different and useful properties.
+-- 
+-- Neither of this is a problem if we keep the dual space a separate type.
+-- Effectively, this enables the type system to prevent you from writing code that
+-- does not behave natural (i.e. that depends on a concrete choice of basis / scalar
+-- product).
+-- 
+-- For cases when you do have some given notion of orientation/scale in a vector space
+-- and need it for an algorithm, you can always provide a 'Norm', which is essentially
+-- a reified scalar product.
+-- 
+-- Note that @DualVector (DualVector v) ~ v@ in any 'LSpace': the /double-dual/
+-- space is /naturally/ isomorphic to the original space, by way of
+-- 
+-- @
+-- v '<.>^' dv  ≡  dv '<.>^' v
+-- @
 
 
 
@@ -341,11 +393,30 @@ deriving instance (Show (EntireBasis u), Show (EntireBasis v))
 
 infixr 0 \$
 
--- | Inverse function application, in the sense of providing a
---   /least-squares-error/ solution to a linear equation system.
+-- | Inverse function application, aka solving of a linear system:
+--   
+-- @
+-- f '\$' f '$' v  ≡  v
 -- 
---   If you want to solve for multiple RHS vectors, be sure to partially
---   apply this operator to the matrix element.
+-- f '$' f '\$' u  ≡  u
+-- @
+-- 
+-- If @f@ does not have full rank, the behaviour is undefined (but we expect
+-- it to be reasonably well-behaved or even give a least-squares solution).
+-- 
+-- If you want to solve for multiple RHS vectors, be sure to partially
+-- apply this operator to the linear map, like
+-- 
+-- @
+-- map (f '\$') [v₁, v₂, ...]
+-- @
+-- 
+-- Since most of the work is actually done in triangularising the operator,
+-- this may be much faster than
+-- 
+-- @
+-- [f '\$' v₁, f '\$' v₂, ...]
+-- @
 (\$) :: ( FiniteDimensional u, FiniteDimensional v, SemiInner v
         , Scalar u ~ Scalar v, Fractional' (Scalar v) )
           => (u+>v) -> v -> u
@@ -542,9 +613,10 @@ deriving instance (Show v, Show (Scalar v)) => Show (Eigenvector v)
 
 -- | Lazily compute the eigenbasis of a linear map. The algorithm is essentially
 --   a hybrid of Lanczos/Arnoldi style Krylov-spanning and QR-diagonalisation,
---   but we don't separate these steps but /interleave/ them at each operation.
+--   which we don't do separately but /interleave/ at each step.
+-- 
 --   The size of the eigen-subbasis increases with each step until the space's
---   dimesion is reached. (But the algorithm can also be used for
+--   dimension is reached. (But the algorithm can also be used for
 --   infinite-dimensional spaces.)
 constructEigenSystem :: (LSpace v, RealFloat (Scalar v))
       => Norm v           -- ^ The notion of orthonormality.

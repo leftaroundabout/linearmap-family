@@ -43,6 +43,11 @@ type Num'' s = (Num' s, LinearSpace s)
 type Num''' s = (Num s, Scalar s ~ s, LSpace' s)
   
 class (VectorSpace v) => TensorSpace v where
+  -- | The internal representation of a 'Tensor' product.
+  -- 
+  -- For euclidean spaces, this is generally constructed by replacing each @s@
+  -- scalar field in the @v@ vector with an entire @w@ vector. I.e., you have
+  -- then a “nested vector” or, if @v@ is a @DualVector@ / “row vector”, a matrix.
   type TensorProduct v w :: *
   zeroTensor :: (LSpace w, Scalar w ~ Scalar v)
                 => v ⊗ w
@@ -71,22 +76,21 @@ class (VectorSpace v) => TensorSpace v where
 
 infixl 7 ⊗
 
+-- | Infix version of 'tensorProduct'.
 (⊗) :: (LSpace v, LSpace w, Scalar w ~ Scalar v)
                 => v -> w -> v ⊗ w
 v⊗w = (tensorProduct $ v) $ w
 
--- | The class of vector spaces which implement linear maps. Alternatively,
---   this can be considered as the class of spaces with a properly tractable
---   <https://en.wikipedia.org/wiki/Dual_space dual space>.
+-- | The class of vector spaces @v@ for which @'LinearMap' s v w@ is well-implemented.
 class ( TensorSpace v, TensorSpace (DualVector v)
       , Num' (Scalar v), Scalar (DualVector v) ~ Scalar v )
               => LinearSpace v where
-  -- | Internal representation of a linear map from the space @v@ to its field.
-  --   For array-of-numbers Hilbert spaces, this will generally be just
-  --   an “row vector”
+  -- | Suitable representation of a linear map from the space @v@ to its field.
   -- 
-  --   Only use the 'DualVector' type and the methods below for /instantiating/ 
-  --   this class. For actually /working/ with dual vectors, use 'DualSpace'.
+  --   For the usual euclidean spaces, you can just define @'DualVector' v = v@.
+  --   (In this case, a dual vector will be just a “row vector” if you consider
+  --   @v@-vectors as “column vectors”. 'LinearMap' will then effectively have
+  --   a matrix layout.)
   type DualVector v :: *
  
   linearId :: v +> v
@@ -193,7 +197,7 @@ instance Num''' s => LinearSpace (ZeroDim s) where
 -- sparse structure; this can be defined in the 'TensorSpace' instance.
 newtype LinearMap s v w = LinearMap {getLinearMap :: TensorProduct (DualVector v) w}
 
--- | Tensor products are mostly interesting because they can be used to implement
+-- | Tensor products are most interesting because they can be used to implement
 --   linear mappings, but they also form a useful vector space on their own right.
 newtype Tensor s v w = Tensor {getTensorProduct :: TensorProduct v w}
 
@@ -217,6 +221,18 @@ type v ⊗ w = Tensor (Scalar v) v w
 
 type LSpace' v = ( LinearSpace v, LinearSpace (Scalar v)
                  , LinearSpace (DualVector v), DualVector (DualVector v) ~ v )
+
+-- | The workhorse of this package: most functions here work on vector
+--   spaces that fulfill the @'LSpace' v@ constraint. In summary, this is:
+-- 
+-- * A 'VectorSpace' whose 'Scalar' is a 'Num'''' (i.e. a number type that
+--   has itself all the vector-space instances).
+-- * You have an implementation for @'TensorProduct' v w@, for any other space @w@.
+-- * You have a 'DualVector' space that fulfills @'DualVector' ('DualVector' v) ~ v@.
+-- 
+-- To make a new space of yours an 'LSpace', you must define instances of
+-- 'TensorSpace' and 'LinearSpace'.
+
 type LSpace v = (LSpace' v, Num''' (Scalar v))
 
 instance (LSpace v, LSpace w, Scalar v~s, Scalar w~s)

@@ -47,11 +47,18 @@ import Math.VectorSpace.ZeroDimensional
 
 
 -- | A linear map, represented simply as a Haskell function tagged with
---   the type of scalar with respect to which it is linear.
---   You can always use a matrix-implemented linear mapping as the function
---   (convert with 'Control.Arrow.Constrained.arr'), but many (sparse)
+--   the type of scalar with respect to which it is linear. Many (sparse)
 --   linear mappings can actually be calculated much more efficiently
---   if you don't represent them with any matrix / tensor product.
+--   if you don't represent them with any kind of matrix, but
+--   just as a function (which is after all, mathematically speaking,
+--   what a linear map foremostly is).
+-- 
+--   However, if you sum up many 'LinearFunction's – which you can
+--   simply do with the 'VectorSpace' instance – they will become ever
+--   slower to calculate, because the summand-functions are actually computed
+--   individually and only the results summed. That's where
+--   'Math.LinearMap.Category.LinearMap' is generally preferrable.
+--   You can always convert between these equivalent categories using 'arr'.
 newtype LinearFunction s v w = LinearFunction { getLinearFunction :: v -> w }
 
 
