@@ -18,6 +18,7 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE ScopedTypeVariables  #-}
 {-# LANGUAGE UnicodeSyntax        #-}
+{-# LANGUAGE ConstraintKinds      #-}
 
 module Math.LinearMap.Category (
             -- * Linear maps
@@ -49,8 +50,10 @@ module Math.LinearMap.Category (
             -- * Solving linear equations
             , (\$), pseudoInverse
             -- * Eigenvalue problems
+            , eigen
             , constructEigenSystem
             , roughEigenSystem
+            , finishEigenSystem
             , Eigenvector(..)
             -- * The classes of suitable vector spaces
             , LSpace
@@ -65,8 +68,8 @@ module Math.LinearMap.Category (
             , addV, scale, inner, flipBilin, bilinearFunction
             -- ** Hilbert space operations
             , DualSpace, riesz, coRiesz, showsPrecAsRiesz, (.<)
-            -- ** Constraints for scalars
-            , Num', Num'', Num''', Fractional', Fractional''
+            -- ** Constraint synonyms
+            , HilbertSpace, Num', Num'', Num''', Fractional', Fractional''
             ) where
 
 import Math.LinearMap.Category.Class
@@ -649,13 +652,14 @@ constructEigenSystem me@(Norm m) ε₀ f = iterate (
               v' = m $ v
 
 
-finishEigensystem :: (LSpace v, RealFloat (Scalar v))
+finishEigenSystem :: (LSpace v, RealFloat (Scalar v))
                       => Norm v -> [Eigenvector v] -> [Eigenvector v]
-finishEigensystem me = go . sortBy (comparing ev_Eigenvalue)
+finishEigenSystem me = go . sortBy (comparing $ negate . ev_Eigenvalue)
  where go [] = []
        go [v] = [v]
-       go [Eigenvector λ₀ v₀ fv₀ _dv₀ _ε₀, Eigenvector λ₁ v₁ fv₁ _dv₁ _ε₁]
-              = [ asEV v₀' fv₀', asEV v₁' fv₁' ]
+       go vs@[Eigenvector λ₀ v₀ fv₀ _dv₀ _ε₀, Eigenvector λ₁ v₁ fv₁ _dv₁ _ε₁]
+          | λ₀>λ₁      = [ asEV v₀' fv₀', asEV v₁' fv₁' ]
+          | otherwise  = vs
         where
               v₀' = v₀^*μ₀₀ ^+^ v₁^*μ₀₁
               fv₀' = fv₀^*μ₀₀ ^+^ fv₁^*μ₀₁
@@ -665,17 +669,17 @@ finishEigensystem me = go . sortBy (comparing ev_Eigenvalue)
               
               fShift₁v₀ = fv₀ ^-^ λ₁*^v₀
               
-              (μ₀₀,μ₀₁) = normalized ( (me <$| fShift₁v₀)<.>^v₀
+              (μ₀₀,μ₀₁) = normalized ( λ₀ - λ₁
                                      , (me <$| fShift₁v₀)<.>^v₁ )
               (μ₁₀,μ₁₁) = (-μ₀₁, μ₀₀)
-              
+        
        go evs = lo'' ++ upper'
         where l = length evs
               lChunk = l`quot`3
               (loEvs, (midEvs, hiEvs)) = second (splitAt $ l - 2*lChunk)
                                                     $ splitAt lChunk evs
-              (lo',hi') = splitAt l . go $ loEvs++hiEvs
-              (lo'',mid') = splitAt l . go $ lo'++midEvs
+              (lo',hi') = splitAt lChunk . go $ loEvs++hiEvs
+              (lo'',mid') = splitAt lChunk . go $ lo'++midEvs
               upper'  = go $ mid'++hi'
        
        asEV v fv = Eigenvector λ v fv dv ε
@@ -709,6 +713,19 @@ roughEigenSystem me f = go fBas 0 [[]]
        fBas = (^%me) <$> snd (decomposeLinMap id) []
        fpε = epsilon * 8
 
+-- | Simple automatic finding of the eigenvalues and -vectors
+--   of a Hermitian operator, in reasonable approximation.
+-- 
+--   This works by spanning a QR-stabilised Krylov basis with 'constructEigenSystem'
+--   until it is complete ('roughEigenSystem'), and then properly decoupling the
+--   system with 'finishEigenSystem' (based on two iterations of shifted Givens rotations).
+--   
+--   This function is a tradeoff in performance vs. accuracy. Use 'constructEigenSystem'
+--   and 'finishEigenSystem' directly for e.g. a faster computed compromise.
+eigen :: (FiniteDimensional v, HilbertSpace v, IEEE (Scalar v))
+               => (v+>v) -> [(Scalar v, v)]
+eigen f = map (ev_Eigenvalue &&& ev_Eigenvector)
+   $ iterate (finishEigenSystem euclideanNorm) (roughEigenSystem euclideanNorm f) !! 2
 
 orthonormalityError :: LSpace v => Norm v -> [v] -> Scalar v
 orthonormalityError me vs = normSq me $ orthogonalComplementProj me vs $ sumV vs
@@ -726,4 +743,7 @@ normSpanningSystem me@(Norm m) = scaleup <$> roughEigenSystem adhocNorm m'
 
 (^) :: Num a => a -> Int -> a
 (^) = (Hask.^)
+ 
+
+type HilbertSpace v = (LSpace v, InnerSpace v, DualVector v ~ v)
 
