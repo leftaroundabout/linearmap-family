@@ -649,6 +649,40 @@ constructEigenSystem me@(Norm m) ε₀ f = iterate (
               v' = m $ v
 
 
+finishEigensystem :: (LSpace v, RealFloat (Scalar v))
+                      => Norm v -> [Eigenvector v] -> [Eigenvector v]
+finishEigensystem me = go . sortBy (comparing ev_Eigenvalue)
+ where go [] = []
+       go [v] = [v]
+       go [Eigenvector λ₀ v₀ fv₀ _dv₀ _ε₀, Eigenvector λ₁ v₁ fv₁ _dv₁ _ε₁]
+              = [ asEV v₀' fv₀', asEV v₁' fv₁' ]
+        where
+              v₀' = v₀^*μ₀₀ ^+^ v₁^*μ₀₁
+              fv₀' = fv₀^*μ₀₀ ^+^ fv₁^*μ₀₁
+              
+              v₁' = v₀^*μ₁₀ ^+^ v₁^*μ₁₁
+              fv₁' = fv₀^*μ₁₀ ^+^ fv₁^*μ₁₁
+              
+              fShift₁v₀ = fv₀ ^-^ λ₁*^v₀
+              
+              (μ₀₀,μ₀₁) = normalized ( (me <$| fShift₁v₀)<.>^v₀
+                                     , (me <$| fShift₁v₀)<.>^v₁ )
+              (μ₁₀,μ₁₁) = (-μ₀₁, μ₀₀)
+              
+       go evs = lo'' ++ upper'
+        where l = length evs
+              lChunk = l`quot`3
+              (loEvs, (midEvs, hiEvs)) = second (splitAt $ l - 2*lChunk)
+                                                    $ splitAt lChunk evs
+              (lo',hi') = splitAt l . go $ loEvs++hiEvs
+              (lo'',mid') = splitAt l . go $ lo'++midEvs
+              upper'  = go $ mid'++hi'
+       
+       asEV v fv = Eigenvector λ v fv dv ε
+        where λ = (me<$|v)<.>^fv
+              dv = v^*λ ^-^ fv
+              ε = normSq me dv / λ^2
+
 
 -- | Find a system of vectors that approximate the eigensytem, in the sense that:
 --   each true eigenvalue is represented by an approximate one, and that is closer

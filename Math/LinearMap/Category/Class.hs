@@ -40,7 +40,7 @@ import Math.VectorSpace.ZeroDimensional
 
 type Num' s = (Num s, VectorSpace s, Scalar s ~ s)
 type Num'' s = (Num' s, LinearSpace s)
-type Num''' s = (Num s, Scalar s ~ s, LSpace' s)
+type Num''' s = (Num s, InnerSpace s, Scalar s ~ s, LSpace' s)
   
 class (VectorSpace v) => TensorSpace v where
   -- | The internal representation of a 'Tensor' product.
@@ -232,7 +232,6 @@ type LSpace' v = ( LinearSpace v, LinearSpace (Scalar v)
 -- 
 -- To make a new space of yours an 'LSpace', you must define instances of
 -- 'TensorSpace' and 'LinearSpace'.
-
 type LSpace v = (LSpace' v, Num''' (Scalar v))
 
 instance (LSpace v, LSpace w, Scalar v~s, Scalar w~s)
