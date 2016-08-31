@@ -733,12 +733,9 @@ orthonormalityError :: LSpace v => Norm v -> [v] -> Scalar v
 orthonormalityError me vs = normSq me $ orthogonalComplementProj me vs $ sumV vs
 
 
-normSpanningSystem :: (FiniteDimensional v, IEEE (Scalar v))
+normSpanningSystem :: (FiniteDimensional v, SemiInner v, IEEE (Scalar v))
                => Norm v -> [DualVector v]
-normSpanningSystem me@(Norm m) = scaleup <$> roughEigenSystem adhocNorm m'
- where m' = sampleLinearFunction $ uncanonicallyFromDual . m
-       scaleup (Eigenvector λ _ fv _ _)
-         | λ>0       = uncanonicallyToDual $ fv^/sqrt λ
+normSpanningSystem = dualBasis . normSpanningSystem'
 
 normSpanningSystem' :: (FiniteDimensional v, IEEE (Scalar v))
                => Norm v -> [v]
