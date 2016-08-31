@@ -43,6 +43,7 @@ module Math.LinearMap.Category (
             , normSq
             , (<$|)
             , normSpanningSystem
+            , normSpanningSystem'
             -- ** Variances
             , Variance, spanVariance
             -- ** Utility
@@ -721,7 +722,8 @@ roughEigenSystem me f = go fBas 0 [[]]
 --   system with 'finishEigenSystem' (based on two iterations of shifted Givens rotations).
 --   
 --   This function is a tradeoff in performance vs. accuracy. Use 'constructEigenSystem'
---   and 'finishEigenSystem' directly for e.g. a faster computed compromise.
+--   and 'finishEigenSystem' directly for more quickly computing a (perhaps incomplete)
+--   approximation, or for more precise results.
 eigen :: (FiniteDimensional v, HilbertSpace v, IEEE (Scalar v))
                => (v+>v) -> [(Scalar v, v)]
 eigen f = map (ev_Eigenvalue &&& ev_Eigenvector)
@@ -737,6 +739,10 @@ normSpanningSystem me@(Norm m) = scaleup <$> roughEigenSystem adhocNorm m'
  where m' = sampleLinearFunction $ uncanonicallyFromDual . m
        scaleup (Eigenvector λ _ fv _ _)
          | λ>0       = uncanonicallyToDual $ fv^/sqrt λ
+
+normSpanningSystem' :: (FiniteDimensional v, IEEE (Scalar v))
+               => Norm v -> [v]
+normSpanningSystem' me = ev_Eigenvector <$> roughEigenSystem me id
        
 
 
