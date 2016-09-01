@@ -611,15 +611,21 @@ orthonormaliseFussily :: (LSpace v, RealFloat (Scalar v))
 orthonormaliseFussily fuss me = go []
  where go _ [] = []
        go ws (v₀:vs)
-         | mvd > fuss  = let v = vd^/sqrt mvd
-                         in v : go (v:ws) vs
+         | mvd > fuss  = let μ = 1/sqrt mvd
+                             v = vd^*μ
+                         in v : go ((v,dvd^*μ):ws) vs
          | otherwise   = go ws vs
-        where vd = orthogonalComplementProj me ws $ v₀
-              mvd = normSq me vd
+        where vd = orthogonalComplementProj' ws $ v₀
+              dvd = applyNorm me $ vd
+              mvd = dvd<.>^vd
+
+orthogonalComplementProj' :: LSpace v => [(v, DualVector v)] -> (v-+>v)
+orthogonalComplementProj' ws = LinearFunction $ \v₀
+             -> foldl' (\v (w,dw) -> v ^-^ w^*(dw<.>^v)) v₀ ws
 
 orthogonalComplementProj :: LSpace v => Norm v -> [v] -> (v-+>v)
-orthogonalComplementProj (Norm m) ws = LinearFunction $ \v₀
-             -> foldl' (\v w -> v ^-^ w^*((m$v)<.>^w)) v₀ ws
+orthogonalComplementProj (Norm m)
+      = orthogonalComplementProj' . map (id &&& (m$))
 
 
 
