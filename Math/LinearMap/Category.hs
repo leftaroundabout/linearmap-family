@@ -607,13 +607,13 @@ data OrthonormalSystem v = OrthonormalSystem {
     }
 
 orthonormaliseFussily :: (LSpace v, RealFloat (Scalar v))
-                           => Norm v -> [v] -> [v]
-orthonormaliseFussily me = go []
+                           => Scalar v -> Norm v -> [v] -> [v]
+orthonormaliseFussily fuss me = go []
  where go _ [] = []
        go ws (v₀:vs)
-         | mvd > 1/4  = let v = vd^/sqrt mvd
-                        in v : go (v:ws) vs
-         | otherwise  = go ws vs
+         | mvd > fuss  = let v = vd^/sqrt mvd
+                         in v : go (v:ws) vs
+         | otherwise   = go ws vs
         where vd = orthogonalComplementProj me ws $ v₀
               mvd = normSq me vd
 
@@ -652,7 +652,7 @@ constructEigenSystem me@(Norm m) ε₀ f = iterate (
                                              sortBy (comparing $
                                                negate . abs . ev_Eigenvalue)
                                            . map asEV
-                                           . orthonormaliseFussily (Norm m)
+                                           . orthonormaliseFussily (1/4) (Norm m)
                                            . newSys)
                                          . map (asEV . (^%me))
  where newSys [] = []
@@ -756,8 +756,8 @@ normSpanningSystem = dualBasis . normSpanningSystem'
 
 normSpanningSystem' :: (FiniteDimensional v, IEEE (Scalar v))
                => Norm v -> [v]
-normSpanningSystem' me = ev_Eigenvector <$> roughEigenSystem me id
-       
+normSpanningSystem' me = orthonormaliseFussily 0 me $ enumerateSubBasis entireBasis
+
 
 
 
