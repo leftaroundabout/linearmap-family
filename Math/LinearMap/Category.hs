@@ -18,6 +18,7 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE ScopedTypeVariables  #-}
 {-# LANGUAGE UnicodeSyntax        #-}
+{-# LANGUAGE TupleSections        #-}
 {-# LANGUAGE ConstraintKinds      #-}
 
 module Math.LinearMap.Category (
@@ -305,19 +306,24 @@ v^/^w = case (v<.>w) of
 
 class (LSpace v, LSpace (Scalar v)) => FiniteDimensional v where
   -- | Whereas 'Basis'-values refer to a single basis vector, a single
-  --   'EntireBasis' value represents a complete collection of such basis vectors,
+  --   'SubBasis' value represents a collection of such basis vectors,
   --   which can be used to associate a vector with a list of coefficients.
   -- 
-  --   For spaces with a canonical finite basis, 'EntireBasis' does not actually
-  --   need to contain any information, since all vectors will anyway be represented in
-  --   that same basis.
-  data EntireBasis v :: *
+  --   For spaces with a canonical finite basis, 'SubBasis' does not actually
+  --   need to contain any information, it can simply have the full finite
+  --   basis as its only value. Even for large sparse spaces, it should only
+  --   have a very coarse structure that can be shared by many vectors.
+  data SubBasis v :: *
+  
+  entireBasis :: SubBasis v
+  
+  enumerateSubBasis :: SubBasis v -> [v]
   
   -- | Split up a linear map in “column vectors” WRT some suitable basis.
-  decomposeLinMap :: (v+>w) -> (EntireBasis v, [w]->[w])
+  decomposeLinMap :: (v+>w) -> (SubBasis v, [w]->[w])
   
   -- | Assemble a vector from coefficients in some basis. Return any excess coefficients.
-  recomposeEntire :: EntireBasis v -> [Scalar v] -> (v, [Scalar v])
+  recomposeSB :: SubBasis v -> [Scalar v] -> (v, [Scalar v])
   
   -- | Given a function that interprets a coefficient-container as a vector representation,
   --   build a linear function mapping to that space.
@@ -334,25 +340,31 @@ class (LSpace v, LSpace (Scalar v)) => FiniteDimensional v where
 
 
 instance (Num''' s) => FiniteDimensional (ZeroDim s) where
-  data EntireBasis (ZeroDim s) = ZeroBasis
-  recomposeEntire ZeroBasis l = (Origin, l)
+  data SubBasis (ZeroDim s) = ZeroBasis
+  entireBasis = ZeroBasis
+  enumerateSubBasis ZeroBasis = []
+  recomposeSB ZeroBasis l = (Origin, l)
   decomposeLinMap _ = (ZeroBasis, id)
   recomposeContraLinMap _ _ = LinearMap Origin
   uncanonicallyFromDual = id
   uncanonicallyToDual = id
   
 instance (Num''' s, LinearSpace s) => FiniteDimensional (V0 s) where
-  data EntireBasis (V0 s) = V0Basis
-  recomposeEntire V0Basis l = (V0, l)
+  data SubBasis (V0 s) = V0Basis
+  entireBasis = V0Basis
+  enumerateSubBasis V0Basis = []
+  recomposeSB V0Basis l = (V0, l)
   decomposeLinMap _ = (V0Basis, id)
   recomposeContraLinMap _ _ = LinearMap V0
   uncanonicallyFromDual = id
   uncanonicallyToDual = id
   
 instance FiniteDimensional ℝ where
-  data EntireBasis ℝ = RealsBasis
-  recomposeEntire RealsBasis [] = (0, [])
-  recomposeEntire RealsBasis (μ:cs) = (μ, cs)
+  data SubBasis ℝ = RealsBasis
+  entireBasis = RealsBasis
+  enumerateSubBasis RealsBasis = [1]
+  recomposeSB RealsBasis [] = (0, [])
+  recomposeSB RealsBasis (μ:cs) = (μ, cs)
   decomposeLinMap (LinearMap v) = (RealsBasis, (v:))
   recomposeContraLinMap fw = LinearMap . fw
   uncanonicallyFromDual = id
@@ -361,11 +373,13 @@ instance FiniteDimensional ℝ where
 #define FreeFiniteDimensional(V, VB, take, give)        \
 instance (Num''' s, LSpace s)                            \
             => FiniteDimensional (V s) where {            \
-  data EntireBasis (V s) = VB;                             \
+  data SubBasis (V s) = VB;                             \
+  entireBasis = VB;                                      \
+  enumerateSubBasis VB = toList $ Mat.identity;      \
   uncanonicallyFromDual = id;                               \
   uncanonicallyToDual = id;                                  \
-  recomposeEntire _ (take:cs) = (give, cs);                   \
-  recomposeEntire b cs = recomposeEntire b $ cs ++ [0];        \
+  recomposeSB _ (take:cs) = (give, cs);                   \
+  recomposeSB b cs = recomposeSB b $ cs ++ [0];        \
   decomposeLinMap (LinearMap m) = (VB, (toList m ++));          \
   recomposeContraLinMap fw mv = LinearMap $ (\v -> fw $ fmap (<.>^v) mv) <$> Mat.identity }
 FreeFiniteDimensional(V1, V1Basis, c₀         , V1 c₀         )
@@ -373,18 +387,21 @@ FreeFiniteDimensional(V2, V2Basis, c₀:c₁      , V2 c₀ c₁      )
 FreeFiniteDimensional(V3, V3Basis, c₀:c₁:c₂   , V3 c₀ c₁ c₂   )
 FreeFiniteDimensional(V4, V4Basis, c₀:c₁:c₂:c₃, V4 c₀ c₁ c₂ c₃)
                                   
-deriving instance Show (EntireBasis ℝ)
+deriving instance Show (SubBasis ℝ)
   
 instance ( FiniteDimensional u, LinearSpace (DualVector u), DualVector (DualVector u) ~ u
          , FiniteDimensional v, LinearSpace (DualVector v), DualVector (DualVector v) ~ v
          , Scalar u ~ Scalar v, Fractional' (Scalar v) )
             => FiniteDimensional (u,v) where
-  data EntireBasis (u,v) = TupleBasis !(EntireBasis u) !(EntireBasis v)
+  data SubBasis (u,v) = TupleBasis !(SubBasis u) !(SubBasis v)
+  entireBasis = TupleBasis entireBasis entireBasis
+  enumerateSubBasis (TupleBasis bu bv)
+       = ((,zeroV)<$>enumerateSubBasis bu) ++ ((zeroV,)<$>enumerateSubBasis bv)
   decomposeLinMap (LinearMap (fu, fv))
        = case (decomposeLinMap (asLinearMap$fu), decomposeLinMap (asLinearMap$fv)) of
          ((bu, du), (bv, dv)) -> (TupleBasis bu bv, du . dv)
-  recomposeEntire (TupleBasis bu bv) coefs = case recomposeEntire bu coefs of
-                        (u, coefs') -> case recomposeEntire bv coefs' of
+  recomposeSB (TupleBasis bu bv) coefs = case recomposeSB bu coefs of
+                        (u, coefs') -> case recomposeSB bv coefs' of
                          (v, coefs'') -> ((u,v), coefs'')
   recomposeContraLinMap fw dds
          = recomposeContraLinMap fw (fst<$>dds)
@@ -392,8 +409,8 @@ instance ( FiniteDimensional u, LinearSpace (DualVector u), DualVector (DualVect
   uncanonicallyFromDual = uncanonicallyFromDual *** uncanonicallyFromDual
   uncanonicallyToDual = uncanonicallyToDual *** uncanonicallyToDual
   
-deriving instance (Show (EntireBasis u), Show (EntireBasis v))
-                    => Show (EntireBasis (u,v))
+deriving instance (Show (SubBasis u), Show (SubBasis v))
+                    => Show (SubBasis (u,v))
 
 infixr 0 \$
 
@@ -424,7 +441,7 @@ infixr 0 \$
 (\$) :: ( FiniteDimensional u, FiniteDimensional v, SemiInner v
         , Scalar u ~ Scalar v, Fractional' (Scalar v) )
           => (u+>v) -> v -> u
-(\$) m = fst . \v -> recomposeEntire mbas [v'<.>^v | v' <- v's]
+(\$) m = fst . \v -> recomposeSB mbas [v'<.>^v | v' <- v's]
  where v's = dualBasis $ mdecomp []
        (mbas, mdecomp) = decomposeLinMap m
     
@@ -432,7 +449,7 @@ infixr 0 \$
 pseudoInverse :: ( FiniteDimensional u, FiniteDimensional v, SemiInner v
                  , Scalar u ~ Scalar v, Fractional' (Scalar v) )
           => (u+>v) -> v+>u
-pseudoInverse m = recomposeContraLinMap (fst . recomposeEntire mbas) v's
+pseudoInverse m = recomposeContraLinMap (fst . recomposeSB mbas) v's
  where v's = dualBasis $ mdecomp []
        (mbas, mdecomp) = decomposeLinMap m
 
@@ -442,12 +459,12 @@ pseudoInverse m = recomposeContraLinMap (fst . recomposeEntire mbas) v's
 riesz :: (FiniteDimensional v, InnerSpace v) => DualVector v -+> v
 riesz = LinearFunction $ \dv ->
        let (bas, compos) = decomposeLinMap $ sampleLinearFunction $ applyDualVector $ dv
-       in fst . recomposeEntire bas $ compos []
+       in fst . recomposeSB bas $ compos []
 
 sRiesz :: (FiniteDimensional v, InnerSpace v) => DualSpace v -+> v
 sRiesz = LinearFunction $ \dv ->
        let (bas, compos) = decomposeLinMap $ dv
-       in fst . recomposeEntire bas $ compos []
+       in fst . recomposeSB bas $ compos []
 
 coRiesz :: (LSpace v, Num''' (Scalar v), InnerSpace v) => v -+> DualVector v
 coRiesz = fromFlatTensor . arr asTensor . sampleLinearFunction . inner
