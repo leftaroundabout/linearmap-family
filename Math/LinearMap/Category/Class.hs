@@ -295,6 +295,8 @@ instance Num''' s => EnhancedCat (->) (LinearMap s) where
   arr m = arr $ applyLinear $ m
 instance Num''' s => EnhancedCat (LinearFunction s) (LinearMap s) where
   arr m = applyLinear $ m
+instance Num''' s => EnhancedCat (LinearMap s) (LinearFunction s) where
+  arr m = sampleLinearFunction $ m
 
 
 

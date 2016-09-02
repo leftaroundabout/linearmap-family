@@ -46,7 +46,7 @@ module Math.LinearMap.Category (
             , normSpanningSystem
             , normSpanningSystem'
             -- ** Variances
-            , Variance, spanVariance
+            , Variance, spanVariance, dualNorm
             -- ** Utility
             , densifyNorm
             -- * Solving linear equations
@@ -555,17 +555,27 @@ newtype Norm v = Norm {
     applyNorm :: v -+> DualVector v
   }
 
+-- | A multidimensional variance of points @v@ with some distribution can be
+--   considered a norm on the dual space, quantifying for a dual vector @dv@ the
+--   expectation value of @(dv<.>^v)^2@.
 type Variance v = Norm (DualVector v)
 
 -- | The canonical standard metric on inner-product / Hilbert spaces.
 euclideanNorm :: (LSpace v, InnerSpace v, DualVector v ~ v) => Norm v
 euclideanNorm = Norm id
 
--- | The norm induced from the (arbirtrary) choice of basis in a finite space.
+-- | The norm induced from the (arbitrary) choice of basis in a finite space.
 --   Only use this in contexts where you merely need /some/ norm, but don't
 --   care if it might be biased in some unnatural way.
 adhocNorm :: FiniteDimensional v => Norm v
 adhocNorm = Norm uncanonicallyToDual
+
+-- | A proper norm induces a norm on the dual space. If you use this
+--   with a seminorm, the behaviour is undefined.
+dualNorm :: ( FiniteDimensional v, FiniteDimensional (DualVector v)
+            , SemiInner (DualVector v), RealFrac (Scalar v) )
+                 => Norm v -> Variance v
+dualNorm (Norm m) = Norm . arr . pseudoInverse $ arr m
 
 infixl 6 ^%
 (^%) :: (LSpace v, Floating (Scalar v)) => v -> Norm v -> v
