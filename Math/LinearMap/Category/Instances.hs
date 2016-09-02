@@ -202,5 +202,26 @@ instance (Fractional'' n, TensorProduct (DualVector n) n ~ n)
   recip (LinearMap n) = LinearMap $ recip n
   fromRational = LinearMap . fromRational
 
+
+
+
+
+
+instance (LSpace u, LSpace v, s~Scalar u, s~Scalar v)
+                      => AffineSpace (Tensor s u v) where
+  type Diff (Tensor s u v) = Tensor s u v
+  (.-.) = (^-^)
+  (.+^) = (^+^)
+instance (LSpace u, LSpace v, s~Scalar u, s~Scalar v)
+                      => AffineSpace (LinearMap s u v) where
+  type Diff (LinearMap s u v) = LinearMap s u v
+  (.-.) = (^-^)
+  (.+^) = (^+^)
+instance (LSpace u, LSpace v, s~Scalar u, s~Scalar v)
+                      => AffineSpace (LinearFunction s u v) where
+  type Diff (LinearFunction s u v) = LinearFunction s u v
+  (.-.) = (^-^)
+  (.+^) = (^+^)
+
   
 
