@@ -71,7 +71,13 @@ module Math.LinearMap.Category (
             -- ** Hilbert space operations
             , DualSpace, riesz, coRiesz, showsPrecAsRiesz, (.<)
             -- ** Constraint synonyms
-            , HilbertSpace, Num', Num'', Num''', Fractional', Fractional''
+            , HilbertSpace
+            , Num', Num'', Num'''
+            , Fractional', Fractional''
+            , RealFrac'
+            -- ** Misc
+            , relaxNorm
+            , findNormalLength, normalLength
             ) where
 
 import Math.LinearMap.Category.Class
@@ -550,7 +556,28 @@ spanNorm dvs = Norm . LinearFunction $ \v -> sumV [dv ^* (dv<.>^v) | dv <- dvs]
 spanVariance :: LSpace v => [v] -> Variance v
 spanVariance = spanNorm
 
--- | A positive definite symmetric bilinear form.
+-- | Modify a norm in such a way that the given vectors lie within its unit ball.
+--   (Not /optimally/ – the unit ball may be bigger than necessary.)
+relaxNorm :: ( FiniteDimensional v, FiniteDimensional (DualVector v)
+             , SemiInner v, IEEE (Scalar v) )
+                => Norm v -> [v] -> Norm v
+relaxNorm me = \vs -> dualNorm . spanVariance $ vs' ++ vs
+ where vs' = normSpanningSystem' me
+
+-- | A positive semidefinite symmetric bilinear form. This gives rise
+--   to a <https://en.wikipedia.org/wiki/Norm_(mathematics) norm> thus:
+-- 
+--   @
+--   'Norm' n '|$|' v = √(n v '<.>^' v)
+--   @
+--   
+--   Strictly speaking, this type is neither strong enough nor general enough to
+--   deserve the name 'Norm': it includes proper seminorms (i.e. @m|$|v ≡ 0@ does
+--   not guarantee @v == zeroV@), but not actual norms such as the ℓ₁-norm on ℝⁿ
+--   (Taxcab norm) or the supremum norm.
+--   However, 𝐿₂-like norms are the only ones that can really be formulated without
+--   any basis reference; and guaranteeing positive definiteness through the type
+--   system is scarcely practical.
 newtype Norm v = Norm {
     applyNorm :: v -+> DualVector v
   }
@@ -560,7 +587,7 @@ newtype Norm v = Norm {
 --   expectation value of @(dv<.>^v)^2@.
 type Variance v = Norm (DualVector v)
 
--- | The canonical standard metric on inner-product / Hilbert spaces.
+-- | The canonical standard norm (2-norm) on inner-product / Hilbert spaces.
 euclideanNorm :: (LSpace v, InnerSpace v, DualVector v ~ v) => Norm v
 euclideanNorm = Norm id
 
@@ -577,17 +604,39 @@ dualNorm :: ( FiniteDimensional v, FiniteDimensional (DualVector v)
                  => Norm v -> Variance v
 dualNorm (Norm m) = Norm . arr . pseudoInverse $ arr m
 
+transformNorm :: (LSpace v, LSpace w, Scalar v~Scalar w) => (v+>w) -> Norm w -> Norm v
+transformNorm f (Norm m) = Norm . arr $ f' . (fmap m $ f)
+ where f' = asLinearMap $ transposeTensor $ asTensor $ f
+
+transformVariance :: (LSpace v, LSpace w, Scalar v~Scalar w)
+                        => (v+>w) -> Variance v -> Variance w
+transformVariance f (Norm m) = Norm . arr $ f . (fmap m $ f')
+ where f' = asLinearMap $ transposeTensor $ asTensor $ f
+
 infixl 6 ^%
 (^%) :: (LSpace v, Floating (Scalar v)) => v -> Norm v -> v
 v ^% Norm m = v ^/ sqrt ((m$v)<.>^v)
 
+-- | The unique positive number whose norm is 1 (if the norm is not constant zero).
+findNormalLength :: RealFrac' s => Norm s -> Maybe s
+findNormalLength (Norm m) = case m $ 1 of
+   o | o > 0      -> Just . sqrt $ recip o
+     | otherwise  -> Nothing
+
+-- | Unsafe version of 'findNormalLength', only works reliable if the norm
+--   is actually positive definite.
+normalLength :: RealFrac' s => Norm s -> s
+normalLength (Norm m) = case m $ 1 of
+   o | o >= 0     -> sqrt $ recip o
+     | o < 0      -> error "Norm fails to be positive semidefinite."
+     | otherwise  -> error "Norm yields NaN."
 
 infixr 0 <$|, |$|
 -- | “Partially apply” a norm, yielding a dual vector
 --   (i.e. a linear form that accepts the second argument of the scalar product).
 -- 
 -- @
--- (euclideanNorm '<$|' v) '<.>^' w  ≡  v '<.>' w
+-- ('euclideanNorm' '<$|' v) '<.>^' w  ≡  v '<.>' w
 -- @
 (<$|) :: LSpace v => Norm v -> v -> DualVector v
 Norm m <$| v = m $ v
@@ -600,7 +649,7 @@ normSq (Norm m) v = (m$v)<.>^v
 -- | Use a 'Norm' to measure the length / norm of a vector.
 -- 
 -- @
--- euclideanNorm |$| v  ≡  √(v '<.>' v)
+-- 'euclideanNorm' |$| v  ≡  √(v '<.>' v)
 -- @
 (|$|) :: (LSpace v, Floating (Scalar v)) => Norm v -> v -> Scalar v
 (|$|) m = sqrt . normSq m
@@ -783,3 +832,4 @@ normSpanningSystem' me = orthonormaliseFussily 0 me $ enumerateSubBasis entireBa
 
 type HilbertSpace v = (LSpace v, InnerSpace v, DualVector v ~ v)
 
+type RealFrac' s = (IEEE s, HilbertSpace s, Scalar s ~ s)
