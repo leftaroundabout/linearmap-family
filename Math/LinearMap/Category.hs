@@ -38,7 +38,7 @@ module Math.LinearMap.Category (
             , Tensor (..), (⊗)(), (⊗)
             -- * Norms
             -- $metricIntro
-            , Norm(..)
+            , Norm(..), Seminorm
             , spanNorm
             , euclideanNorm
             , (|$|)
@@ -92,6 +92,7 @@ import Data.Set (Set)
 import Data.Ord (comparing)
 import Data.List (maximumBy)
 import Data.Foldable (toList)
+import Data.Semigroup
 
 import Data.VectorSpace
 import Data.Basis
@@ -552,7 +553,7 @@ instance (FiniteDimensional v, InnerSpace v, Scalar v ~ ℝ, Show v)
 
 
 -- $metricIntro
--- A norm is a way to quantify the magnitude of different vectors,
+-- A norm is a way to quantify the magnitude/length of different vectors,
 -- even if they point in different directions.
 -- 
 -- In an 'InnerSpace', a norm is always given by the scalar product,
@@ -562,19 +563,18 @@ instance (FiniteDimensional v, InnerSpace v, Scalar v ~ ℝ, Show v)
 -- for orthonormalisation, accept a 'Norm' as an extra argument instead of
 -- requiring 'InnerSpace'.
 
--- | A norm defined by
+-- | A seminorm defined by
 -- 
 -- @
 -- ‖v‖ = √(∑ᵢ ⟨dᵢ|v⟩²)
 -- @
 -- 
--- for some dual vectors @dᵢ@. Note that this only really generates a norm/metric if
--- these form a complete basis of the dual space, otherwise it will merely be
--- a /seminorm/.
+-- for some dual vectors @dᵢ@. If given a complete basis of the dual space,
+-- this generates a proper 'Norm'.
 -- 
--- If the @dᵢ@ are an orthonormal system, you get the 'euclideanNorm' (in
--- an inefficient form).
-spanNorm :: LSpace v => [DualVector v] -> Norm v
+-- If the @dᵢ@ are a complete orthonormal system, you get the 'euclideanNorm'
+-- (in an inefficient form).
+spanNorm :: LSpace v => [DualVector v] -> Seminorm v
 spanNorm dvs = Norm . LinearFunction $ \v -> sumV [dv ^* (dv<.>^v) | dv <- dvs]
 
 spanVariance :: LSpace v => [v] -> Variance v
@@ -586,7 +586,7 @@ relaxNorm :: SimpleSpace v => Norm v -> [v] -> Norm v
 relaxNorm me = \vs -> dualNorm . spanVariance $ vs' ++ vs
  where vs' = normSpanningSystem' me
 
--- | A positive semidefinite symmetric bilinear form. This gives rise
+-- | A positive (semi)definite symmetric bilinear form. This gives rise
 --   to a <https://en.wikipedia.org/wiki/Norm_(mathematics) norm> thus:
 -- 
 --   @
@@ -594,7 +594,7 @@ relaxNorm me = \vs -> dualNorm . spanVariance $ vs' ++ vs
 --   @
 --   
 --   Strictly speaking, this type is neither strong enough nor general enough to
---   deserve the name 'Norm': it includes proper seminorms (i.e. @m|$|v ≡ 0@ does
+--   deserve the name 'Norm': it includes proper 'Seminorm's (i.e. @m|$|v ≡ 0@ does
 --   not guarantee @v == zeroV@), but not actual norms such as the ℓ₁-norm on ℝⁿ
 --   (Taxcab norm) or the supremum norm.
 --   However, 𝐿₂-like norms are the only ones that can really be formulated without
@@ -603,6 +603,17 @@ relaxNorm me = \vs -> dualNorm . spanVariance $ vs' ++ vs
 newtype Norm v = Norm {
     applyNorm :: v -+> DualVector v
   }
+
+-- | A “norm” that may explicitly be degenerate, with @m|$|v ⩵ 0@ for some @v ≠ zeroV@.
+type Seminorm v = Norm v
+
+-- | @(m<>n|$|v)^2 ⩵ (m|$|v)^2 + (n|$|v)^2@
+instance LSpace v => Semigroup (Norm v) where
+  Norm m <> Norm n = Norm $ m^+^n
+-- | @mempty|$|v ≡ 0@
+instance LSpace v => Monoid (Seminorm v) where
+  mempty = Norm zeroV
+  mappend = (<>)
 
 -- | A multidimensional variance of points @v@ with some distribution can be
 --   considered a norm on the dual space, quantifying for a dual vector @dv@ the
@@ -661,7 +672,7 @@ Norm m <$| v = m $ v
 
 -- | The squared norm. More efficient than '|$|' because that needs to take
 --   the square root.
-normSq :: LSpace v => Norm v -> v -> Scalar v
+normSq :: LSpace v => Seminorm v -> v -> Scalar v
 normSq (Norm m) v = (m$v)<.>^v
 
 -- | Use a 'Norm' to measure the length / norm of a vector.
@@ -669,7 +680,7 @@ normSq (Norm m) v = (m$v)<.>^v
 -- @
 -- 'euclideanNorm' |$| v  ≡  √(v '<.>' v)
 -- @
-(|$|) :: (LSpace v, Floating (Scalar v)) => Norm v -> v -> Scalar v
+(|$|) :: (LSpace v, Floating (Scalar v)) => Seminorm v -> v -> Scalar v
 (|$|) m = sqrt . normSq m
 
 -- | `spanNorm` / `spanVariance` are inefficient if the number of vectors
