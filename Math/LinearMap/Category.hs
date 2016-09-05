@@ -30,6 +30,7 @@ module Math.LinearMap.Category (
             -- ** Tensor implementation
             , LinearMap (..), (+>)()
             , (⊕), (>+<)
+            , adjoint
             -- ** Dual vectors
             -- $dualVectorIntro
             , (<.>^)
@@ -76,7 +77,7 @@ module Math.LinearMap.Category (
             , Fractional', Fractional''
             , RealFrac'
             -- ** Misc
-            , relaxNorm
+            , relaxNorm, transformNorm, transformVariance
             , findNormalLength, normalLength
             ) where
 
@@ -418,6 +419,29 @@ instance ( FiniteDimensional u, LinearSpace (DualVector u), DualVector (DualVect
 deriving instance (Show (SubBasis u), Show (SubBasis v))
                     => Show (SubBasis (u,v))
 
+
+-- | For real matrices, this boils down to 'transpose'.
+--   For free complex spaces it also incurs complex conjugation.
+--   
+-- The signature can also be understood as
+--
+-- @
+-- adjoint :: (v +> w) -> (DualVector w +> DualVector v)
+-- @
+-- 
+-- Or
+--
+-- @
+-- adjoint :: (DualVector v +> DualVector w) -> (w +> v)
+-- @
+-- 
+-- But /not/ @(v+>w) -> (w+>v)@, in general (though in a Hilbert space, this too is
+-- equivalent, via 'riesz' isomorphism).
+adjoint :: (LSpace v, LSpace w, Scalar v ~ Scalar w)
+               => (v +> DualVector w) -+> (w +> DualVector v)
+adjoint = arr fromTensor . transposeTensor . arr asTensor
+
+
 infixr 0 \$
 
 -- | Inverse function application, aka solving of a linear system:
@@ -605,13 +629,11 @@ dualNorm :: ( FiniteDimensional v, FiniteDimensional (DualVector v)
 dualNorm (Norm m) = Norm . arr . pseudoInverse $ arr m
 
 transformNorm :: (LSpace v, LSpace w, Scalar v~Scalar w) => (v+>w) -> Norm w -> Norm v
-transformNorm f (Norm m) = Norm . arr $ f' . (fmap m $ f)
- where f' = asLinearMap $ transposeTensor $ asTensor $ f
+transformNorm f (Norm m) = Norm . arr $ (adjoint $ f) . (fmap m $ f)
 
 transformVariance :: (LSpace v, LSpace w, Scalar v~Scalar w)
                         => (v+>w) -> Variance v -> Variance w
-transformVariance f (Norm m) = Norm . arr $ f . (fmap m $ f')
- where f' = asLinearMap $ transposeTensor $ asTensor $ f
+transformVariance f (Norm m) = Norm . arr $ f . (fmap m $ adjoint $ f)
 
 infixl 6 ^%
 (^%) :: (LSpace v, Floating (Scalar v)) => v -> Norm v -> v
