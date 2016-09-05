@@ -40,7 +40,7 @@ import Math.VectorSpace.ZeroDimensional
 
 type Num' s = (Num s, VectorSpace s, Scalar s ~ s)
 type Num'' s = (Num' s, LinearSpace s)
-type Num''' s = (Num s, InnerSpace s, Scalar s ~ s, LSpace' s)
+type Num''' s = (Num s, InnerSpace s, Scalar s ~ s, LSpace' s, DualVector s ~ s)
   
 class (VectorSpace v) => TensorSpace v where
   -- | The internal representation of a 'Tensor' product.
