@@ -72,7 +72,7 @@ module Math.LinearMap.Category (
             -- ** Hilbert space operations
             , DualSpace, riesz, coRiesz, showsPrecAsRiesz, (.<)
             -- ** Constraint synonyms
-            , HilbertSpace
+            , HilbertSpace, SimpleSpace
             , Num', Num'', Num'''
             , Fractional', Fractional''
             , RealFrac'
@@ -582,9 +582,7 @@ spanVariance = spanNorm
 
 -- | Modify a norm in such a way that the given vectors lie within its unit ball.
 --   (Not /optimally/ – the unit ball may be bigger than necessary.)
-relaxNorm :: ( FiniteDimensional v, FiniteDimensional (DualVector v)
-             , SemiInner v, IEEE (Scalar v) )
-                => Norm v -> [v] -> Norm v
+relaxNorm :: SimpleSpace v => Norm v -> [v] -> Norm v
 relaxNorm me = \vs -> dualNorm . spanVariance $ vs' ++ vs
  where vs' = normSpanningSystem' me
 
@@ -623,9 +621,7 @@ adhocNorm = Norm uncanonicallyToDual
 
 -- | A proper norm induces a norm on the dual space. If you use this
 --   with a seminorm, the behaviour is undefined.
-dualNorm :: ( FiniteDimensional v, FiniteDimensional (DualVector v)
-            , SemiInner (DualVector v), RealFrac (Scalar v) )
-                 => Norm v -> Variance v
+dualNorm :: SimpleSpace v => Norm v -> Variance v
 dualNorm (Norm m) = Norm . arr . pseudoInverse $ arr m
 
 transformNorm :: (LSpace v, LSpace w, Scalar v~Scalar w) => (v+>w) -> Norm w -> Norm v
@@ -837,7 +833,7 @@ orthonormalityError :: LSpace v => Norm v -> [v] -> Scalar v
 orthonormalityError me vs = normSq me $ orthogonalComplementProj me vs $ sumV vs
 
 
-normSpanningSystem :: (FiniteDimensional v, SemiInner v, IEEE (Scalar v))
+normSpanningSystem :: SimpleSpace v
                => Norm v -> [DualVector v]
 normSpanningSystem = dualBasis . normSpanningSystem'
 
@@ -855,3 +851,7 @@ normSpanningSystem' me = orthonormaliseFussily 0 me $ enumerateSubBasis entireBa
 type HilbertSpace v = (LSpace v, InnerSpace v, DualVector v ~ v)
 
 type RealFrac' s = (IEEE s, HilbertSpace s, Scalar s ~ s)
+
+type SimpleSpace v = ( FiniteDimensional v, FiniteDimensional (DualVector v)
+                     , SemiInner v, SemiInner (DualVector v)
+                     , RealFrac' (Scalar v) )
