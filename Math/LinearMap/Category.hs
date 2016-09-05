@@ -75,7 +75,7 @@ module Math.LinearMap.Category (
             , HilbertSpace, SimpleSpace
             , Num', Num'', Num'''
             , Fractional', Fractional''
-            , RealFrac'
+            , RealFrac', RealFloat'
             -- ** Misc
             , relaxNorm, transformNorm, transformVariance
             , findNormalLength, normalLength
@@ -862,6 +862,7 @@ normSpanningSystem' me = orthonormaliseFussily 0 me $ enumerateSubBasis entireBa
 type HilbertSpace v = (LSpace v, InnerSpace v, DualVector v ~ v)
 
 type RealFrac' s = (IEEE s, HilbertSpace s, Scalar s ~ s)
+type RealFloat' s = (RealFrac' s, Floating s)
 
 type SimpleSpace v = ( FiniteDimensional v, FiniteDimensional (DualVector v)
                      , SemiInner v, SemiInner (DualVector v)
