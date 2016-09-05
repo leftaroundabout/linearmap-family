@@ -27,6 +27,7 @@ module Math.VectorSpace.ZeroDimensional (
                          ZeroDim (..)
             ) where
 
+import Data.AffineSpace
 import Data.VectorSpace
 import Data.Basis
 import Data.Void
@@ -39,6 +40,10 @@ instance Monoid (ZeroDim s) where
   mempty = Origin
   mappend Origin Origin = Origin
 
+instance AffineSpace (ZeroDim s) where
+  type Diff (ZeroDim s) = ZeroDim s
+  Origin .+^ Origin = Origin
+  Origin .-. Origin = Origin
 instance AdditiveGroup (ZeroDim s) where
   zeroV = Origin
   Origin ^+^ Origin = Origin
