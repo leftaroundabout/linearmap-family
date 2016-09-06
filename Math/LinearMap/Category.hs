@@ -44,6 +44,7 @@ module Math.LinearMap.Category (
             , (|$|)
             , normSq
             , (<$|)
+            , scaleNorm
             , normSpanningSystem
             , normSpanningSystem'
             -- ** Variances
@@ -586,6 +587,16 @@ relaxNorm :: SimpleSpace v => Norm v -> [v] -> Norm v
 relaxNorm me = \vs -> dualNorm . spanVariance $ vs' ++ vs
  where vs' = normSpanningSystem' me
 
+-- | Scale the result of a norm with the absolute of the given number.
+-- 
+-- @
+-- scaleNorm μ n |$| v = abs μ * (n|$|v)
+-- @
+-- 
+-- Equivalently, this scales the norm's unit ball by the reciprocal of that factor.
+scaleNorm :: LSpace v => Scalar v -> Norm v -> Norm v
+scaleNorm μ (Norm n) = Norm $ μ^2 *^ n
+
 -- | A positive (semi)definite symmetric bilinear form. This gives rise
 --   to a <https://en.wikipedia.org/wiki/Norm_(mathematics) norm> thus:
 -- 
@@ -621,7 +632,7 @@ instance LSpace v => Monoid (Seminorm v) where
 type Variance v = Norm (DualVector v)
 
 -- | The canonical standard norm (2-norm) on inner-product / Hilbert spaces.
-euclideanNorm :: (LSpace v, InnerSpace v, DualVector v ~ v) => Norm v
+euclideanNorm :: HilbertSpace v => Norm v
 euclideanNorm = Norm id
 
 -- | The norm induced from the (arbitrary) choice of basis in a finite space.
@@ -630,8 +641,9 @@ euclideanNorm = Norm id
 adhocNorm :: FiniteDimensional v => Norm v
 adhocNorm = Norm uncanonicallyToDual
 
--- | A proper norm induces a norm on the dual space. If you use this
---   with a seminorm, the behaviour is undefined.
+-- | A proper norm induces a norm on the dual space – the “reciprocal norm”.
+--   (The orthonormal systems of the norm and its dual are mutually conjugate.)
+--   The dual norm of a seminorm is undefined.
 dualNorm :: SimpleSpace v => Norm v -> Variance v
 dualNorm (Norm m) = Norm . arr . pseudoInverse $ arr m
 
