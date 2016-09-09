@@ -80,7 +80,7 @@ module Math.LinearMap.Category (
             -- ** Misc
             , relaxNorm, transformNorm, transformVariance
             , findNormalLength, normalLength
-            , summandSpaceNorms
+            , summandSpaceNorms, sharedNormSpanningSystem
             ) where
 
 import Math.LinearMap.Category.Class
@@ -867,6 +867,30 @@ normSpanningSystem = dualBasis . normSpanningSystem'
 normSpanningSystem' :: (FiniteDimensional v, IEEE (Scalar v))
                => Norm v -> [v]
 normSpanningSystem' me = orthonormaliseFussily 0 me $ enumerateSubBasis entireBasis
+
+
+-- | For any two norms, one can find a system of co-vectors that, with suitable
+--   coefficients, spans /either/ of them: if @shSys = sharedNormSpanningSystem n₀ n₁@,
+--   then
+-- 
+-- @
+-- n₀ = 'spanNorm' $ fst<$>shSys
+-- @
+-- 
+-- and
+-- 
+-- @
+-- n₁ = 'spanNorm' [dv^*η | (dv,η)<-shSys]
+-- @
+sharedNormSpanningSystem :: SimpleSpace v
+               => Norm v -> Norm v -> [(DualVector v, Scalar v)]
+sharedNormSpanningSystem (Norm n) (Norm m)
+           = sep =<< roughEigenSystem (Norm n) (pseudoInverse (arr n) . arr m)
+ where sep (Eigenvector λ _ λv _ _)
+         | λ>0        = [(n$v, sqrt λ)]
+         | otherwise  = []
+        where v = λv ^/ λ
+
 
 summandSpaceNorms :: (SimpleSpace u, SimpleSpace v, Scalar u ~ Scalar v)
                        => Norm (u,v) -> (Norm u, Norm v)
