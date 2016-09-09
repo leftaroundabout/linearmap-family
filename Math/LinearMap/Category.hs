@@ -104,6 +104,8 @@ import qualified Prelude as Hask
 import Control.Category.Constrained.Prelude hiding ((^))
 import Control.Arrow.Constrained
 
+import Linear ( V0(V0), V1(V1), V2(V2), V3(V3), V4(V4)
+              , _x, _y, _z, _w )
 import Data.VectorSpace.Free
 import Math.VectorSpace.ZeroDimensional
 import qualified Linear.Matrix as Mat

@@ -40,7 +40,8 @@ import Data.VectorSpace.Free
 import qualified Linear.Matrix as Mat
 import qualified Linear.Vector as Mat
 import qualified Linear.Metric as Mat
-import Linear (_x, _y, _z, _w)
+import Linear ( V0(V0), V1(V1), V2(V2), V3(V3), V4(V4)
+              , _x, _y, _z, _w )
 import Control.Lens ((^.))
 
 import Math.LinearMap.Asserted
