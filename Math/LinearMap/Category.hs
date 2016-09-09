@@ -80,6 +80,7 @@ module Math.LinearMap.Category (
             -- ** Misc
             , relaxNorm, transformNorm, transformVariance
             , findNormalLength, normalLength
+            , summandSpaceNorms
             ) where
 
 import Math.LinearMap.Category.Class
@@ -697,9 +698,10 @@ normSq (Norm m) v = (m$v)<.>^v
 (|$|) :: (LSpace v, Floating (Scalar v)) => Seminorm v -> v -> Scalar v
 (|$|) m = sqrt . normSq m
 
--- | `spanNorm` / `spanVariance` are inefficient if the number of vectors
---   is similar to the dimension of the space. Use this function to optimise
---   the underlying operator to a dense matrix representation.
+-- | 'spanNorm' / 'spanVariance' are inefficient if the number of vectors
+--   is similar to the dimension of the space, or even larger than it.
+--   Use this function to optimise the underlying operator to a dense
+--   matrix representation.
 densifyNorm :: LSpace v => Norm v -> Norm v
 densifyNorm (Norm m) = Norm . arr $ sampleLinearFunction $ m
 
@@ -866,6 +868,11 @@ normSpanningSystem' :: (FiniteDimensional v, IEEE (Scalar v))
                => Norm v -> [v]
 normSpanningSystem' me = orthonormaliseFussily 0 me $ enumerateSubBasis entireBasis
 
+summandSpaceNorms :: (SimpleSpace u, SimpleSpace v, Scalar u ~ Scalar v)
+                       => Norm (u,v) -> (Norm u, Norm v)
+summandSpaceNorms nuv = ( densifyNorm $ spanNorm (fst<$>spanSys)
+                        , densifyNorm $ spanNorm (snd<$>spanSys) )
+ where spanSys = normSpanningSystem nuv
 
 
 
