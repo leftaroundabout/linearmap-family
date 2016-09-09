@@ -888,3 +888,8 @@ type RealFloat' s = (RealFrac' s, Floating s)
 type SimpleSpace v = ( FiniteDimensional v, FiniteDimensional (DualVector v)
                      , SemiInner v, SemiInner (DualVector v)
                      , RealFrac' (Scalar v) )
+
+
+
+instance (SimpleSpace v, Show (DualVector v)) => Show (Norm v) where
+  showsPrec p n = showParen (p>9) $ ("spanNorm "++) . shows (normSpanningSystem n)
