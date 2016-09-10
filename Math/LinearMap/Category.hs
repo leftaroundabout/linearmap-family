@@ -49,6 +49,7 @@ module Math.LinearMap.Category (
             , normSpanningSystem'
             -- ** Variances
             , Variance, spanVariance, dualNorm
+            , dependence
             -- ** Utility
             , densifyNorm
             -- * Solving linear equations
@@ -890,6 +891,16 @@ sharedNormSpanningSystem (Norm n) (Norm m)
          | λ>0        = [(n$v, sqrt λ)]
          | otherwise  = []
         where v = λv ^/ λ
+
+
+-- | Interpret a variance as a covariance between two subspaces, and
+--   normalise it by the variance on @u@. The result is effectively
+--   the linear regression coefficient of a simple regression of the vectors
+--   spanning the variance.
+dependence :: (SimpleSpace u, SimpleSpace v, Scalar u~Scalar v)
+                => Variance (u,v) -> (u+>v)
+dependence (Norm m) = fmap ( snd . m . (id&&&zeroV) )
+      $ pseudoInverse (arr $ fst . m . (id&&&zeroV))
 
 
 summandSpaceNorms :: (SimpleSpace u, SimpleSpace v, Scalar u ~ Scalar v)
