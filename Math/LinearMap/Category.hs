@@ -53,7 +53,7 @@ module Math.LinearMap.Category (
             -- ** Utility
             , densifyNorm
             -- * Solving linear equations
-            , (\$), pseudoInverse
+            , (\$), pseudoInverse, roughDet
             -- * Eigenvalue problems
             , eigen
             , constructEigenSystem
@@ -856,6 +856,12 @@ eigen :: (FiniteDimensional v, HilbertSpace v, IEEE (Scalar v))
                => (v+>v) -> [(Scalar v, v)]
 eigen f = map (ev_Eigenvalue &&& ev_Eigenvector)
    $ iterate (finishEigenSystem euclideanNorm) (roughEigenSystem euclideanNorm f) !! 2
+
+
+-- | Approximation of the determinant.
+roughDet :: (FiniteDimensional v, IEEE (Scalar v)) => (v+>v) -> Scalar v
+roughDet = roughEigenSystem adhocNorm >>> map ev_Eigenvalue >>> product
+
 
 orthonormalityError :: LSpace v => Norm v -> [v] -> Scalar v
 orthonormalityError me vs = normSq me $ orthogonalComplementProj me vs $ sumV vs
