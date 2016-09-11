@@ -81,7 +81,7 @@ module Math.LinearMap.Category (
             -- ** Misc
             , relaxNorm, transformNorm, transformVariance
             , findNormalLength, normalLength
-            , summandSpaceNorms, sharedNormSpanningSystem
+            , summandSpaceNorms, sumSubspaceNorms, sharedNormSpanningSystem
             ) where
 
 import Math.LinearMap.Category.Class
@@ -909,6 +909,9 @@ summandSpaceNorms nuv = ( densifyNorm $ spanNorm (fst<$>spanSys)
                         , densifyNorm $ spanNorm (snd<$>spanSys) )
  where spanSys = normSpanningSystem nuv
 
+sumSubspaceNorms :: (LSpace u, LSpace v, Scalar u~Scalar v)
+                         => Norm u -> Norm v -> Norm (u,v)
+sumSubspaceNorms (Norm nu) (Norm nv) = Norm $ nu *** nv
 
 
 (^) :: Num a => a -> Int -> a
