@@ -43,6 +43,7 @@ library
   other-modules:       Math.LinearMap.Category.Class
                        Math.LinearMap.Asserted
                        Math.LinearMap.Category.Instances
+                       Math.VectorSpace.Docile
   other-extensions:    FlexibleInstances, UndecidableInstances, FunctionalDependencies, TypeOperators, TypeFamilies
   build-depends:       base >=4.8 && <4.9,
                        vector-space >=0.10 && <0.11,
