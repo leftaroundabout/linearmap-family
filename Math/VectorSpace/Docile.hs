@@ -182,6 +182,8 @@ v^/^w = case (v<.>w) of
    0 -> 0
    vw -> vw / (w<.>w)
 
+type DList x = [x]->[x]
+
 class (LSpace v, LSpace (Scalar v)) => FiniteDimensional v where
   -- | Whereas 'Basis'-values refer to a single basis vector, a single
   --   'SubBasis' value represents a collection of such basis vectors,
@@ -198,7 +200,12 @@ class (LSpace v, LSpace (Scalar v)) => FiniteDimensional v where
   enumerateSubBasis :: SubBasis v -> [v]
   
   -- | Split up a linear map in “column vectors” WRT some suitable basis.
-  decomposeLinMap :: (v+>w) -> (SubBasis v, [w]->[w])
+  decomposeLinMap :: (v+>w) -> (SubBasis v, DList w)
+  
+  -- | Expand in the given basis, if possible. Else yield a superbasis of the given
+  --   one, in which this /is/ possible, and the decomposition therein.
+  decomposeLinMapWithin :: SubBasis v -> (v+>w)
+                        -> Either (SubBasis v, DList w) (DList w)
   
   -- | Assemble a vector from coefficients in some basis. Return any excess coefficients.
   recomposeSB :: SubBasis v -> [Scalar v] -> (v, [Scalar v])
@@ -223,6 +230,7 @@ instance (Num''' s) => FiniteDimensional (ZeroDim s) where
   enumerateSubBasis ZeroBasis = []
   recomposeSB ZeroBasis l = (Origin, l)
   decomposeLinMap _ = (ZeroBasis, id)
+  decomposeLinMapWithin ZeroBasis _ = pure id
   recomposeContraLinMap _ _ = LinearMap Origin
   uncanonicallyFromDual = id
   uncanonicallyToDual = id
@@ -233,6 +241,7 @@ instance (Num''' s, LinearSpace s) => FiniteDimensional (V0 s) where
   enumerateSubBasis V0Basis = []
   recomposeSB V0Basis l = (V0, l)
   decomposeLinMap _ = (V0Basis, id)
+  decomposeLinMapWithin V0Basis _ = pure id
   recomposeContraLinMap _ _ = LinearMap V0
   uncanonicallyFromDual = id
   uncanonicallyToDual = id
@@ -244,6 +253,7 @@ instance FiniteDimensional ℝ where
   recomposeSB RealsBasis [] = (0, [])
   recomposeSB RealsBasis (μ:cs) = (μ, cs)
   decomposeLinMap (LinearMap v) = (RealsBasis, (v:))
+  decomposeLinMapWithin RealsBasis (LinearMap v) = pure (v:)
   recomposeContraLinMap fw = LinearMap . fw
   uncanonicallyFromDual = id
   uncanonicallyToDual = id
@@ -259,6 +269,7 @@ instance (Num''' s, LSpace s)                            \
   recomposeSB _ (take:cs) = (give, cs);                   \
   recomposeSB b cs = recomposeSB b $ cs ++ [0];        \
   decomposeLinMap (LinearMap m) = (VB, (toList m ++));          \
+  decomposeLinMapWithin VB (LinearMap m) = pure (toList m ++);          \
   recomposeContraLinMap fw mv = LinearMap $ (\v -> fw $ fmap (<.>^v) mv) <$> Mat.identity }
 FreeFiniteDimensional(V1, V1Basis, c₀         , V1 c₀         )
 FreeFiniteDimensional(V2, V2Basis, c₀:c₁      , V2 c₀ c₁      )
@@ -267,8 +278,7 @@ FreeFiniteDimensional(V4, V4Basis, c₀:c₁:c₂:c₃, V4 c₀ c₁ c₂ c₃)
                                   
 deriving instance Show (SubBasis ℝ)
   
-instance ( FiniteDimensional u, LinearSpace (DualVector u), DualVector (DualVector u) ~ u
-         , FiniteDimensional v, LinearSpace (DualVector v), DualVector (DualVector v) ~ v
+instance ( FiniteDimensional u, FiniteDimensional v
          , Scalar u ~ Scalar v, Fractional' (Scalar v) )
             => FiniteDimensional (u,v) where
   data SubBasis (u,v) = TupleBasis !(SubBasis u) !(SubBasis v)
@@ -278,6 +288,13 @@ instance ( FiniteDimensional u, LinearSpace (DualVector u), DualVector (DualVect
   decomposeLinMap (LinearMap (fu, fv))
        = case (decomposeLinMap (asLinearMap$fu), decomposeLinMap (asLinearMap$fv)) of
          ((bu, du), (bv, dv)) -> (TupleBasis bu bv, du . dv)
+  decomposeLinMapWithin (TupleBasis bu bv) (LinearMap (fu, fv))
+       = case ( decomposeLinMapWithin bu (asLinearMap$fu)
+              , decomposeLinMapWithin bv (asLinearMap$fv) ) of
+         (Left (bu', du), Left (bv', dv)) -> Left (TupleBasis bu' bv', du . dv)
+         (Left (bu', du), Right dv) -> Left (TupleBasis bu' bv, du . dv)
+         (Right du, Left (bv', dv)) -> Left (TupleBasis bu bv', du . dv)
+         (Right du, Right dv) -> Right $ du . dv
   recomposeSB (TupleBasis bu bv) coefs = case recomposeSB bu coefs of
                         (u, coefs') -> case recomposeSB bv coefs' of
                          (v, coefs'') -> ((u,v), coefs'')
