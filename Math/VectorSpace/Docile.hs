@@ -200,15 +200,18 @@ class (LSpace v, LSpace (Scalar v)) => FiniteDimensional v where
   enumerateSubBasis :: SubBasis v -> [v]
   
   -- | Split up a linear map in “column vectors” WRT some suitable basis.
-  decomposeLinMap :: (v+>w) -> (SubBasis v, DList w)
+  decomposeLinMap :: (LSpace w, Scalar w ~ Scalar v) => (v+>w) -> (SubBasis v, DList w)
   
   -- | Expand in the given basis, if possible. Else yield a superbasis of the given
   --   one, in which this /is/ possible, and the decomposition therein.
-  decomposeLinMapWithin :: SubBasis v -> (v+>w)
-                        -> Either (SubBasis v, DList w) (DList w)
+  decomposeLinMapWithin :: (LSpace w, Scalar w ~ Scalar v)
+      => SubBasis v -> (v+>w) -> Either (SubBasis v, DList w) (DList w)
   
   -- | Assemble a vector from coefficients in some basis. Return any excess coefficients.
   recomposeSB :: SubBasis v -> [Scalar v] -> (v, [Scalar v])
+  
+  recomposeTensor :: (FiniteDimensional w, Scalar w ~ Scalar v)
+               => SubBasis v -> SubBasis w -> [Scalar v] -> (v⊗w, [Scalar v])
   
   -- | Given a function that interprets a coefficient-container as a vector representation,
   --   build a linear function mapping to that space.
@@ -229,6 +232,7 @@ instance (Num''' s) => FiniteDimensional (ZeroDim s) where
   entireBasis = ZeroBasis
   enumerateSubBasis ZeroBasis = []
   recomposeSB ZeroBasis l = (Origin, l)
+  recomposeTensor ZeroBasis _ l = (Tensor Origin, l)
   decomposeLinMap _ = (ZeroBasis, id)
   decomposeLinMapWithin ZeroBasis _ = pure id
   recomposeContraLinMap _ _ = LinearMap Origin
@@ -240,6 +244,7 @@ instance (Num''' s, LinearSpace s) => FiniteDimensional (V0 s) where
   entireBasis = V0Basis
   enumerateSubBasis V0Basis = []
   recomposeSB V0Basis l = (V0, l)
+  recomposeTensor V0Basis _ l = (Tensor V0, l)
   decomposeLinMap _ = (V0Basis, id)
   decomposeLinMapWithin V0Basis _ = pure id
   recomposeContraLinMap _ _ = LinearMap V0
@@ -252,13 +257,14 @@ instance FiniteDimensional ℝ where
   enumerateSubBasis RealsBasis = [1]
   recomposeSB RealsBasis [] = (0, [])
   recomposeSB RealsBasis (μ:cs) = (μ, cs)
+  recomposeTensor RealsBasis bw = first Tensor . recomposeSB bw
   decomposeLinMap (LinearMap v) = (RealsBasis, (v:))
   decomposeLinMapWithin RealsBasis (LinearMap v) = pure (v:)
   recomposeContraLinMap fw = LinearMap . fw
   uncanonicallyFromDual = id
   uncanonicallyToDual = id
 
-#define FreeFiniteDimensional(V, VB, take, give)        \
+#define FreeFiniteDimensional(V, VB, dimens, take, give)        \
 instance (Num''' s, LSpace s)                            \
             => FiniteDimensional (V s) where {            \
   data SubBasis (V s) = VB;                             \
@@ -268,18 +274,27 @@ instance (Num''' s, LSpace s)                            \
   uncanonicallyToDual = id;                                  \
   recomposeSB _ (take:cs) = (give, cs);                   \
   recomposeSB b cs = recomposeSB b $ cs ++ [0];        \
+  recomposeTensor VB bw cs = case recomposeMultiple bw dimens cs of \
+                   {(take:[], cs') -> (Tensor (give), cs')};              \
   decomposeLinMap (LinearMap m) = (VB, (toList m ++));          \
   decomposeLinMapWithin VB (LinearMap m) = pure (toList m ++);          \
   recomposeContraLinMap fw mv = LinearMap $ (\v -> fw $ fmap (<.>^v) mv) <$> Mat.identity }
-FreeFiniteDimensional(V1, V1Basis, c₀         , V1 c₀         )
-FreeFiniteDimensional(V2, V2Basis, c₀:c₁      , V2 c₀ c₁      )
-FreeFiniteDimensional(V3, V3Basis, c₀:c₁:c₂   , V3 c₀ c₁ c₂   )
-FreeFiniteDimensional(V4, V4Basis, c₀:c₁:c₂:c₃, V4 c₀ c₁ c₂ c₃)
+FreeFiniteDimensional(V1, V1Basis, 1, c₀         , V1 c₀         )
+FreeFiniteDimensional(V2, V2Basis, 2, c₀:c₁      , V2 c₀ c₁      )
+FreeFiniteDimensional(V3, V3Basis, 3, c₀:c₁:c₂   , V3 c₀ c₁ c₂   )
+FreeFiniteDimensional(V4, V4Basis, 4, c₀:c₁:c₂:c₃, V4 c₀ c₁ c₂ c₃)
+
+recomposeMultiple :: FiniteDimensional w
+              => SubBasis w -> Int -> [Scalar w] -> ([w], [Scalar w])
+recomposeMultiple bw n dc
+ | n<1        = ([], dc)
+ | otherwise  = case recomposeSB bw dc of
+           (w, dc') -> first (w:) $ recomposeMultiple bw (n-1) dc'
                                   
 deriving instance Show (SubBasis ℝ)
   
 instance ( FiniteDimensional u, FiniteDimensional v
-         , Scalar u ~ Scalar v, Fractional' (Scalar v) )
+         , Scalar u ~ Scalar v )
             => FiniteDimensional (u,v) where
   data SubBasis (u,v) = TupleBasis !(SubBasis u) !(SubBasis v)
   entireBasis = TupleBasis entireBasis entireBasis
@@ -298,6 +313,9 @@ instance ( FiniteDimensional u, FiniteDimensional v
   recomposeSB (TupleBasis bu bv) coefs = case recomposeSB bu coefs of
                         (u, coefs') -> case recomposeSB bv coefs' of
                          (v, coefs'') -> ((u,v), coefs'')
+  recomposeTensor (TupleBasis bu bv) bw cs = case recomposeTensor bu bw cs of
+            (tuw, cs') -> case recomposeTensor bv bw cs' of
+               (tvw, cs'') -> (Tensor (tuw, tvw), cs'')
   recomposeContraLinMap fw dds
          = recomposeContraLinMap fw (fst<$>dds)
           ⊕ recomposeContraLinMap fw (snd<$>dds)
