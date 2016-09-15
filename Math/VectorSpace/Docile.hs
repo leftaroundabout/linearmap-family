@@ -218,6 +218,11 @@ class (LSpace v, LSpace (Scalar v)) => FiniteDimensional v where
   recomposeContraLinMap :: (LinearSpace w, Scalar w ~ Scalar v, Hask.Functor f)
            => (f (Scalar w) -> w) -> f (DualVector v) -> v+>w
   
+  recomposeContraLinMapTensor
+        :: ( FiniteDimensional u, LinearSpace w
+           , Scalar u ~ Scalar v, Scalar w ~ Scalar v, Hask.Functor f )
+           => (f (Scalar w) -> w) -> f (DualVector v⊗DualVector u) -> (v⊗u)+>w
+  
   -- | The existance of a finite basis gives us an isomorphism between a space
   --   and its dual space. Note that this isomorphism is not natural (i.e. it
   --   depends on the actual choice of basis, unlike everything else in this
@@ -236,6 +241,7 @@ instance (Num''' s) => FiniteDimensional (ZeroDim s) where
   decomposeLinMap _ = (ZeroBasis, id)
   decomposeLinMapWithin ZeroBasis _ = pure id
   recomposeContraLinMap _ _ = LinearMap Origin
+  recomposeContraLinMapTensor _ _ = LinearMap Origin
   uncanonicallyFromDual = id
   uncanonicallyToDual = id
   
@@ -248,6 +254,7 @@ instance (Num''' s, LinearSpace s) => FiniteDimensional (V0 s) where
   decomposeLinMap _ = (V0Basis, id)
   decomposeLinMapWithin V0Basis _ = pure id
   recomposeContraLinMap _ _ = LinearMap V0
+  recomposeContraLinMapTensor _ _ = LinearMap V0
   uncanonicallyFromDual = id
   uncanonicallyToDual = id
   
@@ -261,6 +268,8 @@ instance FiniteDimensional ℝ where
   decomposeLinMap (LinearMap v) = (RealsBasis, (v:))
   decomposeLinMapWithin RealsBasis (LinearMap v) = pure (v:)
   recomposeContraLinMap fw = LinearMap . fw
+  recomposeContraLinMapTensor fw = arr uncurryLinearMap . LinearMap
+              . recomposeContraLinMap fw . fmap getTensorProduct
   uncanonicallyFromDual = id
   uncanonicallyToDual = id
 
@@ -278,7 +287,12 @@ instance (Num''' s, LSpace s)                            \
                    {(take:[], cs') -> (Tensor (give), cs')};              \
   decomposeLinMap (LinearMap m) = (VB, (toList m ++));          \
   decomposeLinMapWithin VB (LinearMap m) = pure (toList m ++);          \
-  recomposeContraLinMap fw mv = LinearMap $ (\v -> fw $ fmap (<.>^v) mv) <$> Mat.identity }
+  recomposeContraLinMap fw mv \
+         = LinearMap $ (\v -> fw $ fmap (<.>^v) mv) <$> Mat.identity; \
+  recomposeContraLinMapTensor fw mv = LinearMap $ \
+       (\v -> fromLinearMap $ recomposeContraLinMap fw \
+                $ fmap (\(Tensor q) -> foldl' (^+^) zeroV $ liftA2 (*^) v q) mv) \
+                       <$> Mat.identity }
 FreeFiniteDimensional(V1, V1Basis, 1, c₀         , V1 c₀         )
 FreeFiniteDimensional(V2, V2Basis, 2, c₀:c₁      , V2 c₀ c₁      )
 FreeFiniteDimensional(V3, V3Basis, 3, c₀:c₁:c₂   , V3 c₀ c₁ c₂   )
@@ -319,6 +333,12 @@ instance ( FiniteDimensional u, FiniteDimensional v
   recomposeContraLinMap fw dds
          = recomposeContraLinMap fw (fst<$>dds)
           ⊕ recomposeContraLinMap fw (snd<$>dds)
+  recomposeContraLinMapTensor fw dds
+     = uncurryLinearMap
+         $ LinearMap ( fromLinearMap . curryLinearMap
+                         $ recomposeContraLinMapTensor fw (fmap (\(Tensor(tu,_))->tu) dds)
+                     , fromLinearMap . curryLinearMap
+                         $ recomposeContraLinMapTensor fw (fmap (\(Tensor(_,tv))->tv) dds) )
   uncanonicallyFromDual = uncanonicallyFromDual *** uncanonicallyFromDual
   uncanonicallyToDual = uncanonicallyToDual *** uncanonicallyToDual
   
