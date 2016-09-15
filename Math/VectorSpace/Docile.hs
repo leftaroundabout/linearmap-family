@@ -32,7 +32,7 @@ import Data.List (sortBy, foldl')
 import qualified Data.Set as Set
 import Data.Set (Set)
 import Data.Ord (comparing)
-import Data.List (maximumBy)
+import Data.List (maximumBy, unfoldr)
 import Data.Foldable (toList)
 import Data.Semigroup
 
@@ -217,6 +217,9 @@ class (LSpace v, LSpace (Scalar v)) => FiniteDimensional v where
   
   enumerateSubBasis :: SubBasis v -> [v]
   
+  subbasisDimension :: SubBasis v -> Int
+  subbasisDimension = length . enumerateSubBasis
+  
   -- | Split up a linear map in “column vectors” WRT some suitable basis.
   decomposeLinMap :: (LSpace w, Scalar w ~ Scalar v) => (v+>w) -> (SubBasis v, DList w)
   
@@ -228,8 +231,10 @@ class (LSpace v, LSpace (Scalar v)) => FiniteDimensional v where
   -- | Assemble a vector from coefficients in some basis. Return any excess coefficients.
   recomposeSB :: SubBasis v -> [Scalar v] -> (v, [Scalar v])
   
-  recomposeTensor :: (FiniteDimensional w, Scalar w ~ Scalar v)
+  recomposeSBTensor :: (FiniteDimensional w, Scalar w ~ Scalar v)
                => SubBasis v -> SubBasis w -> [Scalar v] -> (v⊗w, [Scalar v])
+  
+  recomposeLinMap :: (LSpace w, Scalar w~Scalar v) => SubBasis v -> [w] -> (v+>w, [w])
   
   -- | Given a function that interprets a coefficient-container as a vector representation,
   --   build a linear function mapping to that space.
@@ -254,8 +259,10 @@ instance (Num''' s) => FiniteDimensional (ZeroDim s) where
   data SubBasis (ZeroDim s) = ZeroBasis
   entireBasis = ZeroBasis
   enumerateSubBasis ZeroBasis = []
+  subbasisDimension ZeroBasis = 0
   recomposeSB ZeroBasis l = (Origin, l)
-  recomposeTensor ZeroBasis _ l = (Tensor Origin, l)
+  recomposeSBTensor ZeroBasis _ l = (Tensor Origin, l)
+  recomposeLinMap ZeroBasis l = (LinearMap Origin, l)
   decomposeLinMap _ = (ZeroBasis, id)
   decomposeLinMapWithin ZeroBasis _ = pure id
   recomposeContraLinMap _ _ = LinearMap Origin
@@ -267,8 +274,10 @@ instance (Num''' s, LinearSpace s) => FiniteDimensional (V0 s) where
   data SubBasis (V0 s) = V0Basis
   entireBasis = V0Basis
   enumerateSubBasis V0Basis = []
+  subbasisDimension V0Basis = 0
   recomposeSB V0Basis l = (V0, l)
-  recomposeTensor V0Basis _ l = (Tensor V0, l)
+  recomposeSBTensor V0Basis _ l = (Tensor V0, l)
+  recomposeLinMap V0Basis l = (LinearMap V0, l)
   decomposeLinMap _ = (V0Basis, id)
   decomposeLinMapWithin V0Basis _ = pure id
   recomposeContraLinMap _ _ = LinearMap V0
@@ -280,9 +289,11 @@ instance FiniteDimensional ℝ where
   data SubBasis ℝ = RealsBasis
   entireBasis = RealsBasis
   enumerateSubBasis RealsBasis = [1]
+  subbasisDimension RealsBasis = 1
   recomposeSB RealsBasis [] = (0, [])
   recomposeSB RealsBasis (μ:cs) = (μ, cs)
-  recomposeTensor RealsBasis bw = first Tensor . recomposeSB bw
+  recomposeSBTensor RealsBasis bw = first Tensor . recomposeSB bw
+  recomposeLinMap RealsBasis (w:ws) = (LinearMap w, ws)
   decomposeLinMap (LinearMap v) = (RealsBasis, (v:))
   decomposeLinMapWithin RealsBasis (LinearMap v) = pure (v:)
   recomposeContraLinMap fw = LinearMap . fw
@@ -297,12 +308,14 @@ instance (Num''' s, LSpace s)                            \
   data SubBasis (V s) = VB;                             \
   entireBasis = VB;                                      \
   enumerateSubBasis VB = toList $ Mat.identity;      \
+  subbasisDimension VB = dimens;                       \
   uncanonicallyFromDual = id;                               \
   uncanonicallyToDual = id;                                  \
   recomposeSB _ (take:cs) = (give, cs);                   \
   recomposeSB b cs = recomposeSB b $ cs ++ [0];        \
-  recomposeTensor VB bw cs = case recomposeMultiple bw dimens cs of \
+  recomposeSBTensor VB bw cs = case recomposeMultiple bw dimens cs of \
                    {(take:[], cs') -> (Tensor (give), cs')};              \
+  recomposeLinMap VB (take:ws') = (LinearMap (give), ws');   \
   decomposeLinMap (LinearMap m) = (VB, (toList m ++));          \
   decomposeLinMapWithin VB (LinearMap m) = pure (toList m ++);          \
   recomposeContraLinMap fw mv \
@@ -332,6 +345,7 @@ instance ( FiniteDimensional u, FiniteDimensional v
   entireBasis = TupleBasis entireBasis entireBasis
   enumerateSubBasis (TupleBasis bu bv)
        = ((,zeroV)<$>enumerateSubBasis bu) ++ ((zeroV,)<$>enumerateSubBasis bv)
+  subbasisDimension (TupleBasis bu bv) = subbasisDimension bu + subbasisDimension bv
   decomposeLinMap (LinearMap (fu, fv))
        = case (decomposeLinMap (asLinearMap$fu), decomposeLinMap (asLinearMap$fv)) of
          ((bu, du), (bv, dv)) -> (TupleBasis bu bv, du . dv)
@@ -345,9 +359,11 @@ instance ( FiniteDimensional u, FiniteDimensional v
   recomposeSB (TupleBasis bu bv) coefs = case recomposeSB bu coefs of
                         (u, coefs') -> case recomposeSB bv coefs' of
                          (v, coefs'') -> ((u,v), coefs'')
-  recomposeTensor (TupleBasis bu bv) bw cs = case recomposeTensor bu bw cs of
-            (tuw, cs') -> case recomposeTensor bv bw cs' of
+  recomposeSBTensor (TupleBasis bu bv) bw cs = case recomposeSBTensor bu bw cs of
+            (tuw, cs') -> case recomposeSBTensor bv bw cs' of
                (tvw, cs'') -> (Tensor (tuw, tvw), cs'')
+  recomposeLinMap (TupleBasis bu bv) ws = case recomposeLinMap bu ws of
+           (lmu, ws') -> first (lmu⊕) $ recomposeLinMap bv ws'
   recomposeContraLinMap fw dds
          = recomposeContraLinMap fw (fst<$>dds)
           ⊕ recomposeContraLinMap fw (snd<$>dds)
@@ -372,6 +388,7 @@ instance ∀ s u v .
   entireBasis = TensorBasis entireBasis entireBasis
   enumerateSubBasis (TensorBasis bu bv)
        = [ u⊗v | u <- enumerateSubBasis bu, v <- enumerateSubBasis bv ]
+  subbasisDimension (TensorBasis bu bv) = subbasisDimension bu * subbasisDimension bv
   decomposeLinMap muvw = case decomposeLinMap $ curryLinearMap $ muvw of
          (bu, mvwsg) -> first (TensorBasis bu) . go id $ mvwsg []
    where (go, _) = tensorLinmapDecompositionhelpers
@@ -380,9 +397,12 @@ instance ∀ s u v .
           Left (bu', mvwsg) -> let (_, (bv', ws)) = goWith bv id (mvwsg []) id
                                in Left (TensorBasis bu' bv', ws)
    where (_, goWith) = tensorLinmapDecompositionhelpers
-  recomposeSB (TensorBasis bu bv) = recomposeTensor bu bv
-  recomposeTensor (TensorBasis bu bv) bw
-          = first (arr lassocTensor) . recomposeTensor bu (TensorBasis bv bw)
+  recomposeSB (TensorBasis bu bv) = recomposeSBTensor bu bv
+  recomposeSBTensor (TensorBasis bu bv) bw
+          = first (arr lassocTensor) . recomposeSBTensor bu (TensorBasis bv bw)
+  recomposeLinMap (TensorBasis bu bv) ws =
+      ( uncurryLinearMap $ fst . recomposeLinMap bu $ unfoldr (pure . recomposeLinMap bv) ws
+      , drop (subbasisDimension bu * subbasisDimension bv) ws )
   recomposeContraLinMap = recomposeContraLinMapTensor
   recomposeContraLinMapTensor fw dds
      = uncurryLinearMap . uncurryLinearMap . fmap (curryLinearMap) . curryLinearMap
@@ -427,6 +447,7 @@ instance ∀ s u v .
   entireBasis = case entireBasis of TensorBasis bu bv -> LinMapBasis bu bv
   enumerateSubBasis (LinMapBasis bu bv)
           = arr (fmap asLinearMap) . enumerateSubBasis $ TensorBasis bu bv
+  subbasisDimension (LinMapBasis bu bv) = subbasisDimension bu * subbasisDimension bv
   decomposeLinMap = first (\(TensorBasis bv bu)->LinMapBasis bu bv)
                     . decomposeLinMap . coerce
   decomposeLinMapWithin (LinMapBasis bu bv) m
@@ -435,8 +456,12 @@ instance ∀ s u v .
               Left (TensorBasis bv' bu', ws) -> Left (LinMapBasis bu' bv', ws)
   recomposeSB (LinMapBasis bu bv)
      = recomposeSB (TensorBasis bu bv) >>> first (arr fromTensor)
-  recomposeTensor (LinMapBasis bu bv) bw
-     = recomposeTensor (TensorBasis bu bv) bw >>> first coerce
+  recomposeSBTensor (LinMapBasis bu bv) bw
+     = recomposeSBTensor (TensorBasis bu bv) bw >>> first coerce
+  recomposeLinMap (LinMapBasis bu bv) ws =
+      ( coUncurryLinearMap . fmap asTensor $ fst . recomposeLinMap bv
+                   $ unfoldr (pure . recomposeLinMap bu) ws
+      , drop (subbasisDimension bu * subbasisDimension bv) ws )
   recomposeContraLinMap fw dds = coUncurryLinearMap . fmap fromLinearMap . curryLinearMap
                    $ recomposeContraLinMapTensor fw $ fmap (arr asTensor) dds
   recomposeContraLinMapTensor fw dds
