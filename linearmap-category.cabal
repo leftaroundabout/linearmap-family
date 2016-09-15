@@ -48,7 +48,7 @@ library
   build-depends:       base >=4.8 && <4.9,
                        vector-space >=0.10 && <0.11,
                        constrained-categories >=0.3 && <0.4,
-                       containers,
+                       containers, vector,
                        free-vector-spaces >= 0.1.1 && < 0.2,
                        linear, lens,
                        semigroups,

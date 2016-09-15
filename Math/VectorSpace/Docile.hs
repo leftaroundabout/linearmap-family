@@ -19,6 +19,7 @@
 {-# LANGUAGE ScopedTypeVariables  #-}
 {-# LANGUAGE UnicodeSyntax        #-}
 {-# LANGUAGE TupleSections        #-}
+{-# LANGUAGE LambdaCase           #-}
 {-# LANGUAGE ConstraintKinds      #-}
 
 module Math.VectorSpace.Docile where
@@ -47,6 +48,7 @@ import Control.Arrow.Constrained
 
 import Linear ( V0(V0), V1(V1), V2(V2), V3(V3), V4(V4)
               , _x, _y, _z, _w )
+import qualified Data.Vector.Unboxed as UArr
 import Data.VectorSpace.Free
 import Math.VectorSpace.ZeroDimensional
 import qualified Linear.Matrix as Mat
@@ -600,3 +602,36 @@ type SimpleSpace v = ( FiniteDimensional v, FiniteDimensional (DualVector v)
                      , RealFrac' (Scalar v) )
 
 
+instance ∀ s u v .
+         ( FiniteDimensional u, LSpace v, FiniteFreeSpace v
+         , Scalar u~s, Scalar v~s ) => FiniteFreeSpace (LinearMap s u v) where
+  freeDimension _ = subbasisDimension (entireBasis :: SubBasis u)
+                       * freeDimension ([]::[v])
+  toFullUnboxVect = decomposeLinMapWithin entireBasis >>> \case
+            Right l -> UArr.concat $ toFullUnboxVect <$> l []
+  unsafeFromFullUnboxVect arrv = fst . recomposeLinMap entireBasis
+          $ [unsafeFromFullUnboxVect $ UArr.slice (dv*j) dv arrv | j <- [0 .. du-1]]
+   where du = subbasisDimension (entireBasis :: SubBasis u)
+         dv = freeDimension ([]::[v])
+
+instance ∀ s u v .
+         ( LSpace u, FiniteDimensional (DualVector u), LSpace v, FiniteFreeSpace v
+         , Scalar u~s, Scalar v~s ) => FiniteFreeSpace (Tensor s u v) where
+  freeDimension _ = subbasisDimension (entireBasis :: SubBasis (DualVector u))
+                        * freeDimension ([]::[v])
+  toFullUnboxVect = arr asLinearMap >>> decomposeLinMapWithin entireBasis >>> \case
+            Right l -> UArr.concat $ toFullUnboxVect <$> l []
+  unsafeFromFullUnboxVect arrv = fromLinearMap $ fst . recomposeLinMap entireBasis
+          $ [unsafeFromFullUnboxVect $ UArr.slice (dv*j) dv arrv | j <- [0 .. du-1]]
+   where du = subbasisDimension (entireBasis :: SubBasis (DualVector u))
+         dv = freeDimension ([]::[v])
+  
+instance ∀ s u v .
+         ( FiniteDimensional u, LSpace v, FiniteFreeSpace v
+         , Scalar u~s, Scalar v~s ) => FiniteFreeSpace (LinearFunction s u v) where
+  freeDimension _ = subbasisDimension (entireBasis :: SubBasis u)
+                       * freeDimension ([]::[v])
+  toFullUnboxVect f = toFullUnboxVect (arr f :: LinearMap s u v)
+  unsafeFromFullUnboxVect arrv = arr (unsafeFromFullUnboxVect arrv :: LinearMap s u v)
+                                     
+  
