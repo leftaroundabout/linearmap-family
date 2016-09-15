@@ -52,6 +52,7 @@ import Math.VectorSpace.ZeroDimensional
 import qualified Linear.Matrix as Mat
 import qualified Linear.Vector as Mat
 import Control.Lens ((^.))
+import Data.Coerce
 
 import Numeric.IEEE
 
@@ -176,6 +177,23 @@ instance ∀ u v . ( SemiInner u, SemiInner v, Scalar u ~ Scalar v ) => SemiInne
                        : combineBaseis True forbidden (bu, abv)
          combineBaseis _ forbidden (bu, []) = combineBaseis False forbidden (bu,[])
          combineBaseis _ forbidden ([], bv) = combineBaseis True forbidden ([],bv)
+
+
+instance ∀ s u v . ( LSpace u, FiniteDimensional (DualVector u), SemiInner (DualVector u)
+                   , SemiInner v, FiniteDimensional v
+                   , Scalar u ~ s, Scalar v ~ s, RealFrac' s )
+           => SemiInner (Tensor s u v) where
+  dualBasisCandidates = map (fmap (second $ arr transposeTensor . arr asTensor))
+                      . dualBasisCandidates
+                      . map (second $ arr asLinearMap)
+
+instance ∀ s u v . ( SemiInner u, FiniteDimensional u, Scalar u ~ s
+                   , SemiInner v, FiniteDimensional v, Scalar v ~ s, RealFrac' s )
+           => SemiInner (LinearMap s u v) where
+  dualBasisCandidates = sequenceForest
+                      . map (second pseudoInverse) -- this is not efficient
+   where sequenceForest [] = []
+         sequenceForest (x:xs) = [Node x $ sequenceForest xs]
   
 (^/^) :: (InnerSpace v, Eq (Scalar v), Fractional (Scalar v)) => v -> v -> Scalar v
 v^/^w = case (v<.>w) of
@@ -346,7 +364,90 @@ deriving instance (Show (SubBasis u), Show (SubBasis v))
                     => Show (SubBasis (u,v))
 
 
+instance ∀ s u v .
+         ( FiniteDimensional u, FiniteDimensional v
+         , Scalar u~s, Scalar v~s, Fractional' (Scalar v) )
+            => FiniteDimensional (Tensor s u v) where
+  data SubBasis (Tensor s u v) = TensorBasis !(SubBasis u) !(SubBasis v)
+  entireBasis = TensorBasis entireBasis entireBasis
+  enumerateSubBasis (TensorBasis bu bv)
+       = [ u⊗v | u <- enumerateSubBasis bu, v <- enumerateSubBasis bv ]
+  decomposeLinMap muvw = case decomposeLinMap $ curryLinearMap $ muvw of
+         (bu, mvwsg) -> first (TensorBasis bu) . go id $ mvwsg []
+   where (go, _) = tensorLinmapDecompositionhelpers
+  decomposeLinMapWithin (TensorBasis bu bv) muvw
+               = case decomposeLinMapWithin bu $ curryLinearMap $ muvw of
+          Left (bu', mvwsg) -> let (_, (bv', ws)) = goWith bv id (mvwsg []) id
+                               in Left (TensorBasis bu' bv', ws)
+   where (_, goWith) = tensorLinmapDecompositionhelpers
+  recomposeSB (TensorBasis bu bv) = recomposeTensor bu bv
+  recomposeTensor (TensorBasis bu bv) bw
+          = first (arr lassocTensor) . recomposeTensor bu (TensorBasis bv bw)
+  recomposeContraLinMap = recomposeContraLinMapTensor
+  recomposeContraLinMapTensor fw dds
+     = uncurryLinearMap . uncurryLinearMap . fmap (curryLinearMap) . curryLinearMap
+               $ recomposeContraLinMapTensor fw $ fmap (arr rassocTensor) dds
+  uncanonicallyToDual = fmap uncanonicallyToDual 
+            >>> transposeTensor >>> fmap uncanonicallyToDual
+            >>> transposeTensor
+  uncanonicallyFromDual = fmap uncanonicallyFromDual 
+            >>> transposeTensor >>> fmap uncanonicallyFromDual
+            >>> transposeTensor
 
+tensorLinmapDecompositionhelpers
+      :: ( FiniteDimensional v, LSpace w , Scalar v~s, Scalar w~s )
+      => ( DList w -> [v+>w] -> (SubBasis v, DList w)
+         , SubBasis v -> DList w -> [v+>w] -> DList (v+>w)
+                        -> (Bool, (SubBasis v, DList w)) )
+tensorLinmapDecompositionhelpers = (go, goWith)
+   where go _ [] = decomposeLinMap zeroV
+         go prevdc (mvw:mvws) = case decomposeLinMap mvw of
+              (bv, cfs) -> snd (goWith bv prevdc mvws (mvw:))
+         goWith bv prevdc [] prevs = (False, (bv, prevdc))
+         goWith bv prevdc (mvw:mvws) prevs = case decomposeLinMapWithin bv mvw of
+              Right cfs -> goWith bv (prevdc . cfs) mvws (prevs . (mvw:))
+              Left (bv', cfs) -> first (const True)
+                                 ( goWith bv' (regoWith bv' (prevs[]) . cfs)
+                                     mvws (prevs . (mvw:)) )
+         regoWith _ [] = id
+         regoWith bv (mvw:mvws) = case decomposeLinMapWithin bv mvw of
+              Right cfs -> cfs . regoWith bv mvws
+              Left _ -> error $
+               "Misbehaved FiniteDimensional instance: `decomposeLinMapWithin` should,\
+             \\nif it cannot decompose in the given basis, do so in a proper\
+             \\nsuperbasis of the given one (so that any vector that could be\
+             \\ndecomposed in the old basis can also be decomposed in the new one)."
+
+
+instance ∀ s u v .
+         ( LSpace u, FiniteDimensional (DualVector u), FiniteDimensional v
+         , Scalar u~s, Scalar v~s, Fractional' (Scalar v) )
+            => FiniteDimensional (LinearMap s u v) where
+  data SubBasis (LinearMap s u v) = LinMapBasis !(SubBasis (DualVector u)) !(SubBasis v)
+  entireBasis = case entireBasis of TensorBasis bu bv -> LinMapBasis bu bv
+  enumerateSubBasis (LinMapBasis bu bv)
+          = arr (fmap asLinearMap) . enumerateSubBasis $ TensorBasis bu bv
+  decomposeLinMap = first (\(TensorBasis bv bu)->LinMapBasis bu bv)
+                    . decomposeLinMap . coerce
+  decomposeLinMapWithin (LinMapBasis bu bv) m
+          = case decomposeLinMapWithin (TensorBasis bv bu) (coerce m) of
+              Right ws -> Right ws
+              Left (TensorBasis bv' bu', ws) -> Left (LinMapBasis bu' bv', ws)
+  recomposeSB (LinMapBasis bu bv)
+     = recomposeSB (TensorBasis bu bv) >>> first (arr fromTensor)
+  recomposeTensor (LinMapBasis bu bv) bw
+     = recomposeTensor (TensorBasis bu bv) bw >>> first coerce
+  recomposeContraLinMap fw dds = coUncurryLinearMap . fmap fromLinearMap . curryLinearMap
+                   $ recomposeContraLinMapTensor fw $ fmap (arr asTensor) dds
+  recomposeContraLinMapTensor fw dds
+       = uncurryLinearMap . coUncurryLinearMap
+         . fmap (fromLinearMap . curryLinearMap) . curryLinearMap
+           $ recomposeContraLinMapTensor fw $ fmap (arr $ asTensor . hasteLinearMap) dds
+  uncanonicallyToDual = fmap uncanonicallyToDual >>> arr asTensor
+             >>> transposeTensor >>> arr fromTensor >>> fmap uncanonicallyToDual
+  uncanonicallyFromDual = fmap uncanonicallyFromDual >>> arr asTensor
+             >>> transposeTensor >>> arr fromTensor >>> fmap uncanonicallyFromDual
+  
 
 infixr 0 \$
 
