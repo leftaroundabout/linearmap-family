@@ -117,17 +117,19 @@ instance (Fractional'' s, SemiInner s) => SemiInner (V0 s) where
 (<.>^) :: LSpace v => DualVector v -> v -> Scalar v
 f<.>^v = (applyDualVector$f)$v
 
-orthonormaliseDuals :: (SemiInner v, LSpace v, Fractional'' (Scalar v))
-                          => [(v, DualVector v)] -> [(v,DualVector v)]
-orthonormaliseDuals [] = []
-orthonormaliseDuals ((v,v'₀):ws)
-          = (v,v') : [(w, w' ^-^ (w'<.>^v)*^v') | (w,w')<-wssys]
- where wssys = orthonormaliseDuals ws
-       v'₁ = foldl' (\v'i (w,w') -> v'i ^-^ (v'i<.>^w)*^w') v'₀ wssys
-       v' = v'₁ ^/ (v'₁<.>^v)
+orthonormaliseDuals :: (SemiInner v, LSpace v, RealFrac' (Scalar v))
+                          => Scalar v -> [(v, DualVector v)] -> [(v,DualVector v)]
+orthonormaliseDuals _ [] = []
+orthonormaliseDuals ε ((v,v'₀):ws)
+        | ovl > ε    = (v,v') : [(w, w' ^-^ (w'<.>^v)*^v') | (w,w')<-wssys]
+        | otherwise  = (v,zeroV) : wssys
+ where wssys = orthonormaliseDuals ε ws
+       v'₁ = foldl' (\v'i (w,w') -> v'i ^-^ (v'i<.>^w)*^w') (v'₀ ^/ (v'₀<.>^v)) wssys
+       v' = v'₁ ^/ ovl
+       ovl = v'₁<.>^v
 
-dualBasis :: (SemiInner v, LSpace v, Fractional'' (Scalar v)) => [v] -> [DualVector v]
-dualBasis vs = snd <$> orthonormaliseDuals (zip' vsIxed candidates)
+dualBasis :: (SemiInner v, LSpace v, RealFrac' (Scalar v)) => [v] -> [DualVector v]
+dualBasis vs = snd <$> orthonormaliseDuals epsilon (zip' vsIxed candidates)
  where zip' ((i,v):vs) ((j,v'):ds)
         | i<j   = zip' vs ((j,v'):ds)
         | i==j  = (v,v') : zip' vs ds
@@ -181,16 +183,13 @@ instance ∀ u v . ( SemiInner u, SemiInner v, Scalar u ~ Scalar v ) => SemiInne
          combineBaseis _ forbidden ([], bv) = combineBaseis True forbidden ([],bv)
 
 
-instance ∀ s u v . ( LSpace u, FiniteDimensional (DualVector u), SemiInner (DualVector u)
-                   , SemiInner v, FiniteDimensional v
-                   , Scalar u ~ s, Scalar v ~ s, RealFrac' s )
+instance ∀ s u v . ( SimpleSpace u, SimpleSpace v, Scalar u ~ s, Scalar v ~ s )
            => SemiInner (Tensor s u v) where
   dualBasisCandidates = map (fmap (second $ arr transposeTensor . arr asTensor))
                       . dualBasisCandidates
                       . map (second $ arr asLinearMap)
 
-instance ∀ s u v . ( SemiInner u, FiniteDimensional u, Scalar u ~ s
-                   , SemiInner v, FiniteDimensional v, Scalar v ~ s, RealFrac' s )
+instance ∀ s u v . ( SimpleSpace u, SimpleSpace v, Scalar u ~ s, Scalar v ~ s )
            => SemiInner (LinearMap s u v) where
   dualBasisCandidates = sequenceForest
                       . map (second pseudoInverse) -- this is not efficient
