@@ -253,7 +253,6 @@ class (LSpace v, LSpace (Scalar v)) => FiniteDimensional v where
   --   library).
   uncanonicallyFromDual :: DualVector v -+> v
   uncanonicallyToDual :: v -+> DualVector v
-  
 
 
 instance (Num''' s) => FiniteDimensional (ZeroDim s) where
@@ -485,8 +484,10 @@ infixr 0 \$
 -- f '$' f '\$' u  ≡  u
 -- @
 -- 
--- If @f@ does not have full rank, the behaviour is undefined (but we expect
--- it to be reasonably well-behaved or even give a least-squares solution).
+-- If @f@ does not have full rank, the behaviour is undefined. However, it
+-- does not need to be a proper isomorphism: the
+-- first of the above equations is still fulfilled if only @f@ is /injective/
+-- (overdetermined system) and the second if it is /surjective/.
 -- 
 -- If you want to solve for multiple RHS vectors, be sure to partially
 -- apply this operator to the linear map, like
@@ -501,18 +502,53 @@ infixr 0 \$
 -- @
 -- [f '\$' v₁, f '\$' v₂, ...]
 -- @
-(\$) :: ( FiniteDimensional u, FiniteDimensional v, SemiInner v
-        , Scalar u ~ Scalar v, Fractional' (Scalar v) )
+(\$) :: ∀ u v . ( SimpleSpace u, SimpleSpace v, Scalar u ~ Scalar v )
           => (u+>v) -> v -> u
-(\$) m = fst . \v -> recomposeSB mbas [v'<.>^v | v' <- v's]
- where v's = dualBasis $ mdecomp []
-       (mbas, mdecomp) = decomposeLinMap m
+(\$) m
+  | du > dv    = (unsafeRightInverse m $)
+  | du < dv    = (unsafeLeftInverse m $)
+  | otherwise  = let v's = dualBasis $ mdecomp []
+                     (mbas, mdecomp) = decomposeLinMap m
+                 in fst . \v -> recomposeSB mbas [v'<.>^v | v' <- v's]
+ where du = subbasisDimension (entireBasis :: SubBasis u)
+       dv = subbasisDimension (entireBasis :: SubBasis v)
     
 
-pseudoInverse :: ( FiniteDimensional u, FiniteDimensional v, SemiInner v
-                 , Scalar u ~ Scalar v, Fractional' (Scalar v) )
+pseudoInverse :: ∀ u v . ( SimpleSpace u, SimpleSpace v, Scalar u ~ Scalar v )
           => (u+>v) -> v+>u
-pseudoInverse m = recomposeContraLinMap (fst . recomposeSB mbas) v's
+pseudoInverse m
+  | du > dv    = unsafeRightInverse m
+  | du < dv    = unsafeLeftInverse m
+  | otherwise  = unsafeInverse m
+ where du = subbasisDimension (entireBasis :: SubBasis u)
+       dv = subbasisDimension (entireBasis :: SubBasis v)
+
+-- | If @f@ is injective, then
+-- 
+-- @
+-- unsafeLeftInverse f . f  ≡  id
+-- @
+unsafeLeftInverse :: ∀ u v . ( SimpleSpace u, SimpleSpace v, Scalar u ~ Scalar v )
+                     => (u+>v) -> v+>u
+unsafeLeftInverse m = unsafeInverse (m' . (fmap uncanonicallyToDual $ m))
+                         . m' . arr uncanonicallyToDual
+ where m' = adjoint $ m :: DualVector v +> DualVector u
+
+-- | If @f@ is surjective, then
+-- 
+-- @
+-- f . unsafeRightInverse f  ≡  id
+-- @
+unsafeRightInverse :: ∀ u v . ( SimpleSpace u, SimpleSpace v, Scalar u ~ Scalar v )
+                     => (u+>v) -> v+>u
+unsafeRightInverse m = (fmap uncanonicallyToDual $ m')
+                          . unsafeInverse (m . (fmap uncanonicallyToDual $ m'))
+ where m' = adjoint $ m :: DualVector v +> DualVector u
+
+-- | Invert an isomorphism. For other linear maps, the result is undefined.
+unsafeInverse :: ( SimpleSpace u, SimpleSpace v, Scalar u ~ Scalar v )
+          => (u+>v) -> v+>u
+unsafeInverse m = recomposeContraLinMap (fst . recomposeSB mbas) v's
  where v's = dualBasis $ mdecomp []
        (mbas, mdecomp) = decomposeLinMap m
 
