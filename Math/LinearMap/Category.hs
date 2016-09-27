@@ -196,27 +196,6 @@ import Numeric.IEEE
 
 
 
--- | For real matrices, this boils down to 'transpose'.
---   For free complex spaces it also incurs complex conjugation.
---   
--- The signature can also be understood as
---
--- @
--- adjoint :: (v +> w) -> (DualVector w +> DualVector v)
--- @
--- 
--- Or
---
--- @
--- adjoint :: (DualVector v +> DualVector w) -> (w +> v)
--- @
--- 
--- But /not/ @(v+>w) -> (w+>v)@, in general (though in a Hilbert space, this too is
--- equivalent, via 'riesz' isomorphism).
-adjoint :: (LSpace v, LSpace w, Scalar v ~ Scalar w)
-               => (v +> DualVector w) -+> (w +> DualVector v)
-adjoint = arr fromTensor . transposeTensor . arr asTensor
-
 
 
 
