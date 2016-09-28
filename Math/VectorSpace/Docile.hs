@@ -305,7 +305,7 @@ instance FiniteDimensional ℝ where
 #define FreeFiniteDimensional(V, VB, dimens, take, give)        \
 instance (Num''' s, LSpace s)                            \
             => FiniteDimensional (V s) where {            \
-  data SubBasis (V s) = VB deriving (Show);                             \
+  data SubBasis (V s) = VB deriving (Show);             \
   entireBasis = VB;                                      \
   enumerateSubBasis VB = toList $ Mat.identity;      \
   subbasisDimension VB = dimens;                       \
@@ -390,7 +390,7 @@ instance ∀ s u v .
        = [ u⊗v | u <- enumerateSubBasis bu, v <- enumerateSubBasis bv ]
   subbasisDimension (TensorBasis bu bv) = subbasisDimension bu * subbasisDimension bv
   decomposeLinMap muvw = case decomposeLinMap $ curryLinearMap $ muvw of
-         (bu, mvwsg) -> first (TensorBasis bu) . go id $ mvwsg []
+         (bu, mvwsg) -> first (TensorBasis bu) . go $ mvwsg []
    where (go, _) = tensorLinmapDecompositionhelpers
   decomposeLinMapWithin (TensorBasis bu bv) muvw
                = case decomposeLinMapWithin bu $ curryLinearMap $ muvw of
@@ -416,13 +416,13 @@ instance ∀ s u v .
 
 tensorLinmapDecompositionhelpers
       :: ( FiniteDimensional v, LSpace w , Scalar v~s, Scalar w~s )
-      => ( DList w -> [v+>w] -> (SubBasis v, DList w)
+      => ( [v+>w] -> (SubBasis v, DList w)
          , SubBasis v -> DList w -> [v+>w] -> DList (v+>w)
                         -> (Bool, (SubBasis v, DList w)) )
 tensorLinmapDecompositionhelpers = (go, goWith)
-   where go _ [] = decomposeLinMap zeroV
-         go prevdc (mvw:mvws) = case decomposeLinMap mvw of
-              (bv, cfs) -> snd (goWith bv prevdc mvws (mvw:))
+   where go [] = decomposeLinMap zeroV
+         go (mvw:mvws) = case decomposeLinMap mvw of
+              (bv, cfs) -> snd (goWith bv cfs mvws (mvw:))
          goWith bv prevdc [] prevs = (False, (bv, prevdc))
          goWith bv prevdc (mvw:mvws) prevs = case decomposeLinMapWithin bv mvw of
               Right cfs -> goWith bv (prevdc . cfs) mvws (prevs . (mvw:))
