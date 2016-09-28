@@ -305,7 +305,7 @@ instance FiniteDimensional ℝ where
 #define FreeFiniteDimensional(V, VB, dimens, take, give)        \
 instance (Num''' s, LSpace s)                            \
             => FiniteDimensional (V s) where {            \
-  data SubBasis (V s) = VB;                             \
+  data SubBasis (V s) = VB deriving (Show);                             \
   entireBasis = VB;                                      \
   enumerateSubBasis VB = toList $ Mat.identity;      \
   subbasisDimension VB = dimens;                       \
@@ -437,6 +437,9 @@ tensorLinmapDecompositionhelpers = (go, goWith)
              \\nif it cannot decompose in the given basis, do so in a proper\
              \\nsuperbasis of the given one (so that any vector that could be\
              \\ndecomposed in the old basis can also be decomposed in the new one)."
+  
+deriving instance (Show (SubBasis u), Show (SubBasis v))
+             => Show (SubBasis (Tensor s u v))
 
 
 instance ∀ s u v .
@@ -473,6 +476,9 @@ instance ∀ s u v .
   uncanonicallyFromDual = fmap uncanonicallyFromDual >>> arr asTensor
              >>> transposeTensor >>> arr fromTensor >>> fmap uncanonicallyFromDual
   
+deriving instance (Show (SubBasis (DualVector u)), Show (SubBasis v))
+             => Show (SubBasis (LinearMap s u v))
+
 
 infixr 0 \$
 
@@ -560,7 +566,7 @@ riesz = LinearFunction $ \dv ->
        let (bas, compos) = decomposeLinMap $ sampleLinearFunction $ applyDualVector $ dv
        in fst . recomposeSB bas $ compos []
 
-sRiesz :: (FiniteDimensional v, InnerSpace v) => DualSpace v -+> v
+sRiesz :: FiniteDimensional v => DualSpace v -+> v
 sRiesz = LinearFunction $ \dv ->
        let (bas, compos) = decomposeLinMap $ dv
        in fst . recomposeSB bas $ compos []
@@ -578,6 +584,7 @@ showsPrecAsRiesz p dv = showParen (p>0) $ ("().<"++)
             . showsPrec 7 (sRiesz$dv)
 
 instance Show (LinearMap ℝ (V0 ℝ) ℝ) where showsPrec = showsPrecAsRiesz
+instance Show (LinearMap ℝ ℝ ℝ) where showsPrec = showsPrecAsRiesz
 instance Show (LinearMap ℝ (V1 ℝ) ℝ) where showsPrec = showsPrecAsRiesz
 instance Show (LinearMap ℝ (V2 ℝ) ℝ) where showsPrec = showsPrecAsRiesz
 instance Show (LinearMap ℝ (V3 ℝ) ℝ) where showsPrec = showsPrecAsRiesz
@@ -596,22 +603,22 @@ bw .< v = sampleLinearFunction $ LinearFunction $ \v' -> recompose [(bw, v<.>v')
 
 instance Show (LinearMap s v (V0 s)) where
   show _ = "zeroV"
-instance (FiniteDimensional v, InnerSpace v, Scalar v ~ ℝ, Show v)
+instance (FiniteDimensional v, v ~ DualVector v, Scalar v ~ ℝ, Show v)
               => Show (LinearMap ℝ v (V1 ℝ)) where
   showsPrec p m = showParen (p>6) $ ("ex .< "++)
                        . showsPrec 7 (sRiesz $ fmap (LinearFunction (^._x)) $ m)
-instance (FiniteDimensional v, InnerSpace v, Scalar v ~ ℝ, Show v)
+instance (FiniteDimensional v, v ~ DualVector v, Scalar v ~ ℝ, Show v)
               => Show (LinearMap ℝ v (V2 ℝ)) where
   showsPrec p m = showParen (p>6)
               $ ("ex.<"++) . showsPrec 7 (sRiesz $ fmap (LinearFunction (^._x)) $ m)
          . (" ^+^ ey.<"++) . showsPrec 7 (sRiesz $ fmap (LinearFunction (^._y)) $ m)
-instance (FiniteDimensional v, InnerSpace v, Scalar v ~ ℝ, Show v)
+instance (FiniteDimensional v, v ~ DualVector v, Scalar v ~ ℝ, Show v)
               => Show (LinearMap ℝ v (V3 ℝ)) where
   showsPrec p m = showParen (p>6)
               $ ("ex.<"++) . showsPrec 7 (sRiesz $ fmap (LinearFunction (^._x)) $ m)
          . (" ^+^ ey.<"++) . showsPrec 7 (sRiesz $ fmap (LinearFunction (^._y)) $ m)
          . (" ^+^ ez.<"++) . showsPrec 7 (sRiesz $ fmap (LinearFunction (^._z)) $ m)
-instance (FiniteDimensional v, InnerSpace v, Scalar v ~ ℝ, Show v)
+instance (FiniteDimensional v, v ~ DualVector v, Scalar v ~ ℝ, Show v)
               => Show (LinearMap ℝ v (V4 ℝ)) where
   showsPrec p m = showParen (p>6)
               $ ("ex.<"++) . showsPrec 7 (sRiesz $ fmap (LinearFunction (^._x)) $ m)
