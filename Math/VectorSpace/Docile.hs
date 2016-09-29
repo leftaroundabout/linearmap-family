@@ -34,6 +34,7 @@ import qualified Data.Set as Set
 import Data.Set (Set)
 import Data.Ord (comparing)
 import Data.List (maximumBy, unfoldr)
+import qualified Data.Vector as Arr
 import Data.Foldable (toList)
 import Data.Semigroup
 
@@ -91,15 +92,15 @@ cartesianDualBasisCandidates
                         --   the functional list.
      -> ([(Int,v)] -> Forest (Int, DualVector v))
                         -- ^ Suitable definition of 'dualBasisCandidates'.
-cartesianDualBasisCandidates dvs abss vcas = go 0 sorted
+cartesianDualBasisCandidates dvs abss vcas = go 0 0 sorted
  where sorted = sortBy (comparing $ negate . snd . snd)
                        [ (i, (av, maximum av)) | (i,v)<-vcas, let av = abss v ]
-       go k ((i,(av,_)):scs)
-          | k<n   = Node (i, dv) (go (k+1) [(i',(zeroAt j av',m)) | (i',(av',m))<-scs])
-                                : go k scs
+       go k nDelay scs@((i,(av,_)):scs')
+          | k<n   = Node (i, dv) (go (k+1) 0 [(i',(zeroAt j av',m)) | (i',(av',m))<-scs'])
+                                : go k (nDelay+1) (bringToFront (nDelay+1) scs)
         where (j,_) = maximumBy (comparing snd) $ zip jfus av
               dv = dvs !! j
-       go _ _ = []
+       go _ _ _ = []
        
        jfus = [0 .. n-1]
        n = length dvs
@@ -108,6 +109,11 @@ cartesianDualBasisCandidates dvs abss vcas = go 0 sorted
        zeroAt _ [] = []
        zeroAt 0 (_:l) = (-1/0):l
        zeroAt j (e:l) = e : zeroAt (j-1) l
+       
+       bringToFront :: Int -> [a] -> [a]
+       bringToFront i l = case splitAt i l of
+           (_,[]) -> []
+           (f,s:l') -> s : f++l'
 
 instance (Fractional'' s, SemiInner s) => SemiInner (ZeroDim s) where
   dualBasisCandidates _ = []
@@ -134,11 +140,19 @@ dualBasis vs = snd <$> orthonormaliseDuals epsilon (zip' vsIxed candidates)
         | i<j   = zip' vs ((j,v'):ds)
         | i==j  = (v,v') : zip' vs ds
        zip' _ _ = []
-       candidates = sortBy (comparing fst) . findBest
-                             $ dualBasisCandidates vsIxed
-        where findBest [] = []
-              findBest (Node iv' bv' : _) = iv' : findBest bv'
+       candidates
+         | Just bestCandidates <- findBest n $ dualBasisCandidates vsIxed
+             = sortBy (comparing fst) bestCandidates
+        where findBest 0 _ = Just []
+              findBest _ [] = Nothing
+              findBest n (Node (i,v') bv' : alts)
+               | v'<.>^(lookupArr Arr.! i) > 0
+               , Just best' <- findBest (n-1) bv'
+                            = Just $ (i,v') : best'
+               | otherwise  = findBest n alts
        vsIxed = zip [0..] vs
+       lookupArr = Arr.fromList vs
+       n = Arr.length lookupArr
 
 instance SemiInner ℝ where
   dualBasisCandidates = fmap ((`Node`[]) . second recip)
