@@ -127,8 +127,8 @@ orthonormaliseDuals :: (SemiInner v, LSpace v, RealFrac' (Scalar v))
                           => Scalar v -> [(v, DualVector v)] -> [(v,DualVector v)]
 orthonormaliseDuals _ [] = []
 orthonormaliseDuals ε ((v,v'₀):ws)
-        | ovl > ε    = (v,v') : [(w, w' ^-^ (w'<.>^v)*^v') | (w,w')<-wssys]
-        | otherwise  = (v,zeroV) : wssys
+        | abs ovl > ε  = (v,v') : [(w, w' ^-^ (w'<.>^v)*^v') | (w,w')<-wssys]
+        | otherwise    = (v,zeroV) : wssys
  where wssys = orthonormaliseDuals ε ws
        v'₁ = foldl' (\v'i (w,w') -> v'i ^-^ (v'i<.>^w)*^w') (v'₀ ^/ (v'₀<.>^v)) wssys
        v' = v'₁ ^/ ovl
@@ -146,7 +146,7 @@ dualBasis vs = snd <$> orthonormaliseDuals epsilon (zip' vsIxed candidates)
         where findBest 0 _ = Just []
               findBest _ [] = Nothing
               findBest n (Node (i,v') bv' : alts)
-               | v'<.>^(lookupArr Arr.! i) > 0
+               | v'<.>^(lookupArr Arr.! i) /= 0
                , Just best' <- findBest (n-1) bv'
                             = Just $ (i,v') : best'
                | otherwise  = findBest n alts
