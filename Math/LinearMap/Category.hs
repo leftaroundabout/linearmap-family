@@ -510,11 +510,12 @@ orthonormalityError me vs = normSq me $ orthogonalComplementProj me vs $ sumV vs
 
 
 normSpanningSystem :: SimpleSpace v
-               => Norm v -> [DualVector v]
-normSpanningSystem = dualBasis . normSpanningSystem'
+               => Seminorm v -> [DualVector v]
+normSpanningSystem me@(Norm m)
+     = map snd . orthonormaliseDuals 0 . map (id&&&(m$)) $ normSpanningSystem' me
 
 normSpanningSystem' :: (FiniteDimensional v, IEEE (Scalar v))
-               => Norm v -> [v]
+               => Seminorm v -> [v]
 normSpanningSystem' me = orthonormaliseFussily 0 me $ enumerateSubBasis entireBasis
 
 
