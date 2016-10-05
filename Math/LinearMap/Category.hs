@@ -291,7 +291,7 @@ adhocNorm = Norm uncanonicallyToDual
 --   (The orthonormal systems of the norm and its dual are mutually conjugate.)
 --   The dual norm of a seminorm is undefined.
 dualNorm :: SimpleSpace v => Norm v -> Variance v
-dualNorm (Norm m) = Norm . arr . pseudoInverse $ arr m
+dualNorm = spanVariance . normSpanningSystem'
 
 transformNorm :: (LSpace v, LSpace w, Scalar v~Scalar w) => (v+>w) -> Norm w -> Norm v
 transformNorm f (Norm m) = Norm . arr $ (adjoint $ f) . (fmap m $ f)
@@ -533,13 +533,14 @@ normSpanningSystem' me = orthonormaliseFussily 0 me $ enumerateSubBasis entireBa
 -- n₁ = 'spanNorm' [dv^*η | (dv,η)<-shSys]
 -- @
 sharedNormSpanningSystem :: SimpleSpace v
-               => Norm v -> Norm v -> [(DualVector v, Scalar v)]
-sharedNormSpanningSystem (Norm n) (Norm m)
-           = sep =<< roughEigenSystem (Norm n) (pseudoInverse (arr n) . arr m)
+               => Norm v -> Seminorm v -> [(DualVector v, Scalar v)]
+sharedNormSpanningSystem nn@(Norm n) (Norm m)
+           = sep =<< roughEigenSystem (Norm n) (arr n' . arr m)
  where sep (Eigenvector λ _ λv _ _)
-         | λ>0        = [(n$v, sqrt λ)]
+         | λ>=0       = [(n$v, sqrt λ)]
          | otherwise  = []
         where v = λv ^/ λ
+       Norm n' = dualNorm nn
 
 
 -- | Interpret a variance as a covariance between two subspaces, and
