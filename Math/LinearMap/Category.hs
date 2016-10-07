@@ -20,22 +20,23 @@
 {-# LANGUAGE UnicodeSyntax        #-}
 {-# LANGUAGE TupleSections        #-}
 {-# LANGUAGE ConstraintKinds      #-}
+{-# LANGUAGE ExplicitNamespaces   #-}
 
 module Math.LinearMap.Category (
             -- * Linear maps
             -- $linmapIntro
 
             -- ** Function implementation
-              LinearFunction (..), (-+>)(), Bilinear
+              LinearFunction (..), type (-+>)(), Bilinear
             -- ** Tensor implementation
-            , LinearMap (..), (+>)()
+            , LinearMap (..), type (+>)()
             , (⊕), (>+<)
             , adjoint
             -- ** Dual vectors
             -- $dualVectorIntro
             , (<.>^)
             -- * Tensor spaces
-            , Tensor (..), (⊗)(), (⊗)
+            , Tensor (..), type (⊗)(), (⊗)
             -- * Norms
             -- $metricIntro
             , Norm(..), Seminorm
