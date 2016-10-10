@@ -124,32 +124,81 @@ instance (Fractional'' s, SemiInner s) => SemiInner (V0 s) where
 f<.>^v = (applyDualVector$f)$v
 
 orthonormaliseDuals :: (SemiInner v, LSpace v, RealFrac' (Scalar v))
-                          => Scalar v -> [(v, DualVector v)] -> [(v,DualVector v)]
+                          => Scalar v -> [(v, DualVector v)]
+                                      -> [(v,Maybe (DualVector v))]
 orthonormaliseDuals _ [] = []
 orthonormaliseDuals ε ((v,v'₀):ws)
-        | abs ovl > ε  = (v,v') : [(w, w' ^-^ (w'<.>^v)*^v') | (w,w')<-wssys]
-        | otherwise    = (v,zeroV) : wssys
+        | abs ovl₀ > 0, abs ovl₁ > ε
+                       = (v,Just v')
+                       : [ (w, fmap (\w' -> w' ^-^ (w'<.>^v)*^v') w's)
+                         | (w,w's)<-wssys ]
+        | otherwise    = (v,Nothing) : wssys
  where wssys = orthonormaliseDuals ε ws
-       v'₁ = foldl' (\v'i (w,w') -> v'i ^-^ (v'i<.>^w)*^w') (v'₀ ^/ (v'₀<.>^v)) wssys
-       v' = v'₁ ^/ ovl
-       ovl = v'₁<.>^v
+       v'₁ = foldl' (\v'i₀ (w,w's)
+                      -> foldl' (\v'i w' -> v'i ^-^ (v'i<.>^w)*^w') v'i₀ w's)
+                    (v'₀ ^/ ovl₀) wssys
+       v' = v'₁ ^/ ovl₁
+       ovl₀ = v'₀<.>^v
+       ovl₁ = v'₁<.>^v
 
-dualBasis :: (SemiInner v, LSpace v, RealFrac' (Scalar v)) => [v] -> [DualVector v]
-dualBasis vs = snd <$> orthonormaliseDuals epsilon (zip' vsIxed candidates)
+dualBasis :: ∀ v . (SemiInner v, LSpace v, RealFrac' (Scalar v))
+                => [v] -> [Maybe (DualVector v)]
+dualBasis vs = snd <$> result
  where zip' ((i,v):vs) ((j,v'):ds)
         | i<j   = zip' vs ((j,v'):ds)
         | i==j  = (v,v') : zip' vs ds
        zip' _ _ = []
-       candidates
-         | Just bestCandidates <- findBest n $ dualBasisCandidates vsIxed
-             = sortBy (comparing fst) bestCandidates
-        where findBest 0 _ = Just []
-              findBest _ [] = Nothing
-              findBest n (Node (i,v') bv' : alts)
-               | v'<.>^(lookupArr Arr.! i) /= 0
-               , Just best' <- findBest (n-1) bv'
-                            = Just $ (i,v') : best'
-               | otherwise  = findBest n alts
+       result :: [(v, Maybe (DualVector v))]
+       result = case findBest n n $ dualBasisCandidates vsIxed of
+                       Right bestCandidates
+                           -> orthonormaliseDuals epsilon
+                                 (zip' vsIxed $ sortBy (comparing fst) bestCandidates)
+                       Left (_, bestCompromise)
+                           -> let survivors :: [(Int, DualVector v)]
+                                  casualties :: [Int]
+                                  (casualties, survivors)
+                                    = second (sortBy $ comparing fst)
+                                        $ mapEither (\case
+                                                       (i,Nothing) -> Left i
+                                                       (i,Just v') -> Right (i,v')
+                                                    ) bestCompromise
+                                  bestEffort = orthonormaliseDuals epsilon
+                                    [ (lookupArr Arr.! i, v')
+                                    | (i,v') <- survivors ]
+                              in map snd . sortBy (comparing fst)
+                                   $ zipWith ((,) . fst) survivors bestEffort
+                                  ++ [ (i,(lookupArr Arr.! i, Nothing))
+                                     | i <- casualties ]
+        where findBest :: Int -- ^ Dual vectors needed for complete dual basis
+                       -> Int -- ^ Maximum numbers of alternatives to consider
+                              --   (to prevent exponential blowup of possibilities)
+                       -> Forest (Int, DualVector v)
+                            -> Either (Int, [(Int, Maybe (DualVector v))])
+                                               [(Int, DualVector v)]
+              findBest 0 _ _ = Right []
+              findBest nMissing _ [] = Left (nMissing, [])
+              findBest n maxCompromises (Node (i,v') bv' : alts)
+                | Just _ <- guardedv'
+                , Right best' <- straightContinue = Right $ (i,v') : best'
+                | maxCompromises > 0
+                , Right goodAlt <- alternative = Right goodAlt
+                | otherwise  = case straightContinue of
+                         Right goodOtherwise -> Left (1, second Just <$> goodOtherwise)
+                         Left (nBad, badAnyway)
+                           | maxCompromises > 0
+                           , Left (nBadAlt, badAlt) <- alternative
+                           , nBadAlt < nBad + myBadness
+                                       -> Left (nBadAlt, badAlt)
+                           | otherwise -> Left ( nBad + myBadness
+                                               , (i, guardedv') : badAnyway )
+               where guardedv' = case v'<.>^(lookupArr Arr.! i) of
+                                   0 -> Nothing
+                                   _ -> Just v'
+                     myBadness = case guardedv' of
+                                   Nothing -> 1
+                                   Just _ -> 0
+                     straightContinue = findBest (n-1) (maxCompromises-1) bv'
+                     alternative = findBest n (maxCompromises-1) alts
        vsIxed = zip [0..] vs
        lookupArr = Arr.fromList vs
        n = Arr.length lookupArr
@@ -529,7 +578,7 @@ infixr 0 \$
   | du < dv    = (unsafeLeftInverse m $)
   | otherwise  = let v's = dualBasis $ mdecomp []
                      (mbas, mdecomp) = decomposeLinMap m
-                 in fst . \v -> recomposeSB mbas [v'<.>^v | v' <- v's]
+                 in fst . \v -> recomposeSB mbas [ maybe 0 (<.>^v) v' | v' <- v's ]
  where du = subbasisDimension (entireBasis :: SubBasis u)
        dv = subbasisDimension (entireBasis :: SubBasis v)
     
@@ -568,7 +617,8 @@ unsafeRightInverse m = (fmap uncanonicallyToDual $ m')
 -- | Invert an isomorphism. For other linear maps, the result is undefined.
 unsafeInverse :: ( SimpleSpace u, SimpleSpace v, Scalar u ~ Scalar v )
           => (u+>v) -> v+>u
-unsafeInverse m = recomposeContraLinMap (fst . recomposeSB mbas) v's
+unsafeInverse m = recomposeContraLinMap (fst . recomposeSB mbas)
+                                        $ [maybe zeroV id v' | v'<-v's]
  where v's = dualBasis $ mdecomp []
        (mbas, mdecomp) = decomposeLinMap m
 

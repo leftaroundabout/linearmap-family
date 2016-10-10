@@ -96,6 +96,7 @@ import qualified Data.Set as Set
 import Data.Set (Set)
 import Data.Ord (comparing)
 import Data.List (maximumBy)
+import Data.Maybe (catMaybes)
 import Data.Foldable (toList)
 import Data.Semigroup
 
@@ -513,7 +514,8 @@ orthonormalityError me vs = normSq me $ orthogonalComplementProj me vs $ sumV vs
 normSpanningSystem :: SimpleSpace v
                => Seminorm v -> [DualVector v]
 normSpanningSystem me@(Norm m)
-     = map snd . orthonormaliseDuals 0 . map (id&&&(m$)) $ normSpanningSystem' me
+     = catMaybes . map snd . orthonormaliseDuals 0
+         . map (id&&&(m$)) $ normSpanningSystem' me
 
 normSpanningSystem' :: (FiniteDimensional v, IEEE (Scalar v))
                => Seminorm v -> [v]
