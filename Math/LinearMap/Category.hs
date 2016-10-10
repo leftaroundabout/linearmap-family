@@ -538,11 +538,12 @@ normSpanningSystem' me = orthonormaliseFussily 0 me $ enumerateSubBasis entireBa
 sharedNormSpanningSystem :: SimpleSpace v
                => Norm v -> Seminorm v -> [(DualVector v, Scalar v)]
 sharedNormSpanningSystem nn@(Norm n) (Norm m)
-           = sep =<< roughEigenSystem (Norm n) (arr n' . arr m)
- where sep (Eigenvector λ _ λv _ _)
-         | λ>=0       = [(n$v, sqrt λ)]
+           = sep =<< roughEigenSystem nn (arr n' . arr m)
+ where sep (Eigenvector λ v λv _ _)
+         | λ>0        = [(n$λv^/λ, sqrt λ)]
+         | μ<-(m$v)<.>^v
+         , μ >= 0     = [(n$v    , sqrt μ)]
          | otherwise  = []
-        where v = λv ^/ λ
        Norm n' = dualNorm nn
 
 
