@@ -567,11 +567,10 @@ sharedNormSpanningSystem' nn@(Norm n) (Norm m)
 sharedSeminormSpanningSystem :: SimpleSpace v
                => Seminorm v -> Seminorm v -> [(DualVector v, Maybe (Scalar v))]
 sharedSeminormSpanningSystem nn@(Norm n) nm@(Norm m)
-             = (second Just <$> lhsFullrank)
+             = ((snd***Just) <$> lhsFullrank)
             ++ ((, Nothing) <$> normSpanningSystem rhsSolo)
- where lhsFullrank = sharedNormSpanningSystem nn nm
-       Norm lhsFrApprox = spanNorm [dv^*η | (dv,η)<-lhsFullrank]
-       rhsSolo = densifyNorm . Norm $ m^-^lhsFrApprox
+ where lhsFullrank = first (id&&&(n$)) <$> sharedNormSpanningSystem' nn nm
+       rhsSolo = densifyNorm . Norm $ m . orthogonalComplementProj' (fst<$>lhsFullrank)
 
 
 -- | Interpret a variance as a covariance between two subspaces, and
