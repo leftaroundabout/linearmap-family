@@ -536,20 +536,21 @@ normSpanningSystem' me = orthonormaliseFussily 0 me $ enumerateSubBasis entireBa
 -- @
 -- n₁ = 'spanNorm' [dv^*η | (dv,η)<-shSys]
 -- @
+-- 
+-- A rather crude approximation ('roughEigenSystem') is used in this function, so do
+-- not expect the above equations to hold with great accuracy.
 sharedNormSpanningSystem :: SimpleSpace v
                => Norm v -> Seminorm v -> [(DualVector v, Scalar v)]
-sharedNormSpanningSystem nn@(Norm n) nm = first (n$) <$> sharedNormSpanningSystem' nn nm
+sharedNormSpanningSystem nn@(Norm n) nm
+      = first (n$) <$> sharedNormSpanningSystem' (nn, dualNorm nn) nm
 
 sharedNormSpanningSystem' :: SimpleSpace v
-               => Norm v -> Seminorm v -> [(v, Scalar v)]
-sharedNormSpanningSystem' nn@(Norm n) (Norm m)
+               => (Norm v, Variance v) -> Seminorm v -> [(v, Scalar v)]
+sharedNormSpanningSystem' (nn@(Norm n), Norm n') (Norm m)
            = sep =<< roughEigenSystem nn (arr n' . arr m)
  where sep (Eigenvector λ v λv _ _)
-         | λ>0        = [(λv^/λ, sqrt λ)]
-         | μ<-(m$v)<.>^v
-         , μ >= 0     = [(v    , sqrt μ)]
+         | λ>=0       = [(v, sqrt λ)]
          | otherwise  = []
-       Norm n' = dualNorm nn
 
 -- | Like 'sharedNormSpanningSystem n₀ n₁', but allows /either/ of the norms
 --   to be singular.
@@ -564,13 +565,20 @@ sharedNormSpanningSystem' nn@(Norm n) (Norm m)
 -- n₁ = 'spanNorm' $ [dv^*η | (dv, Just η)<-shSys]
 --                 ++ [ dv | (dv, Nothing)<-shSys]
 -- @
-sharedSeminormSpanningSystem :: SimpleSpace v
+-- 
+-- You may also interpret a @Nothing@ here as an “infinite eigenvalue”, i.e.
+-- it is so small as an spanning vector of @n₀@ that you would need to scale it
+-- by ∞ to use it for spanning @n₁@.
+sharedSeminormSpanningSystem :: ∀ v .  SimpleSpace v
                => Seminorm v -> Seminorm v -> [(DualVector v, Maybe (Scalar v))]
-sharedSeminormSpanningSystem nn@(Norm n) nm@(Norm m)
-             = ((snd***Just) <$> lhsFullrank)
-            ++ ((, Nothing) <$> normSpanningSystem rhsSolo)
- where lhsFullrank = first (id&&&(n$)) <$> sharedNormSpanningSystem' nn nm
-       rhsSolo = densifyNorm . Norm $ m . orthogonalComplementProj' (fst<$>lhsFullrank)
+sharedSeminormSpanningSystem nn nm
+         = finalise <$> sharedNormSpanningSystem' (combined, dualNorm combined) nn
+ where combined = densifyNorm $ nn<>nm
+       finalise :: (v, Scalar v) -> (DualVector v, Maybe (Scalar v))
+       finalise (v, μn)
+           | μn^2 > epsilon  = (v'^*μn, Just $ sqrt (1 - μn^2)/μn)
+           | otherwise       = (v', Nothing)
+        where v' = combined<$|v
 
 
 -- | Interpret a variance as a covariance between two subspaces, and
