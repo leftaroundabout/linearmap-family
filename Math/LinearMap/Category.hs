@@ -542,12 +542,13 @@ normSpanningSystem' me = orthonormaliseFussily 0 me $ enumerateSubBasis entireBa
 sharedNormSpanningSystem :: SimpleSpace v
                => Norm v -> Seminorm v -> [(DualVector v, Scalar v)]
 sharedNormSpanningSystem nn@(Norm n) nm
-      = first (n$) <$> sharedNormSpanningSystem' (nn, dualNorm nn) nm
+      = first (n$) <$> sharedNormSpanningSystem' 0 (nn, dualNorm nn) nm
 
 sharedNormSpanningSystem' :: SimpleSpace v
-               => (Norm v, Variance v) -> Seminorm v -> [(v, Scalar v)]
-sharedNormSpanningSystem' (nn@(Norm n), Norm n') (Norm m)
-           = sep =<< roughEigenSystem nn (arr n' . arr m)
+               => Int -> (Norm v, Variance v) -> Seminorm v -> [(v, Scalar v)]
+sharedNormSpanningSystem' nRefine (nn@(Norm n), Norm n') (Norm m)
+           = sep =<< iterate (finishEigenSystem nn)
+                        (roughEigenSystem nn $ arr n' . arr m) !! nRefine
  where sep (Eigenvector λ v λv _ _)
          | λ>=0       = [(v, sqrt λ)]
          | otherwise  = []
@@ -572,7 +573,7 @@ sharedNormSpanningSystem' (nn@(Norm n), Norm n') (Norm m)
 sharedSeminormSpanningSystem :: ∀ v .  SimpleSpace v
                => Seminorm v -> Seminorm v -> [(DualVector v, Maybe (Scalar v))]
 sharedSeminormSpanningSystem nn nm
-         = finalise <$> sharedNormSpanningSystem' (combined, dualNorm combined) nn
+         = finalise <$> sharedNormSpanningSystem' 1 (combined, dualNorm combined) nn
  where combined = densifyNorm $ nn<>nm
        finalise :: (v, Scalar v) -> (DualVector v, Maybe (Scalar v))
        finalise (v, μn)
