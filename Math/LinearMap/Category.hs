@@ -82,7 +82,8 @@ module Math.LinearMap.Category (
             -- ** Misc
             , relaxNorm, transformNorm, transformVariance
             , findNormalLength, normalLength
-            , summandSpaceNorms, sumSubspaceNorms, sharedNormSpanningSystem
+            , summandSpaceNorms, sumSubspaceNorms
+            , sharedNormSpanningSystem, sharedSeminormSpanningSystem
             ) where
 
 import Math.LinearMap.Category.Class
@@ -537,14 +538,40 @@ normSpanningSystem' me = orthonormaliseFussily 0 me $ enumerateSubBasis entireBa
 -- @
 sharedNormSpanningSystem :: SimpleSpace v
                => Norm v -> Seminorm v -> [(DualVector v, Scalar v)]
-sharedNormSpanningSystem nn@(Norm n) (Norm m)
+sharedNormSpanningSystem nn@(Norm n) nm = first (n$) <$> sharedNormSpanningSystem' nn nm
+
+sharedNormSpanningSystem' :: SimpleSpace v
+               => Norm v -> Seminorm v -> [(v, Scalar v)]
+sharedNormSpanningSystem' nn@(Norm n) (Norm m)
            = sep =<< roughEigenSystem nn (arr n' . arr m)
  where sep (Eigenvector λ v λv _ _)
-         | λ>0        = [(n$λv^/λ, sqrt λ)]
+         | λ>0        = [(λv^/λ, sqrt λ)]
          | μ<-(m$v)<.>^v
-         , μ >= 0     = [(n$v    , sqrt μ)]
+         , μ >= 0     = [(v    , sqrt μ)]
          | otherwise  = []
        Norm n' = dualNorm nn
+
+-- | Like 'sharedNormSpanningSystem n₀ n₁', but allows /either/ of the norms
+--   to be singular.
+-- 
+-- @
+-- n₀ = 'spanNorm' [dv | (dv, Just _)<-shSys]
+-- @
+-- 
+-- and
+-- 
+-- @
+-- n₁ = 'spanNorm' $ [dv^*η | (dv, Just η)<-shSys]
+--                 ++ [ dv | (dv, Nothing)<-shSys]
+-- @
+sharedSeminormSpanningSystem :: SimpleSpace v
+               => Seminorm v -> Seminorm v -> [(DualVector v, Maybe (Scalar v))]
+sharedSeminormSpanningSystem nn@(Norm n) nm@(Norm m)
+             = (second Just <$> lhsFullrank)
+            ++ ((, Nothing) <$> normSpanningSystem rhsSolo)
+ where lhsFullrank = sharedNormSpanningSystem nn nm
+       Norm lhsFrApprox = spanNorm [dv^*η | (dv,η)<-lhsFullrank]
+       rhsSolo = densifyNorm . Norm $ m^-^lhsFrApprox
 
 
 -- | Interpret a variance as a covariance between two subspaces, and
