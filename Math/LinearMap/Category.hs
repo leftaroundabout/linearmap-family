@@ -481,7 +481,7 @@ roughEigenSystem me f = go fBas 0 [[]]
          | normSq me vPerp > fpε  = case evss of
              evs':_ | length evs' > oldDim
                -> go (v:vs) (length evs) evss
-             _ -> let evss' = constructEigenSystem me fpε (arr f)
+             _ -> let evss' = tail . constructEigenSystem me fpε (arr f)
                                 $ map ev_Eigenvector (head $ evss++[evs]) ++ [vPerp]
                   in go vs (length evs) evss'
          | otherwise              = go vs oldDim (evs:evss)
