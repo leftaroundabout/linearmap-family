@@ -48,7 +48,7 @@ import Control.Category.Constrained.Prelude hiding ((^))
 import Control.Arrow.Constrained
 
 import Linear ( V0(V0), V1(V1), V2(V2), V3(V3), V4(V4)
-              , _x, _y, _z, _w )
+              , _x, _y, _z, _w, ex, ey, ez, ew )
 import qualified Data.Vector.Unboxed as UArr
 import Data.VectorSpace.Free
 import Math.VectorSpace.ZeroDimensional
@@ -654,6 +654,44 @@ instance Show (LinearMap ℝ (V2 ℝ) ℝ) where showsPrec = showsPrecAsRiesz
 instance Show (LinearMap ℝ (V3 ℝ) ℝ) where showsPrec = showsPrecAsRiesz
 instance Show (LinearMap ℝ (V4 ℝ) ℝ) where showsPrec = showsPrecAsRiesz
 
+class (FiniteDimensional u, HasBasis u) => RieszDecomposable u where
+  rieszDecomposition :: (FiniteDimensional v, v ~ DualVector v, Scalar v ~ Scalar u)
+              => (v +> u) -> [(Basis u, v)]
+  showsPrecBasis :: Hask.Functor p => p u -> Int -> Basis u -> ShowS
+
+instance RieszDecomposable ℝ where
+  rieszDecomposition (LinearMap r) = [((), fromFlatTensor $ Tensor r)]
+  showsPrecBasis _ _ = shows
+instance (RieszDecomposable x, RieszDecomposable y, Scalar x ~ Scalar y)
+              => RieszDecomposable (x,y) where
+  rieszDecomposition m = map (first Left) (rieszDecomposition $ fst . m)
+                      ++ map (first Right) (rieszDecomposition $ snd . m)
+  showsPrecBasis proxy p (Left bx)
+      = showParen (p>9) $ ("Left "++) . showsPrecBasis (fst<$>proxy) 10 bx
+  showsPrecBasis proxy p (Right by)
+      = showParen (p>9) $ ("Right "++) . showsPrecBasis (snd<$>proxy) 10 by
+
+instance RieszDecomposable (V0 ℝ) where
+  rieszDecomposition _ = []
+  showsPrecBasis _ _ (Mat.E q) = (V0^.q ++)
+instance RieszDecomposable (V1 ℝ) where
+  rieszDecomposition m = [(ex, sRiesz $ fmap (LinearFunction (^._x)) $ m)]
+  showsPrecBasis _ _ (Mat.E q) = (V1"ex"^.q ++)
+instance RieszDecomposable (V2 ℝ) where
+  rieszDecomposition m = [ (ex, sRiesz $ fmap (LinearFunction (^._x)) $ m)
+                         , (ey, sRiesz $ fmap (LinearFunction (^._y)) $ m) ]
+  showsPrecBasis _ _ (Mat.E q) = (V2"ex""ey"^.q ++)
+instance RieszDecomposable (V3 ℝ) where
+  rieszDecomposition m = [ (ex, sRiesz $ fmap (LinearFunction (^._x)) $ m)
+                         , (ey, sRiesz $ fmap (LinearFunction (^._y)) $ m)
+                         , (ez, sRiesz $ fmap (LinearFunction (^._z)) $ m) ]
+  showsPrecBasis _ _ (Mat.E q) = (V3"ex""ey""ez"^.q ++)
+instance RieszDecomposable (V4 ℝ) where
+  rieszDecomposition m = [ (ex, sRiesz $ fmap (LinearFunction (^._x)) $ m)
+                         , (ey, sRiesz $ fmap (LinearFunction (^._y)) $ m)
+                         , (ez, sRiesz $ fmap (LinearFunction (^._z)) $ m)
+                         , (ew, sRiesz $ fmap (LinearFunction (^._w)) $ m) ]
+  showsPrecBasis _ _ (Mat.E q) = (V4"ex""ey""ez""ew"^.q ++)
 
 infixl 7 .<
 
@@ -665,31 +703,39 @@ infixl 7 .<
            => Basis w -> v -> v+>w
 bw .< v = sampleLinearFunction $ LinearFunction $ \v' -> recompose [(bw, v<.>v')]
 
+rieszDecomposeShowsPrec :: ∀ u v s . ( RieszDecomposable u
+                                     , FiniteDimensional v, v ~ DualVector v, Show v
+                                     , Scalar u ~ s, Scalar v ~ s )
+                        => Int -> LinearMap s v u -> ShowS
+rieszDecomposeShowsPrec p m = case rieszDecomposition m of
+            [] -> ("zeroV"++)
+            ((b₀,dv₀):dvs) -> showParen (p>6)
+                            $ \s -> showsPrecBasis ([]::[u]) 7 b₀
+                                                     . (".<"++) . showsPrec 7 dv₀
+                                  $ foldr (\(b,dv)
+                                        -> (" ^+^ "++) . showsPrecBasis ([]::[u]) 7 b
+                                                       . (".<"++) . showsPrec 7 dv) s dvs
+
 instance Show (LinearMap s v (V0 s)) where
   show _ = "zeroV"
 instance (FiniteDimensional v, v ~ DualVector v, Scalar v ~ ℝ, Show v)
               => Show (LinearMap ℝ v (V1 ℝ)) where
-  showsPrec p m = showParen (p>6) $ ("ex .< "++)
-                       . showsPrec 7 (sRiesz $ fmap (LinearFunction (^._x)) $ m)
+  showsPrec = rieszDecomposeShowsPrec
 instance (FiniteDimensional v, v ~ DualVector v, Scalar v ~ ℝ, Show v)
               => Show (LinearMap ℝ v (V2 ℝ)) where
-  showsPrec p m = showParen (p>6)
-              $ ("ex.<"++) . showsPrec 7 (sRiesz $ fmap (LinearFunction (^._x)) $ m)
-         . (" ^+^ ey.<"++) . showsPrec 7 (sRiesz $ fmap (LinearFunction (^._y)) $ m)
+  showsPrec = rieszDecomposeShowsPrec
 instance (FiniteDimensional v, v ~ DualVector v, Scalar v ~ ℝ, Show v)
               => Show (LinearMap ℝ v (V3 ℝ)) where
-  showsPrec p m = showParen (p>6)
-              $ ("ex.<"++) . showsPrec 7 (sRiesz $ fmap (LinearFunction (^._x)) $ m)
-         . (" ^+^ ey.<"++) . showsPrec 7 (sRiesz $ fmap (LinearFunction (^._y)) $ m)
-         . (" ^+^ ez.<"++) . showsPrec 7 (sRiesz $ fmap (LinearFunction (^._z)) $ m)
+  showsPrec = rieszDecomposeShowsPrec
 instance (FiniteDimensional v, v ~ DualVector v, Scalar v ~ ℝ, Show v)
               => Show (LinearMap ℝ v (V4 ℝ)) where
-  showsPrec p m = showParen (p>6)
-              $ ("ex.<"++) . showsPrec 7 (sRiesz $ fmap (LinearFunction (^._x)) $ m)
-         . (" ^+^ ey.<"++) . showsPrec 7 (sRiesz $ fmap (LinearFunction (^._y)) $ m)
-         . (" ^+^ ez.<"++) . showsPrec 7 (sRiesz $ fmap (LinearFunction (^._z)) $ m)
-         . (" ^+^ ew.<"++) . showsPrec 7 (sRiesz $ fmap (LinearFunction (^._w)) $ m)
+  showsPrec = rieszDecomposeShowsPrec
 
+instance ( FiniteDimensional v, v ~ DualVector v, Show v
+         , RieszDecomposable x, RieszDecomposable y
+         , Scalar x ~ s, Scalar y ~ s, Scalar v ~ s )
+              => Show (LinearMap s v (x,y)) where
+  showsPrec = rieszDecomposeShowsPrec
 
 
 
