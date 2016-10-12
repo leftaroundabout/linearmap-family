@@ -383,8 +383,8 @@ data Eigenvector v = Eigenvector {
       ev_Eigenvalue :: Scalar v -- ^ The estimated eigenvalue @λ@.
     , ev_Eigenvector :: v       -- ^ Normalised vector @v@ that gets mapped to a multiple, namely:
     , ev_FunctionApplied :: v   -- ^ @f $ v ≡ λ *^ v @.
-    , ev_Deviation :: v         -- ^ Deviation of these two supposedly equivalent expressions.
-    , ev_Badness :: Scalar v    -- ^ Squared norm of the deviation, normalised by the eigenvalue.
+    , ev_Deviation :: v         -- ^ Deviation of @v@ to @(f$v)^/λ@. Ideally, this would of course be equal.
+    , ev_Badness :: Scalar v    -- ^ Squared norm of the deviation.
     }
 deriving instance (Show v, Show (Scalar v)) => Show (Eigenvector v)
 
@@ -404,26 +404,28 @@ constructEigenSystem :: (LSpace v, RealFloat (Scalar v))
       -> [v]                -- ^ Starting vector(s) for the power method.
       -> [[Eigenvector v]]  -- ^ Infinite sequence of ever more accurate approximations
                             --   to the eigensystem of the operator.
-constructEigenSystem me@(Norm m) ε₀ f = iterate (
+constructEigenSystem me ε₀ f = iterate (
                                              sortBy (comparing $
                                                negate . abs . ev_Eigenvalue)
                                            . map asEV
-                                           . orthonormaliseFussily (1/4) (Norm m)
+                                           . orthonormaliseFussily (1/4) me
                                            . newSys)
                                          . map (asEV . (^%me))
  where newSys [] = []
        newSys (Eigenvector λ v fv dv ε : evs)
          | ε>ε₀       = case newSys evs of
-                         []     -> [fv^/λ, dv^*(sqrt $ λ^2/ε)]
-                         vn:vns -> fv^/λ : vn : dv^*(sqrt $ λ^2/ε) : vns
+                         []     -> [fv^/λ, dv^/sqrt(ε+ε₀)]
+                         vn:vns -> fv^/λ : vn : dv^/sqrt(ε+ε₀) : vns
          | ε>=0       = v : newSys evs
          | otherwise  = newSys evs
        asEV v = Eigenvector λ v fv dv ε
-        where λ = v'<.>^fv
-              ε = normSq me dv / (λ^2 + ε₀)
+        where λ² = fv'<.>^fv
+              λ = fv'<.>^v
+              ε = normSq me dv
               fv = f $ v
-              dv = v^*λ ^-^ fv
-              v' = m $ v
+              fv' = me<$|fv
+              dv | λ²>0       = v ^-^ fv^*(λ/λ²) -- for stability reasons
+                 | otherwise  = zeroV
 
 
 finishEigenSystem :: (LSpace v, RealFloat (Scalar v))
