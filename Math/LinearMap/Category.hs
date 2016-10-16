@@ -84,6 +84,7 @@ module Math.LinearMap.Category (
             , findNormalLength, normalLength
             , summandSpaceNorms, sumSubspaceNorms
             , sharedNormSpanningSystem, sharedSeminormSpanningSystem
+            , sharedSeminormSpanningSystem'
             ) where
 
 import Math.LinearMap.Category.Class
@@ -593,6 +594,14 @@ sharedSeminormSpanningSystem nn nm
            | μn^2 > epsilon  = (v'^*μn, Just $ sqrt (1 - μn^2)/μn)
            | otherwise       = (v', Nothing)
         where v' = combined<$|v
+
+-- | A system of vectors which are orthogonal with respect to both of the given
+--   seminorms. (In general they are not /orthonormal/ to either of them.)
+sharedSeminormSpanningSystem' :: ∀ v .  SimpleSpace v
+               => Seminorm v -> Seminorm v -> [v]
+sharedSeminormSpanningSystem' nn nm
+         = fst <$> sharedNormSpanningSystem' 1 (combined, dualNorm combined) nn
+ where combined = densifyNorm $ nn<>nm
 
 
 -- | Interpret a variance as a covariance between two subspaces, and
