@@ -34,7 +34,7 @@ module Math.LinearMap.Category (
             , adjoint
             -- ** Dual vectors
             -- $dualVectorIntro
-            , (<.>^)
+            , (<.>^), (-+|>)
             -- * Tensor spaces
             , Tensor (..), type (⊗)(), (⊗)
             -- * Norms
@@ -197,6 +197,17 @@ import Numeric.IEEE
 
 
 
+-- | A linear map that simply projects from a dual vector in @u@ to a vector in @v@.
+-- 
+-- @
+-- (du-+|>v) u  ≡  v ^* (du<.>^u)
+-- @
+infixr 7 -+|>
+(-+|>) :: ( EnhancedCat f (LinearFunction s)
+          , LSpace u, LSpace v, Scalar u ~ s, Scalar v ~ s
+          , Object f u, Object f v )
+             => DualVector u -> v -> f u v
+du-+|>v = arr . LinearFunction $ (v^*) . (du<.>^)
 
 
 
