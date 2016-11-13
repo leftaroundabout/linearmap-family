@@ -52,6 +52,7 @@ type ℝ = Double
 
 instance TensorSpace ℝ where
   type TensorProduct ℝ w = w
+  scalarSpaceWitness = ScalarSpaceWitness
   zeroTensor = Tensor zeroV
   scaleTensor = LinearFunction (pretendLike Tensor) . scale
   addTensors (Tensor v) (Tensor w) = Tensor $ v ^+^ w
@@ -83,6 +84,7 @@ instance LinearSpace ℝ where
 #define FreeLinearSpace(V, LV, tp, bspan, tenspl, dspan, contraction, contraaction)                                  \
 instance Num''' s => TensorSpace (V s) where {                     \
   type TensorProduct (V s) w = V w;                               \
+  scalarSpaceWitness = ScalarSpaceWitness;                        \
   zeroTensor = Tensor $ pure zeroV;                                \
   addTensors (Tensor m) (Tensor n) = Tensor $ liftA2 (^+^) m n;     \
   subtractTensors (Tensor m) (Tensor n) = Tensor $ liftA2 (^-^) m n; \

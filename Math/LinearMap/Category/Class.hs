@@ -21,6 +21,7 @@
 {-# LANGUAGE UnicodeSyntax              #-}
 {-# LANGUAGE TupleSections              #-}
 {-# LANGUAGE StandaloneDeriving         #-}
+{-# LANGUAGE GADTs                      #-}
 
 module Math.LinearMap.Category.Class where
 
@@ -41,6 +42,11 @@ import Math.VectorSpace.ZeroDimensional
 type Num' s = (Num s, VectorSpace s, Scalar s ~ s)
 type Num'' s = (Num' s, LinearSpace s)
 type Num''' s = (Num s, InnerSpace s, Scalar s ~ s, LSpace' s, DualVector s ~ s)
+
+data ScalarSpaceWitness v where
+  ScalarSpaceWitness :: ( TensorSpace (Scalar v), Num (Scalar v)
+                        , Scalar (Scalar v) ~ Scalar v)
+                             => ScalarSpaceWitness v
   
 class (VectorSpace v) => TensorSpace v where
   -- | The internal representation of a 'Tensor' product.
@@ -49,6 +55,7 @@ class (VectorSpace v) => TensorSpace v where
   -- scalar field in the @v@ vector with an entire @w@ vector. I.e., you have
   -- then a “nested vector” or, if @v@ is a @DualVector@ / “row vector”, a matrix.
   type TensorProduct v w :: *
+  scalarSpaceWitness :: ScalarSpaceWitness v
   zeroTensor :: (LSpace w, Scalar w ~ Scalar v)
                 => v ⊗ w
   toFlatTensor :: v -+> (v ⊗ Scalar v)
@@ -148,6 +155,7 @@ class ( TensorSpace v, TensorSpace (DualVector v)
 
 instance Num''' s => TensorSpace (ZeroDim s) where
   type TensorProduct (ZeroDim s) v = ZeroDim s
+  scalarSpaceWitness = ScalarSpaceWitness
   zeroTensor = Tensor Origin
   toFlatTensor = LinearFunction $ \Origin -> Tensor Origin
   fromFlatTensor = LinearFunction $ \(Tensor Origin) -> Origin
@@ -306,6 +314,9 @@ instance Num''' s => EnhancedCat (LinearMap s) (LinearFunction s) where
 instance ∀ u v . ( Num''' (Scalar v), LSpace u, LSpace v, Scalar u ~ Scalar v )
                        => TensorSpace (u,v) where
   type TensorProduct (u,v) w = (u⊗w, v⊗w)
+  scalarSpaceWitness = case ( scalarSpaceWitness :: ScalarSpaceWitness u
+                            , scalarSpaceWitness :: ScalarSpaceWitness v ) of
+       (ScalarSpaceWitness, ScalarSpaceWitness) -> ScalarSpaceWitness
   zeroTensor = zeroTensor <⊕ zeroTensor
   scaleTensor = scaleTensor&&&scaleTensor >>> LinearFunction (
                         uncurry (***) >>> pretendLike Tensor )
@@ -388,6 +399,9 @@ rassocTensor = Coercion
 instance ∀ s u v . ( Num''' s, LSpace u, LSpace v, Scalar u ~ s, Scalar v ~ s )
                        => TensorSpace (LinearMap s u v) where
   type TensorProduct (LinearMap s u v) w = TensorProduct (DualVector u) (Tensor s v w)
+  scalarSpaceWitness = case ( scalarSpaceWitness :: ScalarSpaceWitness u
+                            , scalarSpaceWitness :: ScalarSpaceWitness v ) of
+       (ScalarSpaceWitness, ScalarSpaceWitness) -> ScalarSpaceWitness
   zeroTensor = deferLinearMap $ zeroV
   toFlatTensor = arr deferLinearMap . fmap toFlatTensor
   fromFlatTensor = fmap fromFlatTensor . arr hasteLinearMap
@@ -464,6 +478,9 @@ instance ∀ s u v . (Num''' s, LSpace u, LSpace v, Scalar u ~ s, Scalar v ~ s)
 instance ∀ s u v . (Num''' s, LSpace u, LSpace v, Scalar u ~ s, Scalar v ~ s)
                        => TensorSpace (Tensor s u v) where
   type TensorProduct (Tensor s u v) w = TensorProduct u (Tensor s v w)
+  scalarSpaceWitness = case ( scalarSpaceWitness :: ScalarSpaceWitness u
+                            , scalarSpaceWitness :: ScalarSpaceWitness v ) of
+       (ScalarSpaceWitness, ScalarSpaceWitness) -> ScalarSpaceWitness
   zeroTensor = lassocTensor $ zeroTensor
   toFlatTensor = arr lassocTensor . fmap toFlatTensor
   fromFlatTensor = fmap fromFlatTensor . arr rassocTensor
@@ -594,6 +611,9 @@ hasteLinearFn = Coercion
 instance (LSpace u, LSpace v, Scalar u ~ s, Scalar v ~ s)
      => TensorSpace (LinearFunction s u v) where
   type TensorProduct (LinearFunction s u v) w = LinearFunction s u (Tensor s v w)
+  scalarSpaceWitness = case ( scalarSpaceWitness :: ScalarSpaceWitness u
+                            , scalarSpaceWitness :: ScalarSpaceWitness v ) of
+       (ScalarSpaceWitness, ScalarSpaceWitness) -> ScalarSpaceWitness
   zeroTensor = deferLinearFn $ const0
   toFlatTensor = arr deferLinearFn . fmap toFlatTensor
   fromFlatTensor = fmap fromFlatTensor . arr hasteLinearFn
