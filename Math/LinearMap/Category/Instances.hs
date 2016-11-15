@@ -50,6 +50,8 @@ import Math.VectorSpace.ZeroDimensional
 
 type ℝ = Double
 
+instance Num' ℝ where
+
 instance TensorSpace ℝ where
   type TensorProduct ℝ w = w
   scalarSpaceWitness = ScalarSpaceWitness
@@ -74,8 +76,8 @@ instance LinearSpace ℝ where
   coerceDoubleDual = Coercion
   contractTensorMap = flout Tensor . flout LinearMap
   contractMapTensor = flout LinearMap . flout Tensor
-  contractTensorWith = flout Tensor >>> applyDualVector
-  contractLinearMapAgainst = flout LinearMap >>> flipBilin lApply
+--contractTensorWith = flout Tensor >>> applyDualVector
+--contractLinearMapAgainst = flout LinearMap >>> flipBilin lApply
   blockVectSpan = follow Tensor . follow LinearMap
   applyDualVector = scale
   applyLinear = elacs . flout LinearMap
@@ -83,17 +85,20 @@ instance LinearSpace ℝ where
                      -> LinearMap $ (applyLinear-+$>f)-+$>g
 
 #define FreeLinearSpace(V, LV, tp, bspan, tenspl, dspan, contraction, contraaction)                                  \
-instance Num''' s => TensorSpace (V s) where {                     \
+instance ∀ s . Num' s => TensorSpace (V s) where {                     \
   type TensorProduct (V s) w = V w;                               \
-  scalarSpaceWitness = ScalarSpaceWitness;                        \
+  scalarSpaceWitness = case closedScalarWitness :: ClosedScalarWitness s of{ \
+                         ClosedScalarWitness -> ScalarSpaceWitness};        \
   zeroTensor = Tensor $ pure zeroV;                                \
   addTensors (Tensor m) (Tensor n) = Tensor $ liftA2 (^+^) m n;     \
   subtractTensors (Tensor m) (Tensor n) = Tensor $ liftA2 (^-^) m n; \
   negateTensor = LinearFunction $ Tensor . fmap negateV . getTensorProduct;  \
   scaleTensor = bilinearFunction   \
           $ \μ -> Tensor . fmap (μ*^) . getTensorProduct; \
-  toFlatTensor = follow Tensor; \
-  fromFlatTensor = flout Tensor; \
+  toFlatTensor = case closedScalarWitness :: ClosedScalarWitness s of{ \
+                         ClosedScalarWitness -> follow Tensor}; \
+  fromFlatTensor = case closedScalarWitness :: ClosedScalarWitness s of{ \
+                         ClosedScalarWitness -> flout Tensor}; \
   tensorProduct = bilinearFunction $ \w v -> Tensor $ fmap (*^v) w; \
   transposeTensor = LinearFunction (tp); \
   fmapTensor = bilinearFunction $       \
@@ -193,7 +198,7 @@ FreeLinearSpace( V4
 
 
 
-instance (Num''' n, TensorProduct (DualVector n) n ~ n) => Num (LinearMap n n n) where
+instance (Num' n, TensorProduct (DualVector n) n ~ n) => Num (LinearMap n n n) where
   LinearMap n + LinearMap m = LinearMap $ n + m
   LinearMap n - LinearMap m = LinearMap $ n - m
   LinearMap n * LinearMap m = LinearMap $ n * m
@@ -201,7 +206,7 @@ instance (Num''' n, TensorProduct (DualVector n) n ~ n) => Num (LinearMap n n n)
   signum (LinearMap n) = LinearMap $ signum n
   fromInteger = LinearMap . fromInteger
    
-instance (Fractional'' n, TensorProduct (DualVector n) n ~ n)
+instance (Fractional' n, TensorProduct (DualVector n) n ~ n)
                            => Fractional (LinearMap n n n) where
   LinearMap n / LinearMap m = LinearMap $ n / m
   recip (LinearMap n) = LinearMap $ recip n

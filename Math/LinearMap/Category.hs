@@ -76,8 +76,8 @@ module Math.LinearMap.Category (
             , DualSpace, riesz, coRiesz, showsPrecAsRiesz, (.<)
             -- ** Constraint synonyms
             , HilbertSpace, SimpleSpace
-            , Num', Num'', Num'''
-            , Fractional', Fractional''
+            , Num'
+            , Fractional'
             , RealFrac', RealFloat'
             -- ** Misc
             , relaxNorm, transformNorm, transformVariance
@@ -236,17 +236,22 @@ du-+|>v = arr . LinearFunction $ (v^*) . (du<.>^)
 -- 
 -- If the @dᵢ@ are a complete orthonormal system, you get the 'euclideanNorm'
 -- (in an inefficient form).
-spanNorm :: LSpace v => [DualVector v] -> Seminorm v
-spanNorm dvs = Norm . LinearFunction $ \v -> sumV [dv ^* (dv<.>^v) | dv <- dvs]
+spanNorm :: ∀ v . LSpace v => [DualVector v] -> Seminorm v
+spanNorm = case dualSpaceWitness :: DualSpaceWitness v of
+    DualSpaceWitness
+        -> \dvs -> Norm . LinearFunction $ \v -> sumV [dv ^* (dv<.>^v) | dv <- dvs]
 
-spanVariance :: LSpace v => [v] -> Variance v
-spanVariance = spanNorm
+spanVariance :: ∀ v . LSpace v => [v] -> Variance v
+spanVariance = case dualSpaceWitness :: DualSpaceWitness v of
+    DualSpaceWitness -> spanNorm
 
 -- | Modify a norm in such a way that the given vectors lie within its unit ball.
 --   (Not /optimally/ – the unit ball may be bigger than necessary.)
-relaxNorm :: SimpleSpace v => Norm v -> [v] -> Norm v
-relaxNorm me = \vs -> dualNorm . spanVariance $ vs' ++ vs
- where vs' = normSpanningSystem' me
+relaxNorm :: ∀ v . SimpleSpace v => Norm v -> [v] -> Norm v
+relaxNorm = case dualSpaceWitness :: DualSpaceWitness v of
+    DualSpaceWitness
+        -> \me vs -> let vs' = normSpanningSystem' me
+                     in dualNorm . spanVariance $ vs' ++ vs
 
 -- | Scale the result of a norm with the absolute of the given number.
 -- 
@@ -255,8 +260,9 @@ relaxNorm me = \vs -> dualNorm . spanVariance $ vs' ++ vs
 -- @
 -- 
 -- Equivalently, this scales the norm's unit ball by the reciprocal of that factor.
-scaleNorm :: LSpace v => Scalar v -> Norm v -> Norm v
-scaleNorm μ (Norm n) = Norm $ μ^2 *^ n
+scaleNorm :: ∀ v . LSpace v => Scalar v -> Norm v -> Norm v
+scaleNorm = case dualSpaceWitness :: DualSpaceWitness v of
+    DualSpaceWitness -> \μ (Norm n) -> Norm $ μ^2 *^ n
 
 -- | A positive (semi)definite symmetric bilinear form. This gives rise
 --   to a <https://en.wikipedia.org/wiki/Norm_(mathematics) norm> thus:
@@ -308,30 +314,39 @@ adhocNorm = Norm uncanonicallyToDual
 dualNorm :: SimpleSpace v => Norm v -> Variance v
 dualNorm = spanVariance . normSpanningSystem'
 
-transformNorm :: (LSpace v, LSpace w, Scalar v~Scalar w) => (v+>w) -> Norm w -> Norm v
-transformNorm f (Norm m) = Norm . arr $ (adjoint $ f) . (fmap m $ f)
+transformNorm :: ∀ v w . (LSpace v, LSpace w, Scalar v~Scalar w)
+                             => (v+>w) -> Norm w -> Norm v
+transformNorm = case ( dualSpaceWitness :: DualSpaceWitness v
+                     , dualSpaceWitness :: DualSpaceWitness w ) of
+    (DualSpaceWitness, DualSpaceWitness)
+            -> \f (Norm m) -> Norm . arr $ (adjoint $ f) . (fmap m $ f)
 
-transformVariance :: (LSpace v, LSpace w, Scalar v~Scalar w)
+transformVariance :: ∀ v w . (LSpace v, LSpace w, Scalar v~Scalar w)
                         => (v+>w) -> Variance v -> Variance w
-transformVariance f (Norm m) = Norm . arr $ f . (fmap m $ adjoint $ f)
+transformVariance = case ( dualSpaceWitness :: DualSpaceWitness v
+                     , dualSpaceWitness :: DualSpaceWitness w ) of
+    (DualSpaceWitness, DualSpaceWitness)
+            -> \f (Norm m) -> Norm . arr $ f . (fmap m $ adjoint $ f)
 
 infixl 6 ^%
 (^%) :: (LSpace v, Floating (Scalar v)) => v -> Norm v -> v
-v ^% Norm m = v ^/ sqrt ((m$v)<.>^v)
+v ^% Norm m = v ^/ sqrt ((m-+$>v)<.>^v)
 
 -- | The unique positive number whose norm is 1 (if the norm is not constant zero).
-findNormalLength :: RealFrac' s => Norm s -> Maybe s
-findNormalLength (Norm m) = case m $ 1 of
-   o | o > 0      -> Just . sqrt $ recip o
-     | otherwise  -> Nothing
+findNormalLength :: ∀ s . RealFrac' s => Norm s -> Maybe s
+findNormalLength (Norm m) = case ( closedScalarWitness :: ClosedScalarWitness s
+                                 , m-+$>1 ) of
+   (ClosedScalarWitness, o) | o > 0      -> Just . sqrt $ recip o
+                            | otherwise  -> Nothing
 
 -- | Unsafe version of 'findNormalLength', only works reliable if the norm
 --   is actually positive definite.
-normalLength :: RealFrac' s => Norm s -> s
-normalLength (Norm m) = case m $ 1 of
-   o | o >= 0     -> sqrt $ recip o
-     | o < 0      -> error "Norm fails to be positive semidefinite."
-     | otherwise  -> error "Norm yields NaN."
+normalLength :: ∀ s . RealFrac' s => Norm s -> s
+normalLength (Norm m) = case ( closedScalarWitness :: ClosedScalarWitness s
+                             , m-+$>1 ) of
+   (ClosedScalarWitness, o) | o >= 0     -> sqrt $ recip o
+                            | o < 0      -> error "Norm fails to be positive semidefinite."
+                            | otherwise  -> error "Norm yields NaN."
 
 infixr 0 <$|, |$|
 -- | “Partially apply” a norm, yielding a dual vector
@@ -360,26 +375,30 @@ normSq (Norm m) v = (m-+$>v)<.>^v
 --   is similar to the dimension of the space, or even larger than it.
 --   Use this function to optimise the underlying operator to a dense
 --   matrix representation.
-densifyNorm :: LSpace v => Norm v -> Norm v
-densifyNorm (Norm m) = Norm . arr $ sampleLinearFunction $ m
+densifyNorm :: ∀ v . LSpace v => Norm v -> Norm v
+densifyNorm = case dualSpaceWitness :: DualSpaceWitness v of
+    DualSpaceWitness
+        -> \(Norm m) -> Norm . arr $ sampleLinearFunction $ m
 
 data OrthonormalSystem v = OrthonormalSystem {
       orthonormalityNorm :: Norm v
     , orthonormalVectors :: [v]
     }
 
-orthonormaliseFussily :: (LSpace v, RealFloat (Scalar v))
+orthonormaliseFussily :: ∀ v . (LSpace v, RealFloat (Scalar v))
                            => Scalar v -> Norm v -> [v] -> [v]
-orthonormaliseFussily fuss me = go []
- where go _ [] = []
-       go ws (v₀:vs)
-         | mvd > fuss  = let μ = 1/sqrt mvd
-                             v = vd^*μ
-                         in v : go ((v,dvd^*μ):ws) vs
-         | otherwise   = go ws vs
-        where vd = orthogonalComplementProj' ws $ v₀
-              dvd = applyNorm me $ vd
-              mvd = dvd<.>^vd
+orthonormaliseFussily = onf dualSpaceWitness
+ where onf :: DualSpaceWitness v -> Scalar v -> Norm v -> [v] -> [v]
+       onf DualSpaceWitness fuss me = go []
+        where go _ [] = []
+              go ws (v₀:vs)
+                | mvd > fuss  = let μ = 1/sqrt mvd
+                                    v = vd^*μ
+                                in v : go ((v,dvd^*μ):ws) vs
+                | otherwise   = go ws vs
+               where vd = orthogonalComplementProj' ws $ v₀
+                     dvd = applyNorm me $ vd
+                     mvd = dvd<.>^vd
 
 orthogonalComplementProj' :: LSpace v => [(v, DualVector v)] -> (v-+>v)
 orthogonalComplementProj' ws = LinearFunction $ \v₀
@@ -457,7 +476,7 @@ finishEigenSystem me = go . sortBy (comparing $ negate . ev_Eigenvalue)
               
               fShift₁v₀ = fv₀ ^-^ λ₁*^v₀
               
-              (μ₀₀,μ₀₁) = normalized ( λ₀ - λ₁
+              (μ₀₀,μ₀₁) = normalised ( λ₀ - λ₁
                                      , (me <$| fShift₁v₀)<.>^v₁ )
               (μ₁₀,μ₁₁) = (-μ₀₁, μ₀₀)
         
@@ -474,7 +493,9 @@ finishEigenSystem me = go . sortBy (comparing $ negate . ev_Eigenvalue)
         where λ = (me<$|v)<.>^fv
               dv = v^*λ ^-^ fv
               ε = normSq me dv / λ^2
-
+       
+       normalised (x,y) = (x/r, y/r)
+        where r = sqrt $ x^2 + y^2
 
 -- | Find a system of vectors that approximate the eigensytem, in the sense that:
 --   each true eigenvalue is represented by an approximate one, and that is closer
@@ -560,10 +581,13 @@ sharedNormSpanningSystem nn@(Norm n) nm
 
 sharedNormSpanningSystem' :: ∀ v . SimpleSpace v
                => Int -> (Norm v, Variance v) -> Seminorm v -> [(v, Scalar v)]
-sharedNormSpanningSystem' nRefine (nn@(Norm n), Norm n') (Norm m)
+sharedNormSpanningSystem' = snss dualSpaceWitness
+ where snss :: DualSpaceWitness v -> Int -> (Norm v, Variance v)
+                     -> Seminorm v -> [(v, Scalar v)]
+       snss DualSpaceWitness nRefine (nn@(Norm n), Norm n') (Norm m)
            = sep =<< iterate (finishEigenSystem nn)
                         (roughEigenSystem nn $ arr n' . arr m) !! nRefine
- where sep (Eigenvector λ v λv _ _)
+       sep (Eigenvector λ v λv _ _)
          | λ>=0       = [(v, sqrt λ)]
          | otherwise  = []
 
@@ -584,13 +608,14 @@ sharedNormSpanningSystem' nRefine (nn@(Norm n), Norm n') (Norm m)
 -- You may also interpret a @Nothing@ here as an “infinite eigenvalue”, i.e.
 -- it is so small as an spanning vector of @n₀@ that you would need to scale it
 -- by ∞ to use it for spanning @n₁@.
-sharedSeminormSpanningSystem :: ∀ v .  SimpleSpace v
+sharedSeminormSpanningSystem :: ∀ v . SimpleSpace v
                => Seminorm v -> Seminorm v -> [(DualVector v, Maybe (Scalar v))]
 sharedSeminormSpanningSystem nn nm
-         = finalise <$> sharedNormSpanningSystem' 1 (combined, dualNorm combined) nn
+         = finalise dualSpaceWitness
+               <$> sharedNormSpanningSystem' 1 (combined, dualNorm combined) nn
  where combined = densifyNorm $ nn<>nm
-       finalise :: (v, Scalar v) -> (DualVector v, Maybe (Scalar v))
-       finalise (v, μn)
+       finalise :: DualSpaceWitness v -> (v, Scalar v) -> (DualVector v, Maybe (Scalar v))
+       finalise DualSpaceWitness (v, μn)
            | μn^2 > epsilon  = (v'^*μn, Just $ sqrt (1 - μn^2)/μn)
            | otherwise       = (v', Nothing)
         where v' = combined<$|v
@@ -608,21 +633,30 @@ sharedSeminormSpanningSystem' nn nm
 --   normalise it by the variance on @u@. The result is effectively
 --   the linear regression coefficient of a simple regression of the vectors
 --   spanning the variance.
-dependence :: (SimpleSpace u, SimpleSpace v, Scalar u~Scalar v)
+dependence :: ∀ u v . (SimpleSpace u, SimpleSpace v, Scalar u~Scalar v)
                 => Variance (u,v) -> (u+>v)
-dependence (Norm m) = fmap ( snd . m . (id&&&zeroV) )
-      $ pseudoInverse (arr $ fst . m . (id&&&zeroV))
+dependence = case ( dualSpaceWitness :: DualSpaceWitness u
+                  , dualSpaceWitness :: DualSpaceWitness v ) of
+  (DualSpaceWitness,DualSpaceWitness)
+        -> \(Norm m) -> fmap ( snd . m . (id&&&zeroV) )
+              $ pseudoInverse (arr $ fst . m . (id&&&zeroV))
 
 
-summandSpaceNorms :: (SimpleSpace u, SimpleSpace v, Scalar u ~ Scalar v)
+summandSpaceNorms :: ∀ u v . (SimpleSpace u, SimpleSpace v, Scalar u ~ Scalar v)
                        => Norm (u,v) -> (Norm u, Norm v)
-summandSpaceNorms nuv = ( densifyNorm $ spanNorm (fst<$>spanSys)
-                        , densifyNorm $ spanNorm (snd<$>spanSys) )
- where spanSys = normSpanningSystem nuv
+summandSpaceNorms = case ( dualSpaceWitness :: DualSpaceWitness u
+                         , dualSpaceWitness :: DualSpaceWitness v ) of
+  (DualSpaceWitness,DualSpaceWitness)
+        -> \nuv -> let spanSys = normSpanningSystem nuv
+                   in ( densifyNorm $ spanNorm (fst<$>spanSys)
+                      , densifyNorm $ spanNorm (snd<$>spanSys) )
 
-sumSubspaceNorms :: (LSpace u, LSpace v, Scalar u~Scalar v)
+sumSubspaceNorms :: ∀ u v . (LSpace u, LSpace v, Scalar u~Scalar v)
                          => Norm u -> Norm v -> Norm (u,v)
-sumSubspaceNorms (Norm nu) (Norm nv) = Norm $ nu *** nv
+sumSubspaceNorms = case ( dualSpaceWitness :: DualSpaceWitness u
+                         , dualSpaceWitness :: DualSpaceWitness v ) of
+  (DualSpaceWitness,DualSpaceWitness)
+        -> \(Norm nu) (Norm nv) -> Norm $ nu *** nv
 
 
 
