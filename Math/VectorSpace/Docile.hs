@@ -121,7 +121,7 @@ instance (Fractional'' s, SemiInner s) => SemiInner (V0 s) where
   dualBasisCandidates _ = []
 
 (<.>^) :: LSpace v => DualVector v -> v -> Scalar v
-f<.>^v = (applyDualVector$f)$v
+f<.>^v = (applyDualVector-+$>f)-+$>v
 
 orthonormaliseDuals :: (SemiInner v, LSpace v, RealFrac' (Scalar v))
                           => Scalar v -> [(v, DualVector v)]
@@ -574,8 +574,8 @@ infixr 0 \$
 (\$) :: ∀ u v . ( SimpleSpace u, SimpleSpace v, Scalar u ~ Scalar v )
           => (u+>v) -> v -> u
 (\$) m
-  | du > dv    = (unsafeRightInverse m $)
-  | du < dv    = (unsafeLeftInverse m $)
+  | du > dv    = ((applyLinear-+$>unsafeRightInverse m)-+$>)
+  | du < dv    = ((applyLinear-+$>unsafeLeftInverse m)-+$>)
   | otherwise  = let v's = dualBasis $ mdecomp []
                      (mbas, mdecomp) = decomposeLinMap m
                  in fst . \v -> recomposeSB mbas [ maybe 0 (<.>^v) v' | v' <- v's ]

@@ -54,7 +54,7 @@ instance TensorSpace ℝ where
   type TensorProduct ℝ w = w
   scalarSpaceWitness = ScalarSpaceWitness
   zeroTensor = Tensor zeroV
-  scaleTensor = LinearFunction (pretendLike Tensor) . scale
+  scaleTensor = bilinearFunction $ \μ (Tensor t) -> Tensor $ μ*^t
   addTensors (Tensor v) (Tensor w) = Tensor $ v ^+^ w
   subtractTensors (Tensor v) (Tensor w) = Tensor $ v ^-^ w
   negateTensor = pretendLike Tensor lNegateV
@@ -79,7 +79,8 @@ instance LinearSpace ℝ where
   blockVectSpan = follow Tensor . follow LinearMap
   applyDualVector = scale
   applyLinear = elacs . flout LinearMap
-  composeLinear = LinearFunction $ \f -> follow LinearMap . arr f . flout LinearMap
+  composeLinear = bilinearFunction $ \f (LinearMap g)
+                     -> LinearMap $ (applyLinear-+$>f)-+$>g
 
 #define FreeLinearSpace(V, LV, tp, bspan, tenspl, dspan, contraction, contraaction)                                  \
 instance Num''' s => TensorSpace (V s) where {                     \
@@ -101,23 +102,24 @@ instance Num''' s => TensorSpace (V s) where {                     \
           \(LinearFunction f) (Tensor vw, Tensor vx) \
                   -> Tensor $ liftA2 (curry f) vw vx; \
   coerceFmapTensorProduct _ Coercion = Coercion };                  \
-instance Num''' s => LinearSpace (V s) where {                  \
+instance Num' s => LinearSpace (V s) where {                  \
   type DualVector (V s) = V s;                                 \
   linearId = LV Mat.identity;                                   \
   idTensor = Tensor Mat.identity; \
   coerceDoubleDual = Coercion; \
-  fromLinearForm = flout LinearMap; \
+  fromLinearForm = case closedScalarWitness :: ClosedScalarWitness s of{ \
+                         ClosedScalarWitness -> flout LinearMap}; \
   blockVectSpan = LinearFunction $ Tensor . (bspan);            \
   contractTensorMap = LinearFunction $ (contraction) . coerce . getLinearMap;      \
   contractMapTensor = LinearFunction $ (contraction) . coerce . getTensorProduct;      \
-  contractTensorWith = bilinearFunction $ \
-             \(Tensor wv) dw -> fmap (arr $ applyDualVector $ dw) wv;      \
+{-contractTensorWith = bilinearFunction $ \
+            \(Tensor wv) dw -> fmap (arr $ applyDualVector $ dw) wv;  -}    \
   contractLinearMapAgainst = bilinearFunction $ getLinearMap >>> (contraaction); \
   applyDualVector = bilinearFunction Mat.dot;           \
   applyLinear = bilinearFunction $ \(LV m)                        \
                   -> foldl' (^+^) zeroV . liftA2 (^*) m;           \
   composeLinear = bilinearFunction $   \
-         \f (LinearMap g) -> LinearMap $ fmap (f$) g }
+         \f (LinearMap g) -> LinearMap $ fmap ((applyLinear-+$>f)-+$>) g }
 FreeLinearSpace( V0
                , LinearMap
                , \(Tensor V0) -> zeroV

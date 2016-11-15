@@ -86,7 +86,7 @@ infixl 7 ⊗
 -- | Infix version of 'tensorProduct'.
 (⊗) :: (LSpace v, LSpace w, Scalar w ~ Scalar v)
                 => v -> w -> v ⊗ w
-v⊗w = (tensorProduct $ v) $ w
+v⊗w = (tensorProduct-+$>v)-+$>w
 
 -- | The class of vector spaces @v@ for which @'LinearMap' s v w@ is well-implemented.
 class ( TensorSpace v, TensorSpace (DualVector v)
@@ -251,18 +251,18 @@ instance (LSpace v, LSpace w, Scalar v~s, Scalar w~s)
 instance (LSpace v, LSpace w, Scalar v~s, Scalar w~s)
                => VectorSpace (LinearMap s v w) where
   type Scalar (LinearMap s v w) = s
-  μ*^v = arr fromTensor . (scaleTensor$μ) . arr asTensor $ v
+  μ*^v = fromTensor $ (scaleTensor-+$>μ) -+$> asTensor $ v
 
 instance (LSpace v, LSpace w, Scalar v~s, Scalar w~s)
                => AdditiveGroup (Tensor s v w) where
   zeroV = zeroTensor
   (^+^) = addTensors
   (^-^) = subtractTensors
-  negateV = arr negateTensor
+  negateV = getLinearFunction negateTensor
 instance (LSpace v, LSpace w, Scalar v~s, Scalar w~s)
                => VectorSpace (Tensor s v w) where
   type Scalar (Tensor s v w) = s
-  μ*^t = (scaleTensor $ μ) $ t
+  μ*^t = (scaleTensor-+$>μ)-+$>t
   
 infixr 6 ⊕, >+<, <⊕
 
@@ -318,23 +318,25 @@ instance ∀ u v . ( Num''' (Scalar v), LSpace u, LSpace v, Scalar u ~ Scalar v 
                             , scalarSpaceWitness :: ScalarSpaceWitness v ) of
        (ScalarSpaceWitness, ScalarSpaceWitness) -> ScalarSpaceWitness
   zeroTensor = zeroTensor <⊕ zeroTensor
-  scaleTensor = scaleTensor&&&scaleTensor >>> LinearFunction (
-                        uncurry (***) >>> pretendLike Tensor )
-  negateTensor = pretendLike Tensor $ negateTensor *** negateTensor
+  scaleTensor = bilinearFunction $ \μ (Tensor (v,w)) ->
+                 Tensor ( (scaleTensor-+$>μ)-+$>v, (scaleTensor-+$>μ)-+$>w )
+  negateTensor = LinearFunction $ \(Tensor (v,w))
+          -> Tensor (negateTensor-+$>v, negateTensor-+$>w)
   addTensors (Tensor (fu, fv)) (Tensor (fu', fv')) = (fu ^+^ fu') <⊕ (fv ^+^ fv')
   subtractTensors (Tensor (fu, fv)) (Tensor (fu', fv'))
           = (fu ^-^ fu') <⊕ (fv ^-^ fv')
   toFlatTensor = follow Tensor <<< toFlatTensor *** toFlatTensor
   fromFlatTensor = flout Tensor >>> fromFlatTensor *** fromFlatTensor
-  tensorProduct = LinearFunction $ \(u,v) ->
-                    (tensorProduct$u) &&& (tensorProduct$v) >>> follow Tensor
-  transposeTensor = flout Tensor >>> transposeTensor *** transposeTensor >>> fzip
-  fmapTensor = LinearFunction $
-           \f -> pretendLike Tensor $ (fmapTensor$f) *** (fmapTensor$f)
+  tensorProduct = bilinearFunction $ \(u,v) w ->
+                    Tensor ((tensorProduct-+$>u)-+$>w, (tensorProduct-+$>v)-+$>w)
+  transposeTensor = LinearFunction $ \(Tensor (uw,vw))
+              -> (fzipTensorWith-+$>id)-+$>(transposeTensor-+$>uw,transposeTensor-+$>vw)
+  fmapTensor = bilinearFunction $
+     \f (Tensor (uw,vw)) -> Tensor ((fmapTensor-+$>f)-+$>uw, (fmapTensor-+$>f)-+$>vw)
   fzipTensorWith = bilinearFunction
                $ \f (Tensor (uw, vw), Tensor (ux, vx))
-                      -> Tensor ( (fzipTensorWith$f)$(uw,ux)
-                                , (fzipTensorWith$f)$(vw,vx) )
+                      -> Tensor ( (fzipTensorWith-+$>f)-+$>(uw,ux)
+                                , (fzipTensorWith-+$>f)-+$>(vw,vx) )
   coerceFmapTensorProduct p cab = case
              ( coerceFmapTensorProduct (fst<$>p) cab
              , coerceFmapTensorProduct (snd<$>p) cab ) of
@@ -370,7 +372,8 @@ instance ∀ u v . ( LinearSpace u, LinearSpace (DualVector u), DualVector (Dual
            (applyLinear $ (asLinearMap $ fu)) *** (applyLinear $ (asLinearMap $ fv))
              >>> addV
   composeLinear = bilinearFunction $ \f (LinearMap (fu, fv))
-                    -> f . (asLinearMap $ fu) ⊕ f . (asLinearMap $ fv)
+                    -> ((composeLinear-+$>f)-+$>asLinearMap $ fu)
+                       ⊕ ((composeLinear-+$>f)-+$>asLinearMap $ fv)
 
 lfstBlock :: ( LSpace u, LSpace v, LSpace w
              , Scalar u ~ Scalar v, Scalar v ~ Scalar w )
@@ -407,7 +410,8 @@ instance ∀ s u v . ( Num''' s, LSpace u, LSpace v, Scalar u ~ s, Scalar v ~ s 
   fromFlatTensor = fmap fromFlatTensor . arr hasteLinearMap
   addTensors t₁ t₂ = deferLinearMap $ (hasteLinearMap$t₁) ^+^ (hasteLinearMap$t₂)
   subtractTensors t₁ t₂ = deferLinearMap $ (hasteLinearMap$t₁) ^-^ (hasteLinearMap$t₂)
-  scaleTensor = LinearFunction $ \μ -> arr deferLinearMap . scaleWith μ . arr hasteLinearMap
+  scaleTensor = bilinearFunction $ \μ t
+            -> deferLinearMap $ scaleWith μ -+$> hasteLinearMap $ t
   negateTensor = arr deferLinearMap . lNegateV . arr hasteLinearMap
   transposeTensor                -- t :: (u +> v) ⊗ w
             = arr hasteLinearMap     --  u +> (v ⊗ w)

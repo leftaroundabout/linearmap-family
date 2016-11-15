@@ -94,7 +94,7 @@ instance VectorSpace w => VectorSpace (LinearFunction s v w) where
 instance Functor (LinearFunction s v) Coercion Coercion where
   fmap Coercion = Coercion
 
-fmapScale :: ( VectorSpace w, Scalar w ~ s, VectorSpace s, Scalar s ~ s
+fmapScale :: ( VectorSpace w, Scalar w ~ s, VectorSpace s
              , Functor f (LinearFunction s) (LinearFunction s)
              , Object (LinearFunction s) s
              , Object (LinearFunction s) w
@@ -145,3 +145,7 @@ biConst0 = LinearFunction $ const const0
 
 lApply :: Bilinear (v-+>w) v w
 lApply = bilinearFunction $ \(LinearFunction f) v -> f v
+
+infixr 0 -+$>
+(-+$>) :: LinearFunction s v w -> v -> w
+LinearFunction f -+$> v = f v

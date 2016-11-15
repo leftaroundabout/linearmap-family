@@ -341,12 +341,12 @@ infixr 0 <$|, |$|
 -- ('euclideanNorm' '<$|' v) '<.>^' w  ≡  v '<.>' w
 -- @
 (<$|) :: LSpace v => Norm v -> v -> DualVector v
-Norm m <$| v = m $ v
+Norm m <$| v = m-+$>v
 
 -- | The squared norm. More efficient than '|$|' because that needs to take
 --   the square root.
 normSq :: LSpace v => Seminorm v -> v -> Scalar v
-normSq (Norm m) v = (m$v)<.>^v
+normSq (Norm m) v = (m-+$>v)<.>^v
 
 -- | Use a 'Norm' to measure the length / norm of a vector.
 -- 
@@ -387,7 +387,7 @@ orthogonalComplementProj' ws = LinearFunction $ \v₀
 
 orthogonalComplementProj :: LSpace v => Norm v -> [v] -> (v-+>v)
 orthogonalComplementProj (Norm m)
-      = orthogonalComplementProj' . map (id &&& (m$))
+      = orthogonalComplementProj' . map (id &&& (m-+$>))
 
 
 
@@ -440,7 +440,7 @@ constructEigenSystem me ε₀ f = iterate (
                  | otherwise  = zeroV
 
 
-finishEigenSystem :: (LSpace v, RealFloat (Scalar v))
+finishEigenSystem :: ∀ v . (LSpace v, RealFloat (Scalar v))
                       => Norm v -> [Eigenvector v] -> [Eigenvector v]
 finishEigenSystem me = go . sortBy (comparing $ negate . ev_Eigenvalue)
  where go [] = []
@@ -530,7 +530,7 @@ normSpanningSystem :: SimpleSpace v
                => Seminorm v -> [DualVector v]
 normSpanningSystem me@(Norm m)
      = catMaybes . map snd . orthonormaliseDuals 0
-         . map (id&&&(m$)) $ normSpanningSystem' me
+         . map (id&&&(m-+$>)) $ normSpanningSystem' me
 
 normSpanningSystem' :: (FiniteDimensional v, IEEE (Scalar v))
                => Seminorm v -> [v]
@@ -556,9 +556,9 @@ normSpanningSystem' me = orthonormaliseFussily 0 me $ enumerateSubBasis entireBa
 sharedNormSpanningSystem :: SimpleSpace v
                => Norm v -> Seminorm v -> [(DualVector v, Scalar v)]
 sharedNormSpanningSystem nn@(Norm n) nm
-      = first (n$) <$> sharedNormSpanningSystem' 0 (nn, dualNorm nn) nm
+      = first (n-+$>) <$> sharedNormSpanningSystem' 0 (nn, dualNorm nn) nm
 
-sharedNormSpanningSystem' :: SimpleSpace v
+sharedNormSpanningSystem' :: ∀ v . SimpleSpace v
                => Int -> (Norm v, Variance v) -> Seminorm v -> [(v, Scalar v)]
 sharedNormSpanningSystem' nRefine (nn@(Norm n), Norm n') (Norm m)
            = sep =<< iterate (finishEigenSystem nn)
