@@ -255,16 +255,12 @@ instance ∀ s u v . ( SimpleSpace u, SimpleSpace v, Scalar u ~ s, Scalar v ~ s 
                              , dualSpaceWitness :: DualSpaceWitness u
                              , dualSpaceWitness :: DualSpaceWitness v ) of
     (ScalarSpaceWitness,DualSpaceWitness,DualSpaceWitness)
-             -> map (fmap (second $ arr transposeTensor . arr asTensor))
+             -> map (fmap (second $ arr asLinearMap))
                       . dualBasisCandidates
                       . map (second $ arr asLinearMap)
 
 instance ∀ s u v . ( SimpleSpace u, SimpleSpace v, Scalar u ~ s, Scalar v ~ s )
            => SemiInner (LinearMap s u v) where
-  dualBasisCandidates = sequenceForest
-                      . map (second pseudoInverse) -- this is not efficient
-   where sequenceForest [] = []
-         sequenceForest (x:xs) = [Node x $ sequenceForest xs]
   
 (^/^) :: (InnerSpace v, Eq (Scalar v), Fractional (Scalar v)) => v -> v -> Scalar v
 v^/^w = case (v<.>w) of
@@ -478,14 +474,6 @@ instance ∀ s u v .
   enumerateSubBasis (TensorBasis bu bv)
        = [ u⊗v | u <- enumerateSubBasis bu, v <- enumerateSubBasis bv ]
   subbasisDimension (TensorBasis bu bv) = subbasisDimension bu * subbasisDimension bv
-  decomposeLinMap muvw = case decomposeLinMap $ curryLinearMap $ muvw of
-         (bu, mvwsg) -> first (TensorBasis bu) . go $ mvwsg []
-   where (go, _) = tensorLinmapDecompositionhelpers
-  decomposeLinMapWithin (TensorBasis bu bv) muvw
-               = case decomposeLinMapWithin bu $ curryLinearMap $ muvw of
-          Left (bu', mvwsg) -> let (_, (bv', ws)) = goWith bv id (mvwsg []) id
-                               in Left (TensorBasis bu' bv', ws)
-   where (_, goWith) = tensorLinmapDecompositionhelpers
   recomposeSB (TensorBasis bu bv) = recomposeSBTensor bu bv
   recomposeSBTensor = rst dualSpaceWitness
    where rst :: ∀ w . (FiniteDimensional w, Scalar w ~ s)
@@ -493,11 +481,6 @@ instance ∀ s u v .
                                -> SubBasis w -> [s] -> ((u⊗v)⊗w, [s])
          rst DualSpaceWitness (TensorBasis bu bv) bw
           = first (arr lassocTensor) . recomposeSBTensor bu (TensorBasis bv bw)
-  recomposeLinMap (TensorBasis bu bv) ws =
-      ( uncurryLinearMap $ fst . recomposeLinMap bu $ unfoldr (pure . recomposeLinMap bv) ws
-      , drop (subbasisDimension bu * subbasisDimension bv) ws )
-  recomposeContraLinMap = case dualSpaceWitness :: DualSpaceWitness u of
-     DualSpaceWitness -> recomposeContraLinMapTensor
 --recomposeContraLinMapTensor = rclt dualSpaceWitness dualSpaceWitness
 -- where rclt :: ∀ u' w f . ( FiniteDimensional u', Scalar u' ~ s
 --                          , TensorSpace w, Scalar w ~ s
@@ -514,10 +497,11 @@ instance ∀ s u v .
                              , dualSpaceWitness :: DualSpaceWitness v ) of
      (DualSpaceWitness, DualSpaceWitness) -> fmap uncanonicallyToDual 
             >>> transposeTensor >>> fmap uncanonicallyToDual
-            >>> transposeTensor
+            >>> transposeTensor >>> arr fromTensor
   uncanonicallyFromDual = case ( dualSpaceWitness :: DualSpaceWitness u
                                , dualSpaceWitness :: DualSpaceWitness v ) of
-     (DualSpaceWitness, DualSpaceWitness) -> fmap uncanonicallyFromDual 
+     (DualSpaceWitness, DualSpaceWitness) -> arr asTensor
+            >>> fmap uncanonicallyFromDual 
             >>> transposeTensor >>> fmap uncanonicallyFromDual
             >>> transposeTensor
 
@@ -551,7 +535,7 @@ deriving instance (Show (SubBasis u), Show (SubBasis v))
 
 instance ∀ s u v .
          ( LSpace u, FiniteDimensional (DualVector u), FiniteDimensional v
-         , Scalar u~s, Scalar v~s, Fractional' (Scalar v) )
+         , Scalar u~s, Scalar v~s, Scalar (DualVector v)~s, Fractional' (Scalar v) )
             => FiniteDimensional (LinearMap s u v) where
   data SubBasis (LinearMap s u v) = LinMapBasis !(SubBasis (DualVector u)) !(SubBasis v)
   entireBasis = case ( dualSpaceWitness :: DualSpaceWitness u
@@ -564,18 +548,6 @@ instance ∀ s u v .
      (DualSpaceWitness, DualSpaceWitness) -> \(LinMapBasis bu bv)
                    -> arr (fmap asLinearMap) . enumerateSubBasis $ TensorBasis bu bv
   subbasisDimension (LinMapBasis bu bv) = subbasisDimension bu * subbasisDimension bv
-  decomposeLinMap = case ( dualSpaceWitness :: DualSpaceWitness u
-                         , dualSpaceWitness :: DualSpaceWitness v ) of
-     (DualSpaceWitness, DualSpaceWitness)
-              -> first (\(TensorBasis bv bu)->LinMapBasis bu bv)
-                    . decomposeLinMap . coerce
-  decomposeLinMapWithin = case ( dualSpaceWitness :: DualSpaceWitness u
-                               , dualSpaceWitness :: DualSpaceWitness v ) of
-     (DualSpaceWitness, DualSpaceWitness)
-        -> \(LinMapBasis bu bv) m
-         -> case decomposeLinMapWithin (TensorBasis bv bu) (coerce m) of
-              Right ws -> Right ws
-              Left (TensorBasis bv' bu', ws) -> Left (LinMapBasis bu' bv', ws)
   recomposeSB = case ( dualSpaceWitness :: DualSpaceWitness u
                      , dualSpaceWitness :: DualSpaceWitness v ) of
      (DualSpaceWitness, DualSpaceWitness) -> \(LinMapBasis bu bv)
@@ -584,32 +556,12 @@ instance ∀ s u v .
                            , dualSpaceWitness :: DualSpaceWitness v ) of
      (DualSpaceWitness, DualSpaceWitness) -> \(LinMapBasis bu bv) bw
         -> recomposeSBTensor (TensorBasis bu bv) bw >>> first coerce
-  recomposeLinMap = case dualSpaceWitness :: DualSpaceWitness u of
-     DualSpaceWitness -> \(LinMapBasis bu bv) ws ->
-      ( coUncurryLinearMap . fmap asTensor $ fst . recomposeLinMap bv
-                   $ unfoldr (pure . recomposeLinMap bu) ws
-      , drop (subbasisDimension bu * subbasisDimension bv) ws )
-  recomposeContraLinMap = case ( dualSpaceWitness :: DualSpaceWitness u
-                               , dualSpaceWitness :: DualSpaceWitness v ) of
-     (DualSpaceWitness, DualSpaceWitness) -> \fw dds
-       -> coUncurryLinearMap . fmap fromLinearMap . curryLinearMap
-                   $ recomposeContraLinMapTensor fw $ fmap (arr asTensor) dds
 --recomposeContraLinMapTensor = case ( dualSpaceWitness :: DualSpaceWitness u
 --                                   , dualSpaceWitness :: DualSpaceWitness v ) of
 --   (DualSpaceWitness, DualSpaceWitness) -> \fw dds
 --     -> uncurryLinearMap . coUncurryLinearMap
 --       . fmap (fromLinearMap . curryLinearMap) . curryLinearMap
 --         $ recomposeContraLinMapTensor fw $ fmap (arr $ asTensor . hasteLinearMap) dds
-  uncanonicallyToDual = case ( dualSpaceWitness :: DualSpaceWitness u
-                             , dualSpaceWitness :: DualSpaceWitness v ) of
-     (DualSpaceWitness, DualSpaceWitness)
-           -> fmap uncanonicallyToDual >>> arr asTensor
-             >>> transposeTensor >>> arr fromTensor >>> fmap uncanonicallyToDual
-  uncanonicallyFromDual = case ( dualSpaceWitness :: DualSpaceWitness u
-                               , dualSpaceWitness :: DualSpaceWitness v ) of
-     (DualSpaceWitness, DualSpaceWitness)
-           -> fmap uncanonicallyFromDual >>> arr asTensor
-             >>> transposeTensor >>> arr fromTensor >>> fmap uncanonicallyFromDual
   
 deriving instance (Show (SubBasis (DualVector u)), Show (SubBasis v))
              => Show (SubBasis (LinearMap s u v))
