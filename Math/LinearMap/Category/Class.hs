@@ -179,11 +179,13 @@ class (TensorSpace v, Num (Scalar v)) => LinearSpace v where
   composeLinear :: ( LinearSpace w, TensorSpace x
                    , Scalar w ~ Scalar v, Scalar x ~ Scalar v )
            => Bilinear (w+>x) (v+>w) (v+>x)
+  composeLinear = case scalarSpaceWitness :: ScalarSpaceWitness v of
+            ScalarSpaceWitness -> applyLinear >>> LinearFunction fmap
   
   tensorId :: (LinearSpace w, Scalar w ~ Scalar v)
                  => (v⊗w)+>(v⊗w)
   
-  applyTensorFunctional :: ( TensorSpace u, Scalar u ~ Scalar v )
+  applyTensorFunctional :: ( LinearSpace u, Scalar u ~ Scalar v )
                => Bilinear (DualVector (v⊗u)) (v⊗u) (Scalar v)
   
   applyTensorLinMap :: ( LinearSpace u, TensorSpace w
@@ -515,6 +517,13 @@ argFromTensor :: ∀ s v w x . (LinearSpace v, LinearSpace w, Scalar v ~ s, Scal
 argFromTensor = case dualSpaceWitness :: DualSpaceWitness v of
      DualSpaceWitness -> curryLinearMap >>> fromLinearMap >>> coUncurryLinearMap
 
+-- | @((v+>w)+>x) -> ((v'⊗w)+>x)@
+argAsTensor :: ∀ s v w x . (LinearSpace v, LinearSpace w, Scalar v ~ s, Scalar w ~ s)
+                 => Coercion (LinearMap s (LinearMap s v w) x)
+                             (LinearMap s (Tensor s (DualVector v) w) x)
+argAsTensor = case dualSpaceWitness :: DualSpaceWitness v of
+     DualSpaceWitness -> uncurryLinearMap <<< asLinearMap <<< coCurryLinearMap
+
 -- | @(u+>(v⊗w)) -> (u+>v)⊗w@
 deferLinearMap :: Coercion (LinearMap s u (Tensor s v w)) (Tensor s (LinearMap s u v) w)
 deferLinearMap = Coercion
@@ -617,20 +626,37 @@ uncurryLinearFn = bilinearFunction
 instance ∀ s u v . (LinearSpace u, LinearSpace v, Scalar u ~ s, Scalar v ~ s)
                        => LinearSpace (LinearMap s u v) where
   type DualVector (LinearMap s u v) = Tensor s u (DualVector v)
+  dualSpaceWitness = case ( dualSpaceWitness :: DualSpaceWitness u
+                          , dualSpaceWitness :: DualSpaceWitness v ) of
+      (DualSpaceWitness, DualSpaceWitness) -> DualSpaceWitness
   linearId = case dualSpaceWitness :: DualSpaceWitness u of
      DualSpaceWitness -> fromTensor . lassocTensor . fromLinearMap . fmap asTensor
                             . curryLinearMap . fmap fromTensor $ tensorId
+  tensorId = uncurryLinearMap . coUncurryLinearMap . fmap curryLinearMap
+               . coCurryLinearMap . fmap deferLinearMap $ id
   coerceDoubleDual = case dualSpaceWitness :: DualSpaceWitness v of
      DualSpaceWitness -> Coercion
 --blockVectSpan = arr deferLinearMap
 --                  . fmap (arr (fmap coUncurryLinearMap) . blockVectSpan)
 --                             . blockVectSpan'
---applyLinear = case dualSpaceWitness :: DualSpaceWitness u of
---   DualSpaceWitness -> bilinearFunction $ \f g
---                -> contractTensorMap $ (coCurryLinearMap$f) . g
+  applyLinear = case dualSpaceWitness :: DualSpaceWitness u of
+    DualSpaceWitness -> arr argAsTensor >>> applyTensorLinMap
+                >>> LinearFunction `id`\f -> f . arr asTensor
   applyDualVector = case dualSpaceWitness :: DualSpaceWitness v of
     DualSpaceWitness -> flipBilin applyTensorFunctional
---composeLinear = bilinearFunction $ \f g
+  applyTensorFunctional = atf scalarSpaceWitness dualSpaceWitness dualSpaceWitness
+   where atf :: ∀ w . (LinearSpace w, Scalar w ~ s)
+                   => ScalarSpaceWitness u -> DualSpaceWitness u -> DualSpaceWitness w
+                       -> Bilinear ((u+>v)+>DualVector w) ((u+>v)⊗w) s
+         atf ScalarSpaceWitness DualSpaceWitness DualSpaceWitness
+              = arr (coCurryLinearMap >>> asLinearMap)
+                           >>> applyTensorFunctional >>> bilinearFunction`id`\f t
+                     -> f . arr (asTensor . hasteLinearMap) -+$> t
+  applyTensorLinMap = case dualSpaceWitness :: DualSpaceWitness u of
+    DualSpaceWitness -> arr (curryLinearMap>>>coCurryLinearMap
+                             >>>fmap uncurryLinearMap>>>coUncurryLinearMap>>>argAsTensor)
+                        >>> applyTensorLinMap >>> bilinearFunction`id`\f g
+                               -> f . arr (asTensor . hasteLinearMap) -+$> g
 --      -> coUncurryLinearMap $ fmap (fmap $ applyLinear $ f) $ (coCurryLinearMap$g)
 --contractTensorWith = arr hasteLinearMap >>> bilinearFunction (\l dw
 --                        -> fmap (flipBilin contractTensorWith $ dw) $ l )
@@ -645,8 +671,10 @@ instance ∀ s u v . (TensorSpace u, TensorSpace v, Scalar u ~ s, Scalar v ~ s)
                             , scalarSpaceWitness :: ScalarSpaceWitness v ) of
        (ScalarSpaceWitness, ScalarSpaceWitness) -> ScalarSpaceWitness
   zeroTensor = lassocTensor $ zeroTensor
-  --toFlatTensor = arr lassocTensor . fmap toFlatTensor
-  --fromFlatTensor = fmap fromFlatTensor . arr rassocTensor
+  toFlatTensor = case scalarSpaceWitness :: ScalarSpaceWitness u of
+    ScalarSpaceWitness -> arr lassocTensor . fmap toFlatTensor
+  fromFlatTensor = case scalarSpaceWitness :: ScalarSpaceWitness u of
+    ScalarSpaceWitness -> fmap fromFlatTensor . arr rassocTensor
   addTensors t₁ t₂ = lassocTensor $ (rassocTensor$t₁) ^+^ (rassocTensor$t₂)
   subtractTensors t₁ t₂ = lassocTensor $ (rassocTensor$t₁) ^-^ (rassocTensor$t₂)
   scaleTensor = case scalarSpaceWitness :: ScalarSpaceWitness u of
@@ -676,14 +704,32 @@ instance ∀ s u v . (LinearSpace u, LinearSpace v, Scalar u ~ s, Scalar v ~ s)
                        => LinearSpace (Tensor s u v) where
   type DualVector (Tensor s u v) = LinearMap s u (DualVector v)
   linearId = tensorId
+  tensorId = fmap lassocTensor . uncurryLinearMap . uncurryLinearMap
+               . fmap curryLinearMap . curryLinearMap $ tensorId
   coerceDoubleDual = case ( dualSpaceWitness :: DualSpaceWitness u
                           , dualSpaceWitness :: DualSpaceWitness v ) of
     (DualSpaceWitness, DualSpaceWitness) -> Coercion
+  dualSpaceWitness = case ( dualSpaceWitness :: DualSpaceWitness u
+                          , dualSpaceWitness :: DualSpaceWitness v ) of
+    (DualSpaceWitness, DualSpaceWitness) -> DualSpaceWitness
 --blockVectSpan = arr lassocTensor . arr (fmap $ fmap uncurryLinearMap)
 --         . fmap (transposeTensor . arr deferLinearMap) . blockVectSpan
 --                 . arr deferLinearMap . fmap transposeTensor . blockVectSpan'
   applyLinear = applyTensorLinMap
   applyDualVector = applyTensorFunctional
+  applyTensorFunctional = atf scalarSpaceWitness dualSpaceWitness
+   where atf :: ∀ w . (LinearSpace w, Scalar w ~ s)
+               => ScalarSpaceWitness u -> DualSpaceWitness w
+                  -> Bilinear (LinearMap s (Tensor s u v) (DualVector w))
+                              (Tensor s (Tensor s u v) w)
+                              s
+         atf ScalarSpaceWitness DualSpaceWitness
+             = arr curryLinearMap >>> applyTensorFunctional
+                           >>> LinearFunction`id`\f -> f . arr rassocTensor
+  applyTensorLinMap = arr (curryLinearMap>>>curryLinearMap
+                            >>>fmap uncurryLinearMap>>>uncurryLinearMap)
+                        >>> applyTensorLinMap >>> LinearFunction`id`
+                             \f -> f . arr rassocTensor
   composeLinear = case scalarSpaceWitness :: ScalarSpaceWitness u of
     ScalarSpaceWitness -> bilinearFunction $ \f g
         -> uncurryLinearMap $ fmap (fmap $ applyLinear $ f) $ (curryLinearMap$g)
@@ -789,8 +835,10 @@ instance ∀ s u v . (LinearSpace u, TensorSpace v, Scalar u ~ s, Scalar v ~ s)
                             , scalarSpaceWitness :: ScalarSpaceWitness v ) of
        (ScalarSpaceWitness, ScalarSpaceWitness) -> ScalarSpaceWitness
   zeroTensor = deferLinearFn $ const0
-  --toFlatTensor = arr deferLinearFn . fmap toFlatTensor
-  --fromFlatTensor = fmap fromFlatTensor . arr hasteLinearFn
+  toFlatTensor = case scalarSpaceWitness :: ScalarSpaceWitness u of
+     ScalarSpaceWitness -> arr deferLinearFn . fmap toFlatTensor
+  fromFlatTensor = case scalarSpaceWitness :: ScalarSpaceWitness u of
+     ScalarSpaceWitness -> fmap fromFlatTensor . arr hasteLinearFn
   addTensors t s = deferLinearFn $ (hasteLinearFn$t)^+^(hasteLinearFn$s)
   subtractTensors t s = deferLinearFn $ (hasteLinearFn$t)^-^(hasteLinearFn$s)
   scaleTensor = case ( scalarSpaceWitness :: ScalarSpaceWitness u
@@ -847,11 +895,18 @@ coUncurryLinearFn = Coercion
 instance (LinearSpace u, LinearSpace v, Scalar u ~ s, Scalar v ~ s)
      => LinearSpace (LinearFunction s u v) where
   type DualVector (LinearFunction s u v) = LinearFunction s v u
+  dualSpaceWitness = case ( dualSpaceWitness :: DualSpaceWitness u
+                          , dualSpaceWitness :: DualSpaceWitness v ) of
+      (DualSpaceWitness, DualSpaceWitness) -> DualSpaceWitness
   linearId = case ( scalarSpaceWitness :: ScalarSpaceWitness u
                   , dualSpaceWitness :: DualSpaceWitness u ) of
      (ScalarSpaceWitness, DualSpaceWitness)
           -> coUncurryLinearFn $ LinearFunction $
                       \v -> fmap (fmap (scaleV v) . applyDualVector) $ idTensor
+  tensorId = case scalarSpaceWitness :: ScalarSpaceWitness u of
+    ScalarSpaceWitness -> uncurryLinearMap . coUncurryLinearFn $ LinearFunction $
+               \v -> coCurryLinearMap . fmap (fromLinearMap . coUncurryLinearFn)
+                       $ fmap (applyLinear . fmap (tensorProduct-+$>v)) -+$> id
   coerceDoubleDual = Coercion
   blockVectSpan = case ( scalarSpaceWitness :: ScalarSpaceWitness u
                        , dualSpaceWitness :: DualSpaceWitness u ) of
