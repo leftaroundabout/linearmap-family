@@ -80,7 +80,7 @@ instance LinearSpace ℝ where
 --contractLinearMapAgainst = flout LinearMap >>> flipBilin lApply
   blockVectSpan = follow Tensor . follow LinearMap
   applyDualVector = scale
-  applyLinear = elacs . flout LinearMap
+  applyLinear = LinearFunction $ \(LinearMap w) -> scaleV w
   composeLinear = bilinearFunction $ \f (LinearMap g)
                      -> LinearMap $ (applyLinear-+$>f)-+$>g
 
