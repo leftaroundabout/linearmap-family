@@ -48,9 +48,14 @@ import Math.LinearMap.Asserted
 import Math.VectorSpace.ZeroDimensional
 
 
+(<.>^) :: LinearSpace v => DualVector v -> v -> Scalar v
+f<.>^v = (applyDualVector-+$>f)-+$>v
+
+
 type ℝ = Double
 
 instance Num' ℝ where
+  closedScalarWitness = ClosedScalarWitness
 
 instance TensorSpace ℝ where
   type TensorProduct ℝ w = w
@@ -70,7 +75,9 @@ instance TensorSpace ℝ where
   coerceFmapTensorProduct _ Coercion = Coercion
 instance LinearSpace ℝ where
   type DualVector ℝ = ℝ
+  dualSpaceWitness = DualSpaceWitness
   linearId = LinearMap 1
+  tensorId = uncurryLinearMap $ LinearMap $ fmap (follow Tensor) -+$> id
   idTensor = Tensor 1
   fromLinearForm = flout LinearMap
   coerceDoubleDual = Coercion
@@ -81,10 +88,14 @@ instance LinearSpace ℝ where
   blockVectSpan = follow Tensor . follow LinearMap
   applyDualVector = scale
   applyLinear = LinearFunction $ \(LinearMap w) -> scaleV w
+  applyTensorFunctional = bilinearFunction $ \(LinearMap du) (Tensor u) -> du<.>^u
+  applyTensorLinMap = bilinearFunction $ \fℝuw (Tensor u)
+                        -> let LinearMap fuw = curryLinearMap $ fℝuw
+                           in (applyLinear-+$>fuw) -+$> u
   composeLinear = bilinearFunction $ \f (LinearMap g)
                      -> LinearMap $ (applyLinear-+$>f)-+$>g
 
-#define FreeLinearSpace(V, LV, tp, bspan, tenspl, dspan, contraction, contraaction)                                  \
+#define FreeLinearSpace(V, LV, tp, bspan, tenspl, tenid, dspan, contraction, contraaction)                                  \
 instance ∀ s . Num' s => TensorSpace (V s) where {                     \
   type TensorProduct (V s) w = V w;                               \
   scalarSpaceWitness = case closedScalarWitness :: ClosedScalarWitness s of{ \
@@ -107,10 +118,17 @@ instance ∀ s . Num' s => TensorSpace (V s) where {                     \
           \(LinearFunction f) (Tensor vw, Tensor vx) \
                   -> Tensor $ liftA2 (curry f) vw vx; \
   coerceFmapTensorProduct _ Coercion = Coercion };                  \
-instance Num' s => LinearSpace (V s) where {                  \
+instance ∀ s . Num' s => LinearSpace (V s) where {                  \
   type DualVector (V s) = V s;                                 \
+  dualSpaceWitness = case closedScalarWitness :: ClosedScalarWitness s of \
+         {ClosedScalarWitness -> DualSpaceWitness};                    \
   linearId = LV Mat.identity;                                   \
   idTensor = Tensor Mat.identity; \
+  tensorId = ti dualSpaceWitness where     \
+   { ti :: ∀ w . (LinearSpace w, Scalar w ~ s) => DualSpaceWitness w -> (V s⊗w)+>(V s⊗w) \
+   ; ti DualSpaceWitness = LinearMap $ \
+          fmap (\f -> fmap (LinearFunction $ Tensor . f)-+$>asTensor $ id) \
+               (tenid :: V (w -> V w)) }; \
   coerceDoubleDual = Coercion; \
   fromLinearForm = case closedScalarWitness :: ClosedScalarWitness s of{ \
                          ClosedScalarWitness -> flout LinearMap}; \
@@ -123,6 +141,11 @@ instance Num' s => LinearSpace (V s) where {                  \
   applyDualVector = bilinearFunction Mat.dot;           \
   applyLinear = bilinearFunction $ \(LV m)                        \
                   -> foldl' (^+^) zeroV . liftA2 (^*) m;           \
+  applyTensorFunctional = bilinearFunction $ \(LinearMap f) (Tensor t) \
+             -> sum $ liftA2 (<.>^) f t; \
+  applyTensorLinMap = bilinearFunction $ \(LinearMap f) (Tensor t) \
+             -> foldl' (^+^) zeroV $ liftA2 (arr fromTensor >>> \
+                                getLinearFunction . getLinearFunction applyLinear) f t; \
   composeLinear = bilinearFunction $   \
          \f (LinearMap g) -> LinearMap $ fmap ((applyLinear-+$>f)-+$>) g }
 FreeLinearSpace( V0
@@ -130,6 +153,7 @@ FreeLinearSpace( V0
                , \(Tensor V0) -> zeroV
                , \_ -> V0
                , \_ -> LinearMap V0
+               , V0
                , LinearMap V0
                , \V0 -> zeroV
                , \V0 _ -> 0 )
@@ -138,6 +162,7 @@ FreeLinearSpace( V1
                , \(Tensor (V1 w₀)) -> w₀⊗V1 1
                , \w -> V1 (LinearMap $ V1 w)
                , \w -> LinearMap $ V1 (Tensor $ V1 w)
+               , V1 V1
                , LinearMap . V1 . blockVectSpan $ V1 1
                , \(V1 (V1 w)) -> w
                , \(V1 x) f -> (f$x)^._x )
@@ -149,6 +174,7 @@ FreeLinearSpace( V2
                           (LinearMap $ V2 zeroV w)
                , \w -> LinearMap $ V2 (Tensor $ V2 w zeroV)
                                       (Tensor $ V2 zeroV w)
+               , V2 (`V2`zeroV) (V2 zeroV)
                , LinearMap $ V2 (blockVectSpan $ V2 1 0)
                                 (blockVectSpan $ V2 0 1)
                , \(V2 (V2 w₀ _)
@@ -165,6 +191,9 @@ FreeLinearSpace( V3
                , \w -> LinearMap $ V3 (Tensor $ V3 w zeroV zeroV)
                                       (Tensor $ V3 zeroV w zeroV)
                                       (Tensor $ V3 zeroV zeroV w)
+               , V3 (\w -> V3 w zeroV zeroV)
+                    (\w -> V3 zeroV w zeroV)
+                    (\w -> V3 zeroV zeroV w)
                , LinearMap $ V3 (blockVectSpan $ V3 1 0 0)
                                 (blockVectSpan $ V3 0 1 0)
                                 (blockVectSpan $ V3 0 0 1)
@@ -186,6 +215,10 @@ FreeLinearSpace( V4
                                       (Tensor $ V4 zeroV w zeroV zeroV)
                                       (Tensor $ V4 zeroV zeroV w zeroV)
                                       (Tensor $ V4 zeroV zeroV zeroV w)
+               , V4 (\w -> V4 w zeroV zeroV zeroV)
+                    (\w -> V4 zeroV w zeroV zeroV)
+                    (\w -> V4 zeroV zeroV w zeroV)
+                    (\w -> V4 zeroV zeroV zeroV w)
                , LinearMap $ V4 (blockVectSpan $ V4 1 0 0 0)
                                 (blockVectSpan $ V4 0 1 0 0)
                                 (blockVectSpan $ V4 0 0 1 0)

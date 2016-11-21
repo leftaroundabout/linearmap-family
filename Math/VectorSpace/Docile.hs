@@ -120,9 +120,6 @@ instance (Fractional' s, SemiInner s) => SemiInner (ZeroDim s) where
 instance (Fractional' s, SemiInner s) => SemiInner (V0 s) where
   dualBasisCandidates _ = []
 
-(<.>^) :: LSpace v => DualVector v -> v -> Scalar v
-f<.>^v = (applyDualVector-+$>f)-+$>v
-
 orthonormaliseDuals :: ∀ v . (SemiInner v, LSpace v, RealFrac' (Scalar v))
                           => Scalar v -> [(v, DualVector v)]
                                       -> [(v,Maybe (DualVector v))]
