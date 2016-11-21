@@ -84,6 +84,9 @@ class LinearSpace v => SemiInner v where
   --   For simple finite-dimensional array-vectors, you can easily define this
   --   method using 'cartesianDualBasisCandidates'.
   dualBasisCandidates :: [(Int,v)] -> Forest (Int, DualVector v)
+  
+  tensorDualBasisCandidates :: (SemiInner w, Scalar w ~ Scalar v)
+                   => [(Int, v⊗w)] -> Forest (Int, DualVector (v⊗w))
 
 cartesianDualBasisCandidates
      :: [DualVector v]  -- ^ Set of canonical basis functionals.
@@ -117,8 +120,10 @@ cartesianDualBasisCandidates dvs abss vcas = go 0 0 sorted
 
 instance (Fractional' s, SemiInner s) => SemiInner (ZeroDim s) where
   dualBasisCandidates _ = []
+  tensorDualBasisCandidates _ = []
 instance (Fractional' s, SemiInner s) => SemiInner (V0 s) where
   dualBasisCandidates _ = []
+  tensorDualBasisCandidates _ = []
 
 orthonormaliseDuals :: ∀ v . (SemiInner v, LSpace v, RealFrac' (Scalar v))
                           => Scalar v -> [(v, DualVector v)]
@@ -205,19 +210,33 @@ instance SemiInner ℝ where
   dualBasisCandidates = fmap ((`Node`[]) . second recip)
                 . sortBy (comparing $ negate . abs . snd)
                 . filter ((/=0) . snd)
+  tensorDualBasisCandidates = map (second getTensorProduct)
+                 >>> dualBasisCandidates
+                 >>> fmap (fmap $ second LinearMap)
 
 instance (Fractional' s, Ord s, SemiInner s) => SemiInner (V1 s) where
   dualBasisCandidates = fmap ((`Node`[]) . second recip)
                 . sortBy (comparing $ negate . abs . snd)
                 . filter ((/=0) . snd)
+  tensorDualBasisCandidates = map (second $ \(Tensor (V1 w)) -> w)
+                 >>> dualBasisCandidates
+                 >>> fmap (fmap . second $ LinearMap . V1)
 
-#define FreeSemiInner(V, sabs) \
-instance SemiInner (V) where {  \
-  dualBasisCandidates            \
-     = cartesianDualBasisCandidates Mat.basis (fmap sabs . toList) }
-FreeSemiInner(V2 ℝ, abs)
-FreeSemiInner(V3 ℝ, abs)
-FreeSemiInner(V4 ℝ, abs)
+instance SemiInner (V2 ℝ) where
+  dualBasisCandidates = cartesianDualBasisCandidates Mat.basis (toList . fmap abs)
+  tensorDualBasisCandidates = map (second $ \(Tensor (V2 x y)) -> (x,y))
+                 >>> dualBasisCandidates
+                 >>> map (fmap . second $ LinearMap . \(dx,dy) -> V2 dx dy)
+instance SemiInner (V3 ℝ) where
+  dualBasisCandidates = cartesianDualBasisCandidates Mat.basis (toList . fmap abs)
+  tensorDualBasisCandidates = map (second $ \(Tensor (V3 x y z)) -> (x,(y,z)))
+                 >>> dualBasisCandidates
+                 >>> map (fmap . second $ LinearMap . \(dx,(dy,dz)) -> V3 dx dy dz)
+instance SemiInner (V4 ℝ) where
+  dualBasisCandidates = cartesianDualBasisCandidates Mat.basis (toList . fmap abs)
+  tensorDualBasisCandidates = map (second $ \(Tensor (V4 x y z w)) -> ((x,y),(z,w)))
+                 >>> dualBasisCandidates
+                 >>> map (fmap . second $ LinearMap . \((dx,dy),(dz,dw)) -> V4 dx dy dz dw)
 
 instance ∀ u v . ( SemiInner u, SemiInner v, Scalar u ~ Scalar v ) => SemiInner (u,v) where
   dualBasisCandidates = fmap (\(i,(u,v))->((i,u),(i,v))) >>> unzip
@@ -244,20 +263,31 @@ instance ∀ u v . ( SemiInner u, SemiInner v, Scalar u ~ Scalar v ) => SemiInne
                        : combineBaseis wit True forbidden (bu, abv)
          combineBaseis wit _ forbidden (bu, []) = combineBaseis wit False forbidden (bu,[])
          combineBaseis wit _ forbidden ([], bv) = combineBaseis wit True forbidden ([],bv)
+  tensorDualBasisCandidates = case scalarSpaceWitness :: ScalarSpaceWitness u of
+     ScalarSpaceWitness -> map (second $ \(Tensor (tu, tv)) -> (tu, tv))
+                          >>> dualBasisCandidates
+                          >>> map (fmap . second $ \(LinearMap lu, LinearMap lv)
+                                            -> LinearMap $ (Tensor lu, Tensor lv) )
 
 
-instance ∀ s u v . ( SimpleSpace u, SimpleSpace v, Scalar u ~ s, Scalar v ~ s )
+instance ∀ s u v . ( SemiInner u, SemiInner v, Scalar u ~ s, Scalar v ~ s )
            => SemiInner (Tensor s u v) where
-  dualBasisCandidates = case ( scalarSpaceWitness :: ScalarSpaceWitness u
-                             , dualSpaceWitness :: DualSpaceWitness u
-                             , dualSpaceWitness :: DualSpaceWitness v ) of
-    (ScalarSpaceWitness,DualSpaceWitness,DualSpaceWitness)
-             -> map (fmap (second $ arr asLinearMap))
-                      . dualBasisCandidates
-                      . map (second $ arr asLinearMap)
+  dualBasisCandidates = tensorDualBasisCandidates
+  tensorDualBasisCandidates = map (second $ arr rassocTensor)
+                    >>> tensorDualBasisCandidates
+                    >>> map (fmap . second $ arr uncurryLinearMap)
 
-instance ∀ s u v . ( SimpleSpace u, SimpleSpace v, Scalar u ~ s, Scalar v ~ s )
+instance ∀ s u v . ( LinearSpace u, SemiInner (DualVector u), SemiInner v
+                   , Scalar u ~ s, Scalar v ~ s )
            => SemiInner (LinearMap s u v) where
+  dualBasisCandidates = case dualSpaceWitness :: DualSpaceWitness u of
+     DualSpaceWitness -> (coerce :: [(Int, LinearMap s u v)]
+                                 -> [(Int, Tensor s (DualVector u) v)])
+                    >>> tensorDualBasisCandidates
+                    >>> coerce
+  tensorDualBasisCandidates = map (second $ arr hasteLinearMap)
+                    >>> dualBasisCandidates
+                    >>> map (fmap . second $ arr coUncurryLinearMap)
   
 (^/^) :: (InnerSpace v, Eq (Scalar v), Fractional (Scalar v)) => v -> v -> Scalar v
 v^/^w = case (v<.>w) of

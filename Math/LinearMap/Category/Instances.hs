@@ -145,7 +145,7 @@ instance ∀ s . Num' s => LinearSpace (V s) where {                  \
              -> sum $ liftA2 (<.>^) f t; \
   applyTensorLinMap = bilinearFunction $ \(LinearMap f) (Tensor t) \
              -> foldl' (^+^) zeroV $ liftA2 (arr fromTensor >>> \
-                                getLinearFunction . getLinearFunction applyLinear) f t; \
+                         getLinearFunction . getLinearFunction applyLinear) f t; \
   composeLinear = bilinearFunction $   \
          \f (LinearMap g) -> LinearMap $ fmap ((applyLinear-+$>f)-+$>) g }
 FreeLinearSpace( V0
