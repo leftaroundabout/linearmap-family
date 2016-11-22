@@ -790,45 +790,34 @@ instance Show (LinearMap ℝ (V2 ℝ) ℝ) where showsPrec = showsPrecAsRiesz
 instance Show (LinearMap ℝ (V3 ℝ) ℝ) where showsPrec = showsPrecAsRiesz
 instance Show (LinearMap ℝ (V4 ℝ) ℝ) where showsPrec = showsPrecAsRiesz
 
-class (FiniteDimensional u, HasBasis u) => RieszDecomposable u where
+class TensorDecomposable u => RieszDecomposable u where
   rieszDecomposition :: (FiniteDimensional v, v ~ DualVector v, Scalar v ~ Scalar u)
               => (v +> u) -> [(Basis u, v)]
-  showsPrecBasis :: Hask.Functor p => p u -> Int -> Basis u -> ShowS
 
 instance RieszDecomposable ℝ where
   rieszDecomposition (LinearMap r) = [((), fromFlatTensor $ Tensor r)]
-  showsPrecBasis _ _ = shows
 instance ( RieszDecomposable x, RieszDecomposable y
          , Scalar x ~ Scalar y, Scalar (DualVector x) ~ Scalar (DualVector y) )
               => RieszDecomposable (x,y) where
   rieszDecomposition m = map (first Left) (rieszDecomposition $ fst . m)
                       ++ map (first Right) (rieszDecomposition $ snd . m)
-  showsPrecBasis proxy p (Left bx)
-      = showParen (p>9) $ ("Left "++) . showsPrecBasis (fst<$>proxy) 10 bx
-  showsPrecBasis proxy p (Right by)
-      = showParen (p>9) $ ("Right "++) . showsPrecBasis (snd<$>proxy) 10 by
 
 instance RieszDecomposable (V0 ℝ) where
   rieszDecomposition _ = []
-  showsPrecBasis _ _ (Mat.E q) = (V0^.q ++)
 instance RieszDecomposable (V1 ℝ) where
   rieszDecomposition m = [(ex, sRiesz $ fmap (LinearFunction (^._x)) $ m)]
-  showsPrecBasis _ _ (Mat.E q) = (V1"ex"^.q ++)
 instance RieszDecomposable (V2 ℝ) where
   rieszDecomposition m = [ (ex, sRiesz $ fmap (LinearFunction (^._x)) $ m)
                          , (ey, sRiesz $ fmap (LinearFunction (^._y)) $ m) ]
-  showsPrecBasis _ _ (Mat.E q) = (V2"ex""ey"^.q ++)
 instance RieszDecomposable (V3 ℝ) where
   rieszDecomposition m = [ (ex, sRiesz $ fmap (LinearFunction (^._x)) $ m)
                          , (ey, sRiesz $ fmap (LinearFunction (^._y)) $ m)
                          , (ez, sRiesz $ fmap (LinearFunction (^._z)) $ m) ]
-  showsPrecBasis _ _ (Mat.E q) = (V3"ex""ey""ez"^.q ++)
 instance RieszDecomposable (V4 ℝ) where
   rieszDecomposition m = [ (ex, sRiesz $ fmap (LinearFunction (^._x)) $ m)
                          , (ey, sRiesz $ fmap (LinearFunction (^._y)) $ m)
                          , (ez, sRiesz $ fmap (LinearFunction (^._z)) $ m)
                          , (ew, sRiesz $ fmap (LinearFunction (^._w)) $ m) ]
-  showsPrecBasis _ _ (Mat.E q) = (V4"ex""ey""ez""ew"^.q ++)
 
 infixl 7 .<
 
@@ -839,6 +828,7 @@ infixl 7 .<
         , InnerSpace v, LSpace w, HasBasis w, Scalar v ~ Scalar w )
            => Basis w -> v -> v+>w
 bw .< v = sampleLinearFunction $ LinearFunction $ \v' -> recompose [(bw, v<.>v')]
+
 
 rieszDecomposeShowsPrec :: ∀ u v s . ( RieszDecomposable u
                                      , FiniteDimensional v, v ~ DualVector v, Show v
@@ -873,9 +863,86 @@ instance ( FiniteDimensional v, v ~ DualVector v, Show v
          , Scalar x ~ s, Scalar y ~ s, Scalar v ~ s
          , Scalar (DualVector x) ~ s, Scalar (DualVector y) ~ s )
               => Show (LinearMap s v (x,y)) where
-  showsPrec = rieszDecomposeShowsPrec
+  showsPrec = case
+      (dualSpaceWitness::DualSpaceWitness x, dualSpaceWitness::DualSpaceWitness y) of
+      (DualSpaceWitness, DualSpaceWitness) -> rieszDecomposeShowsPrec
 
 
+infixr 7 .⊗
+
+(.⊗) :: ( TensorSpace v, HasBasis v, TensorSpace w
+        , Num' (Scalar v), Scalar v ~ Scalar w )
+         => Basis v -> w -> v⊗w
+b .⊗ w = basisValue b ⊗ w
+
+class (FiniteDimensional v, HasBasis v) => TensorDecomposable v where
+  tensorDecomposition :: v⊗w -> [(Basis v, w)]
+  showsPrecBasis :: Hask.Functor p => p v -> Int -> Basis v -> ShowS
+
+instance TensorDecomposable ℝ where
+  tensorDecomposition (Tensor r) = [((), r)]
+  showsPrecBasis _ _ = shows
+instance ( TensorDecomposable x, TensorDecomposable y
+         , Scalar x ~ Scalar y, Scalar (DualVector x) ~ Scalar (DualVector y) )
+              => TensorDecomposable (x,y) where
+  tensorDecomposition (Tensor (tx,ty))
+                = map (first Left) (tensorDecomposition tx)
+               ++ map (first Right) (tensorDecomposition ty)
+  showsPrecBasis proxy p (Left bx)
+      = showParen (p>9) $ ("Left "++) . showsPrecBasis (fst<$>proxy) 10 bx
+  showsPrecBasis proxy p (Right by)
+      = showParen (p>9) $ ("Right "++) . showsPrecBasis (snd<$>proxy) 10 by
+
+instance TensorDecomposable (V0 ℝ) where
+  tensorDecomposition _ = []
+  showsPrecBasis _ _ (Mat.E q) = (V0^.q ++)
+instance TensorDecomposable (V1 ℝ) where
+  tensorDecomposition (Tensor (V1 w)) = [(ex, w)]
+  showsPrecBasis _ _ (Mat.E q) = (V1"ex"^.q ++)
+instance TensorDecomposable (V2 ℝ) where
+  tensorDecomposition (Tensor (V2 x y)) = [ (ex, x), (ey, y) ]
+  showsPrecBasis _ _ (Mat.E q) = (V2"ex""ey"^.q ++)
+instance TensorDecomposable (V3 ℝ) where
+  tensorDecomposition (Tensor (V3 x y z)) = [ (ex, x), (ey, y), (ez, z) ]
+  showsPrecBasis _ _ (Mat.E q) = (V3"ex""ey""ez"^.q ++)
+instance TensorDecomposable (V4 ℝ) where
+  tensorDecomposition (Tensor (V4 x y z w)) = [ (ex, x), (ey, y), (ez, z), (ew, w) ]
+  showsPrecBasis _ _ (Mat.E q) = (V4"ex""ey""ez""ew"^.q ++)
+
+tensorDecomposeShowsPrec :: ∀ u v s
+  . ( TensorDecomposable u, FiniteDimensional v, Show v, Scalar u ~ s, Scalar v ~ s )
+                        => Int -> Tensor s u v -> ShowS
+tensorDecomposeShowsPrec p t = case tensorDecomposition t of
+            [] -> ("zeroV"++)
+            ((b₀,dv₀):dvs) -> showParen (p>6)
+                            $ \s -> showsPrecBasis ([]::[u]) 7 b₀
+                                                     . (".⊗"++) . showsPrec 7 dv₀
+                                  $ foldr (\(b,dv)
+                                        -> (" ^+^ "++) . showsPrecBasis ([]::[u]) 7 b
+                                                       . (".⊗"++) . showsPrec 7 dv) s dvs
+
+instance Show (Tensor s (V0 s) v) where
+  show _ = "zeroV"
+instance (FiniteDimensional v, v ~ DualVector v, Scalar v ~ ℝ, Show v)
+              => Show (Tensor ℝ (V1 ℝ) v) where
+  showsPrec = tensorDecomposeShowsPrec
+instance (FiniteDimensional v, v ~ DualVector v, Scalar v ~ ℝ, Show v)
+              => Show (Tensor ℝ (V2 ℝ) v) where
+  showsPrec = tensorDecomposeShowsPrec
+instance (FiniteDimensional v, v ~ DualVector v, Scalar v ~ ℝ, Show v)
+              => Show (Tensor ℝ (V3 ℝ) v) where
+  showsPrec = tensorDecomposeShowsPrec
+instance (FiniteDimensional v, v ~ DualVector v, Scalar v ~ ℝ, Show v)
+              => Show (Tensor ℝ (V4 ℝ) v) where
+  showsPrec = tensorDecomposeShowsPrec
+
+instance ( FiniteDimensional v, v ~ DualVector v, Show v
+         , TensorDecomposable x, TensorDecomposable y
+         , Scalar x ~ s, Scalar y ~ s, Scalar v ~ s )
+              => Show (Tensor s (x,y) v) where
+  showsPrec = case
+      (dualSpaceWitness::DualSpaceWitness x, dualSpaceWitness::DualSpaceWitness y) of
+      (DualSpaceWitness, DualSpaceWitness) -> tensorDecomposeShowsPrec
 
 
 (^) :: Num a => a -> Int -> a

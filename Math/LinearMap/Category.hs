@@ -72,6 +72,8 @@ module Math.LinearMap.Category (
             -- * Utility
             -- ** Linear primitives
             , addV, scale, inner, flipBilin, bilinearFunction
+            -- ** Tensors with basis decomposition
+            , (.⊗)
             -- ** Hilbert space operations
             , DualSpace, riesz, coRiesz, showsPrecAsRiesz, (.<)
             -- ** Constraint synonyms
