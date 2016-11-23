@@ -134,38 +134,33 @@ class (TensorSpace v, Num (Scalar v)) => LinearSpace v where
   coerceDoubleDual = case dualSpaceWitness :: DualSpaceWitness v of
     DualSpaceWitness -> Coercion
   
-  blockVectSpan :: (TensorSpace w, Scalar w ~ Scalar v)
-           => w -+> (v⊗(v+>w))
-  blockVectSpan' :: ∀ w . (TensorSpace w, Scalar v ~ Scalar w)
-                  => w -+> (v+>(v⊗w))
-  blockVectSpan' = case scalarSpaceWitness :: ScalarSpaceWitness v of
-    ScalarSpaceWitness -> LinearFunction $ \w
-              -> (fmapLinearMap-+$>flipBilin tensorProduct-+$>w)-+$>linearId
-  
   trace :: (v+>v) -+> Scalar v
   trace = case scalarSpaceWitness :: ScalarSpaceWitness v of
       ScalarSpaceWitness -> flipBilin contractLinearMapAgainst-+$>id
   
   contractTensorMap :: (TensorSpace w, Scalar w ~ Scalar v)
            => (v+>(v⊗w)) -+> w
+  contractTensorMap = case scalarSpaceWitness :: ScalarSpaceWitness v of
+           ScalarSpaceWitness -> arr deferLinearMap >>> transposeTensor
+                                  >>> fmap trace >>> fromFlatTensor
   contractMapTensor :: (TensorSpace w, Scalar w ~ Scalar v)
            => (v⊗(v+>w)) -+> w
-  contractFnTensor :: (TensorSpace w, Scalar w ~ Scalar v)
-           => (v⊗(v-+>w)) -+> w
+  contractMapTensor = case ( scalarSpaceWitness :: ScalarSpaceWitness v
+                           , dualSpaceWitness :: DualSpaceWitness v ) of
+        (ScalarSpaceWitness,DualSpaceWitness)
+              -> arr (coUncurryLinearMap>>>asTensor)
+                       >>> transposeTensor >>> fmap (arr asLinearMap >>> trace)
+                                >>> fromFlatTensor
   contractTensorFn :: ∀ w . (TensorSpace w, Scalar w ~ Scalar v)
            => (v-+>(v⊗w)) -+> w
-  --contractTensorFn = case ( dualSpaceWitness :: DualSpaceWitness v
-  --                        , dualSpaceWitness :: DualSpaceWitness w) of
-  --             (DualSpaceWitness, DualSpaceWitness)
-  --                 -> sampleLinearFunction >>> contractTensorMap
-  contractTensorWith :: ∀ w . (LinearSpace w, Scalar w ~ Scalar v)
-           => Bilinear (v⊗w) (DualVector w) v
-  --contractTensorWith = case ( dualSpaceWitness :: DualSpaceWitness v
-  --                          , dualSpaceWitness :: DualSpaceWitness w ) of
-  --             (DualSpaceWitness,DualSpaceWitness) -> flipBilin $ LinearFunction
-  --              (\dw -> fromFlatTensor . fmap (flipBilin applyDualVector$dw))
+  contractTensorFn = LinearFunction $ getLinearFunction sampleLinearFunction
+                                        >>> getLinearFunction contractTensorMap
   contractLinearMapAgainst :: (LinearSpace w, Scalar w ~ Scalar v)
            => Bilinear (v+>w) (w-+>v) (Scalar v)
+  contractLinearMapAgainst = case ( scalarSpaceWitness :: ScalarSpaceWitness v
+                                  , dualSpaceWitness :: DualSpaceWitness v ) of
+      (ScalarSpaceWitness,DualSpaceWitness) -> arr asTensor >>> transposeTensor
+                         >>> applyDualVector >>> LinearFunction (. sampleLinearFunction)
   
   applyDualVector :: LinearSpace v
                 => Bilinear (DualVector v) v (Scalar v)
@@ -224,9 +219,7 @@ instance Num' s => LinearSpace (ZeroDim s) where
   coerceDoubleDual = Coercion
   contractTensorMap = const0
   contractMapTensor = const0
-  contractTensorWith = biConst0
   contractLinearMapAgainst = biConst0
-  blockVectSpan = const0
   applyDualVector = biConst0
   applyLinear = biConst0
   applyTensorFunctional = biConst0

@@ -83,9 +83,6 @@ instance LinearSpace ℝ where
   coerceDoubleDual = Coercion
   contractTensorMap = flout Tensor . flout LinearMap
   contractMapTensor = flout LinearMap . flout Tensor
---contractTensorWith = flout Tensor >>> applyDualVector
---contractLinearMapAgainst = flout LinearMap >>> flipBilin lApply
-  blockVectSpan = follow Tensor . follow LinearMap
   applyDualVector = scale
   applyLinear = LinearFunction $ \(LinearMap w) -> scaleV w
   applyTensorFunctional = bilinearFunction $ \(LinearMap du) (Tensor u) -> du<.>^u
@@ -95,7 +92,7 @@ instance LinearSpace ℝ where
   composeLinear = bilinearFunction $ \f (LinearMap g)
                      -> LinearMap $ (applyLinear-+$>f)-+$>g
 
-#define FreeLinearSpace(V, LV, tp, bspan, tenspl, tenid, dspan, contraction, contraaction)                                  \
+#define FreeLinearSpace(V, LV, tp, tenspl, tenid, dspan, contraction, contraaction)                                  \
 instance ∀ s . Num' s => TensorSpace (V s) where {                     \
   type TensorProduct (V s) w = V w;                               \
   scalarSpaceWitness = case closedScalarWitness :: ClosedScalarWitness s of{ \
@@ -132,7 +129,6 @@ instance ∀ s . Num' s => LinearSpace (V s) where {                  \
   coerceDoubleDual = Coercion; \
   fromLinearForm = case closedScalarWitness :: ClosedScalarWitness s of{ \
                          ClosedScalarWitness -> flout LinearMap}; \
-  blockVectSpan = LinearFunction $ Tensor . (bspan);            \
   contractTensorMap = LinearFunction $ (contraction) . coerce . getLinearMap;      \
   contractMapTensor = LinearFunction $ (contraction) . coerce . getTensorProduct;      \
 {-contractTensorWith = bilinearFunction $ \
@@ -151,7 +147,6 @@ instance ∀ s . Num' s => LinearSpace (V s) where {                  \
 FreeLinearSpace( V0
                , LinearMap
                , \(Tensor V0) -> zeroV
-               , \_ -> V0
                , \_ -> LinearMap V0
                , V0
                , LinearMap V0
@@ -160,7 +155,6 @@ FreeLinearSpace( V0
 FreeLinearSpace( V1
                , LinearMap
                , \(Tensor (V1 w₀)) -> w₀⊗V1 1
-               , \w -> V1 (LinearMap $ V1 w)
                , \w -> LinearMap $ V1 (Tensor $ V1 w)
                , V1 V1
                , LinearMap . V1 . blockVectSpan $ V1 1
@@ -170,8 +164,6 @@ FreeLinearSpace( V2
                , LinearMap
                , \(Tensor (V2 w₀ w₁)) -> w₀⊗V2 1 0
                                      ^+^ w₁⊗V2 0 1
-               , \w -> V2 (LinearMap $ V2 w zeroV)
-                          (LinearMap $ V2 zeroV w)
                , \w -> LinearMap $ V2 (Tensor $ V2 w zeroV)
                                       (Tensor $ V2 zeroV w)
                , V2 (`V2`zeroV) (V2 zeroV)
@@ -185,9 +177,6 @@ FreeLinearSpace( V3
                , \(Tensor (V3 w₀ w₁ w₂)) -> w₀⊗V3 1 0 0
                                         ^+^ w₁⊗V3 0 1 0
                                         ^+^ w₂⊗V3 0 0 1
-               , \w -> V3 (LinearMap $ V3 w zeroV zeroV)
-                          (LinearMap $ V3 zeroV w zeroV)
-                          (LinearMap $ V3 zeroV zeroV w)
                , \w -> LinearMap $ V3 (Tensor $ V3 w zeroV zeroV)
                                       (Tensor $ V3 zeroV w zeroV)
                                       (Tensor $ V3 zeroV zeroV w)
@@ -211,10 +200,6 @@ FreeLinearSpace( V4
                           (LinearMap $ V4 zeroV w zeroV zeroV)
                           (LinearMap $ V4 zeroV zeroV w zeroV)
                           (LinearMap $ V4 zeroV zeroV zeroV w)
-               , \w -> LinearMap $ V4 (Tensor $ V4 w zeroV zeroV zeroV)
-                                      (Tensor $ V4 zeroV w zeroV zeroV)
-                                      (Tensor $ V4 zeroV zeroV w zeroV)
-                                      (Tensor $ V4 zeroV zeroV zeroV w)
                , V4 (\w -> V4 w zeroV zeroV zeroV)
                     (\w -> V4 zeroV w zeroV zeroV)
                     (\w -> V4 zeroV zeroV w zeroV)
