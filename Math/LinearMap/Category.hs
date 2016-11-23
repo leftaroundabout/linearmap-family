@@ -49,8 +49,8 @@ module Math.LinearMap.Category (
             , normSpanningSystem
             , normSpanningSystem'
             -- ** Variances
-            , Variance, spanVariance, dualNorm
-            , dependence
+            , Variance, spanVariance, varianceSpanningSystem
+            , dualNorm, dualNorm', dependence
             -- ** Utility
             , densifyNorm
             -- * Solving linear equations
@@ -318,6 +318,12 @@ adhocNorm = Norm uncanonicallyToDual
 dualNorm :: SimpleSpace v => Norm v -> Variance v
 dualNorm = spanVariance . normSpanningSystem'
 
+-- | 'dualNorm' in the opposite direction. This is actually self-inverse;
+--    with 'dualSpaceWitness' you can replace each with the other direction.
+dualNorm' :: ∀ v . SimpleSpace v => Variance v -> Norm v
+dualNorm' = case dualSpaceWitness :: DualSpaceWitness v of
+     DualSpaceWitness -> spanNorm . normSpanningSystem'
+
 transformNorm :: ∀ v w . (LSpace v, LSpace w, Scalar v~Scalar w)
                              => (v+>w) -> Norm w -> Norm v
 transformNorm = case ( dualSpaceWitness :: DualSpaceWitness v
@@ -561,6 +567,10 @@ normSpanningSystem' :: (FiniteDimensional v, IEEE (Scalar v))
                => Seminorm v -> [v]
 normSpanningSystem' me = orthonormaliseFussily 0 me $ enumerateSubBasis entireBasis
 
+-- | Inverse of 'spanVariance'. Equivalent to 'normSpanningSystem' on the dual space.
+varianceSpanningSystem :: ∀ v . SimpleSpace v => Variance v -> [v]
+varianceSpanningSystem = case dualSpaceWitness :: DualSpaceWitness v of
+                           DualSpaceWitness -> normSpanningSystem
 
 -- | For any two norms, one can find a system of co-vectors that, with suitable
 --   coefficients, spans /either/ of them: if @shSys = sharedNormSpanningSystem n₀ n₁@,
