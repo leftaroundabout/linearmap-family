@@ -81,6 +81,8 @@ module Math.LinearMap.Category (
             , Num'
             , Fractional'
             , RealFrac', RealFloat'
+            -- ** Double-dual, scalar-scalar etc. identity
+            , ClosedScalarWitness(..), ScalarSpaceWitness(..), DualSpaceWitness(..)
             -- ** Misc
             , relaxNorm, transformNorm, transformVariance
             , findNormalLength, normalLength
