@@ -78,7 +78,7 @@ module Math.LinearMap.Category (
             , DualSpace, riesz, coRiesz, showsPrecAsRiesz, (.<)
             -- ** Constraint synonyms
             , HilbertSpace, SimpleSpace
-            , Num'
+            , Num'(..)
             , Fractional'
             , RealFrac', RealFloat'
             -- ** Double-dual, scalar-scalar etc. identity
