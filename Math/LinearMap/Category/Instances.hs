@@ -48,6 +48,7 @@ import Math.LinearMap.Asserted
 import Math.VectorSpace.ZeroDimensional
 
 
+infixr 7 <.>^
 (<.>^) :: LinearSpace v => DualVector v -> v -> Scalar v
 f<.>^v = (applyDualVector-+$>f)-+$>v
 
