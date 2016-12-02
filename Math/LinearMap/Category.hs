@@ -205,7 +205,7 @@ import Numeric.IEEE
 -- | A linear map that simply projects from a dual vector in @u@ to a vector in @v@.
 -- 
 -- @
--- (du-+|>v) u  ≡  v ^* (du<.>^u)
+-- (du '-+|>' v) u  ≡  v '^*' (du '<.>^' u)
 -- @
 infixr 7 -+|>
 (-+|>) :: ( EnhancedCat f (LinearFunction s)
