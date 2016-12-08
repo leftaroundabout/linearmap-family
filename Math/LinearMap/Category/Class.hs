@@ -26,6 +26,7 @@
 module Math.LinearMap.Category.Class where
 
 import Data.VectorSpace
+import Data.AffineSpace
 
 import Prelude ()
 import qualified Prelude as Hask
@@ -50,6 +51,9 @@ class (Num s, LinearSpace s) => Num' s where
 data ScalarSpaceWitness v where
   ScalarSpaceWitness :: (Num' (Scalar v), Scalar (Scalar v) ~ Scalar v)
                           => ScalarSpaceWitness v
+data LinearManifoldWitness v where
+  LinearManifoldWitness :: (Needle v ~ v, AffineSpace v, Diff v ~ v)
+                         => BoundarylessWitness v -> LinearManifoldWitness v
   
 class (VectorSpace v, PseudoAffine v) => TensorSpace v where
   -- | The internal representation of a 'Tensor' product.
@@ -59,6 +63,7 @@ class (VectorSpace v, PseudoAffine v) => TensorSpace v where
   -- then a “nested vector” or, if @v@ is a @DualVector@ / “row vector”, a matrix.
   type TensorProduct v w :: *
   scalarSpaceWitness :: ScalarSpaceWitness v
+  linearManifoldWitness :: LinearManifoldWitness v
   zeroTensor :: (TensorSpace w, Scalar w ~ Scalar v)
                 => v ⊗ w
   toFlatTensor :: v -+> (v ⊗ Scalar v)
@@ -197,6 +202,7 @@ instance Num' s => TensorSpace (ZeroDim s) where
   type TensorProduct (ZeroDim s) v = ZeroDim s
   scalarSpaceWitness = case closedScalarWitness :: ClosedScalarWitness s of
                 ClosedScalarWitness -> ScalarSpaceWitness
+  linearManifoldWitness = LinearManifoldWitness BoundarylessWitness
   zeroTensor = Tensor Origin
   toFlatTensor = LinearFunction $ \Origin -> Tensor Origin
   fromFlatTensor = LinearFunction $ \(Tensor Origin) -> Origin
@@ -408,6 +414,11 @@ instance ∀ u v . ( TensorSpace u, TensorSpace v, Scalar u ~ Scalar v )
   scalarSpaceWitness = case ( scalarSpaceWitness :: ScalarSpaceWitness u
                             , scalarSpaceWitness :: ScalarSpaceWitness v ) of
        (ScalarSpaceWitness, ScalarSpaceWitness) -> ScalarSpaceWitness
+  linearManifoldWitness = case ( linearManifoldWitness :: LinearManifoldWitness u
+                            , linearManifoldWitness :: LinearManifoldWitness v ) of
+       ( LinearManifoldWitness BoundarylessWitness
+        ,LinearManifoldWitness BoundarylessWitness )
+         -> LinearManifoldWitness BoundarylessWitness
   zeroTensor = zeroTensor <⊕ zeroTensor
   scaleTensor = bilinearFunction $ \μ (Tensor (v,w)) ->
                  Tensor ( (scaleTensor-+$>μ)-+$>v, (scaleTensor-+$>μ)-+$>w )
@@ -556,7 +567,14 @@ instance ∀ s u v . ( LinearSpace u, TensorSpace v, Scalar u ~ s, Scalar v ~ s 
   type TensorProduct (LinearMap s u v) w = TensorProduct (DualVector u) (Tensor s v w)
   scalarSpaceWitness = case ( scalarSpaceWitness :: ScalarSpaceWitness u
                             , scalarSpaceWitness :: ScalarSpaceWitness v ) of
-       (ScalarSpaceWitness, ScalarSpaceWitness) -> ScalarSpaceWitness
+       (ScalarSpaceWitness, _ScalarSpaceWitness) -> ScalarSpaceWitness
+  linearManifoldWitness = case ( scalarSpaceWitness :: ScalarSpaceWitness u
+                               , linearManifoldWitness :: LinearManifoldWitness u
+                               , linearManifoldWitness :: LinearManifoldWitness v ) of
+       ( ScalarSpaceWitness
+        ,LinearManifoldWitness BoundarylessWitness
+        ,LinearManifoldWitness BoundarylessWitness )
+         -> LinearManifoldWitness BoundarylessWitness
   zeroTensor = deferLinearMap $ zeroV
   toFlatTensor = case scalarSpaceWitness :: ScalarSpaceWitness u of
        ScalarSpaceWitness -> arr deferLinearMap . fmap toFlatTensor
@@ -686,6 +704,11 @@ instance ∀ s u v . (TensorSpace u, TensorSpace v, Scalar u ~ s, Scalar v ~ s)
   scalarSpaceWitness = case ( scalarSpaceWitness :: ScalarSpaceWitness u
                             , scalarSpaceWitness :: ScalarSpaceWitness v ) of
        (ScalarSpaceWitness, ScalarSpaceWitness) -> ScalarSpaceWitness
+  linearManifoldWitness = case ( linearManifoldWitness :: LinearManifoldWitness u
+                             , linearManifoldWitness :: LinearManifoldWitness v ) of
+       ( LinearManifoldWitness BoundarylessWitness
+        ,LinearManifoldWitness BoundarylessWitness )
+         -> LinearManifoldWitness BoundarylessWitness
   zeroTensor = lassocTensor $ zeroTensor
   toFlatTensor = case scalarSpaceWitness :: ScalarSpaceWitness u of
     ScalarSpaceWitness -> arr lassocTensor . fmap toFlatTensor
@@ -855,6 +878,11 @@ instance ∀ s u v . (LinearSpace u, LinearSpace v, Scalar u ~ s, Scalar v ~ s)
   scalarSpaceWitness = case ( scalarSpaceWitness :: ScalarSpaceWitness u
                             , scalarSpaceWitness :: ScalarSpaceWitness v ) of
        (ScalarSpaceWitness, ScalarSpaceWitness) -> ScalarSpaceWitness
+  linearManifoldWitness = case ( linearManifoldWitness :: LinearManifoldWitness u
+                             , linearManifoldWitness :: LinearManifoldWitness v ) of
+       ( LinearManifoldWitness BoundarylessWitness
+        ,LinearManifoldWitness BoundarylessWitness )
+         -> LinearManifoldWitness BoundarylessWitness
   zeroTensor = fromLinearFn $ const0
   toFlatTensor = case scalarSpaceWitness :: ScalarSpaceWitness u of
      ScalarSpaceWitness -> fmap fromLinearFn $ applyDualVector
@@ -945,3 +973,21 @@ instance (LinearSpace u, LinearSpace v, Scalar u ~ s, Scalar v ~ s)
                        $ sampleLinearFunctionFn
                       -+$> exposeLinearFn . curryLinearMap $ f )
 
+
+instance (TensorSpace u, TensorSpace v, s~Scalar u, s~Scalar v)
+                      => AffineSpace (Tensor s u v) where
+  type Diff (Tensor s u v) = Tensor s u v
+  (.-.) = (^-^)
+  (.+^) = (^+^)
+instance (LinearSpace u, TensorSpace v, s~Scalar u, s~Scalar v)
+                      => AffineSpace (LinearMap s u v) where
+  type Diff (LinearMap s u v) = LinearMap s u v
+  (.-.) = (^-^)
+  (.+^) = (^+^)
+instance (TensorSpace u, TensorSpace v, s~Scalar u, s~Scalar v)
+                      => AffineSpace (LinearFunction s u v) where
+  type Diff (LinearFunction s u v) = LinearFunction s u v
+  (.-.) = (^-^)
+  (.+^) = (^+^)
+
+  

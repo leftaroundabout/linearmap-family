@@ -64,6 +64,7 @@ instance Num' ℝ where
 instance TensorSpace ℝ where
   type TensorProduct ℝ w = w
   scalarSpaceWitness = ScalarSpaceWitness
+  linearManifoldWitness = LinearManifoldWitness BoundarylessWitness
   zeroTensor = Tensor zeroV
   scaleTensor = bilinearFunction $ \μ (Tensor t) -> Tensor $ μ*^t
   addTensors (Tensor v) (Tensor w) = Tensor $ v ^+^ w
@@ -108,6 +109,7 @@ instance ∀ s . Num' s => TensorSpace (V s) where {                     \
   type TensorProduct (V s) w = V w;                               \
   scalarSpaceWitness = case closedScalarWitness :: ClosedScalarWitness s of{ \
                          ClosedScalarWitness -> ScalarSpaceWitness};        \
+  linearManifoldWitness = LinearManifoldWitness BoundarylessWitness;   \
   zeroTensor = Tensor $ pure zeroV;                                \
   addTensors (Tensor m) (Tensor n) = Tensor $ liftA2 (^+^) m n;     \
   subtractTensors (Tensor m) (Tensor n) = Tensor $ liftA2 (^-^) m n; \
@@ -245,22 +247,4 @@ instance (Fractional' n, TensorProduct (DualVector n) n ~ n)
 
 
 
-
-instance (LSpace u, LSpace v, s~Scalar u, s~Scalar v)
-                      => AffineSpace (Tensor s u v) where
-  type Diff (Tensor s u v) = Tensor s u v
-  (.-.) = (^-^)
-  (.+^) = (^+^)
-instance (LSpace u, LSpace v, s~Scalar u, s~Scalar v)
-                      => AffineSpace (LinearMap s u v) where
-  type Diff (LinearMap s u v) = LinearMap s u v
-  (.-.) = (^-^)
-  (.+^) = (^+^)
-instance (LSpace u, LSpace v, s~Scalar u, s~Scalar v)
-                      => AffineSpace (LinearFunction s u v) where
-  type Diff (LinearFunction s u v) = LinearFunction s u v
-  (.-.) = (^-^)
-  (.+^) = (^+^)
-
-  
 
