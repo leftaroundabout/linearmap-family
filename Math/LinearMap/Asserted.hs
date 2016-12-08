@@ -28,6 +28,8 @@ module Math.LinearMap.Asserted where
 import Data.VectorSpace
 import Data.Basis
 
+import Math.Manifold.Core.PseudoAffine
+
 import Prelude ()
 import qualified Prelude as Hask
 
@@ -37,6 +39,7 @@ import Data.Traversable.Constrained
 
 import Data.Coerce
 import Data.Type.Coercion
+import Data.Tagged
 
 import Data.VectorSpace.Free
 import qualified Linear.Matrix as Mat
@@ -90,6 +93,14 @@ instance AdditiveGroup w => AdditiveGroup (LinearFunction s v w) where
 instance VectorSpace w => VectorSpace (LinearFunction s v w) where
   type Scalar (LinearFunction s v w) = Scalar w
   μ *^ LinearFunction f = LinearFunction $ (μ*^) . f
+instance VectorSpace w => Semimanifold (LinearFunction s v w) where
+  type Needle (LinearFunction s v w) = LinearFunction s v w
+  toInterior = pure
+  fromInterior = id
+  (.+~^) = (^+^)
+  translateP = Tagged (^+^)
+instance VectorSpace w => PseudoAffine (LinearFunction s v w) where
+  f.-~.g = return $ f^-^g
 
 instance Functor (LinearFunction s v) Coercion Coercion where
   fmap Coercion = Coercion

@@ -25,6 +25,8 @@ import Math.LinearMap.Category.Class
 import Data.VectorSpace
 import Data.Basis
 
+import Math.Manifold.Core.PseudoAffine
+
 import Prelude ()
 import qualified Prelude as Hask
 
@@ -33,6 +35,7 @@ import Control.Arrow.Constrained
 
 import Data.Coerce
 import Data.Type.Coercion
+import Data.Tagged
 
 import Data.Foldable (foldl')
 
@@ -93,7 +96,14 @@ instance LinearSpace ℝ where
   composeLinear = bilinearFunction $ \f (LinearMap g)
                      -> LinearMap $ (applyLinear-+$>f)-+$>g
 
-#define FreeLinearSpace(V, LV, tp, tenspl, tenid, dspan, contraction, contraaction)                                  \
+#define FreeLinearSpace(V, LV, tp, tenspl, tenid, dspan, contraction, contraaction)  \
+instance Num s => Semimanifold (V s) where {  \
+  type Needle (V s) = V s;                      \
+  toInterior = pure; fromInterior = id;           \
+  (.+~^) = (^+^);                                     \
+  translateP = Tagged (^+^) };                      \
+instance Num s => PseudoAffine (V s) where {         \
+  v.-~.w = pure (v^-^w); (.-~!) = (^-^) };              \
 instance ∀ s . Num' s => TensorSpace (V s) where {                     \
   type TensorProduct (V s) w = V w;                               \
   scalarSpaceWitness = case closedScalarWitness :: ClosedScalarWitness s of{ \

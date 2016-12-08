@@ -35,7 +35,9 @@ import Control.Arrow.Constrained
 
 import Data.Coerce
 import Data.Type.Coercion
+import Data.Tagged
 
+import Math.Manifold.Core.PseudoAffine
 import Math.LinearMap.Asserted
 import Math.VectorSpace.ZeroDimensional
 
@@ -49,7 +51,7 @@ data ScalarSpaceWitness v where
   ScalarSpaceWitness :: (Num' (Scalar v), Scalar (Scalar v) ~ Scalar v)
                           => ScalarSpaceWitness v
   
-class (VectorSpace v) => TensorSpace v where
+class (VectorSpace v, PseudoAffine v) => TensorSpace v where
   -- | The internal representation of a 'Tensor' product.
   -- 
   -- For euclidean spaces, this is generally constructed by replacing each @s@
@@ -305,6 +307,17 @@ instance ∀ v w s . (LinearSpace v, TensorSpace w, Scalar v~s, Scalar w~s)
               , scalarSpaceWitness :: ScalarSpaceWitness w ) of
             (DualSpaceWitness, ScalarSpaceWitness)
                 -> fromTensor $ (scaleTensor-+$>μ) -+$> asTensor $ v
+instance ∀ v w s . (LinearSpace v, TensorSpace w, Scalar v~s, Scalar w~s)
+               => Semimanifold (LinearMap s v w) where
+  type Needle (LinearMap s v w) = LinearMap s v w
+  toInterior = pure
+  fromInterior = id
+  (.+~^) = (^+^)
+  translateP = Tagged (^+^)
+instance ∀ v w s . (LinearSpace v, TensorSpace w, Scalar v~s, Scalar w~s)
+               => PseudoAffine (LinearMap s v w) where
+  f.-~.g = return $ f^-^g
+  (.-~!) = (^-^)
 
 instance (TensorSpace v, TensorSpace w, Scalar v~s, Scalar w~s)
                => AdditiveGroup (Tensor s v w) where
@@ -316,6 +329,17 @@ instance (TensorSpace v, TensorSpace w, Scalar v~s, Scalar w~s)
                => VectorSpace (Tensor s v w) where
   type Scalar (Tensor s v w) = s
   μ*^t = (scaleTensor-+$>μ)-+$>t
+instance (TensorSpace v, TensorSpace w, Scalar v~s, Scalar w~s)
+               => Semimanifold (Tensor s v w) where
+  type Needle (Tensor s v w) = Tensor s v w
+  toInterior = pure
+  fromInterior = id
+  (.+~^) = (^+^)
+  translateP = Tagged (^+^)
+instance (TensorSpace v, TensorSpace w, Scalar v~s, Scalar w~s)
+               => PseudoAffine (Tensor s v w) where
+  f.-~.g = return $ f^-^g
+  (.-~!) = (^-^)
   
 infixr 6 ⊕, >+<, <⊕
 
