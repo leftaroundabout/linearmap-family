@@ -78,6 +78,7 @@ instance TensorSpace ℝ where
   fzipTensorWith = LinearFunction
                    $ \f -> follow Tensor <<< f <<< flout Tensor *** flout Tensor
   coerceFmapTensorProduct _ Coercion = Coercion
+  wellDefinedTensor (Tensor w) = Tensor <$> wellDefinedVector w
 instance LinearSpace ℝ where
   type DualVector ℝ = ℝ
   dualSpaceWitness = DualSpaceWitness
@@ -105,7 +106,7 @@ instance Num s => Semimanifold (V s) where {  \
   translateP = Tagged (^+^) };                      \
 instance Num s => PseudoAffine (V s) where {         \
   v.-~.w = pure (v^-^w); (.-~!) = (^-^) };              \
-instance ∀ s . Num' s => TensorSpace (V s) where {                     \
+instance ∀ s . (Num' s, Eq s) => TensorSpace (V s) where {                     \
   type TensorProduct (V s) w = V w;                               \
   scalarSpaceWitness = case closedScalarWitness :: ClosedScalarWitness s of{ \
                          ClosedScalarWitness -> ScalarSpaceWitness};        \
@@ -127,8 +128,10 @@ instance ∀ s . Num' s => TensorSpace (V s) where {                     \
   fzipTensorWith = bilinearFunction $ \
           \(LinearFunction f) (Tensor vw, Tensor vx) \
                   -> Tensor $ liftA2 (curry f) vw vx; \
-  coerceFmapTensorProduct _ Coercion = Coercion };                  \
-instance ∀ s . Num' s => LinearSpace (V s) where {                  \
+  coerceFmapTensorProduct _ Coercion = Coercion; \
+  wellDefinedTensor = getTensorProduct >>> Hask.traverse wellDefinedVector \
+                       >>> fmap Tensor };                  \
+instance ∀ s . (Num' s, Eq s) => LinearSpace (V s) where {                  \
   type DualVector (V s) = V s;                                 \
   dualSpaceWitness = case closedScalarWitness :: ClosedScalarWitness s of \
          {ClosedScalarWitness -> DualSpaceWitness};                    \

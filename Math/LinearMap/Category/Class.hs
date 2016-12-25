@@ -22,6 +22,7 @@
 {-# LANGUAGE TupleSections              #-}
 {-# LANGUAGE StandaloneDeriving         #-}
 {-# LANGUAGE GADTs                      #-}
+{-# LANGUAGE DefaultSignatures          #-}
 
 module Math.LinearMap.Category.Class where
 
@@ -88,6 +89,14 @@ class (VectorSpace v, PseudoAffine v) => TensorSpace v where
            => Bilinear ((w,x) -+> u) (v⊗w, v⊗x) (v⊗u)
   coerceFmapTensorProduct :: Hask.Functor p
        => p v -> Coercion a b -> Coercion (TensorProduct v a) (TensorProduct v b)
+  -- | “Sanity-check” a vector. This typically amounts to detecting any NaN components,
+  --   which should trigger a @Nothing@ result. Otherwise, the result should be @Just@
+  --   the input, but may also be optimised / memoised if applicable (i.e. for
+  --   function spaces).
+  wellDefinedVector :: v -> Maybe v
+  default wellDefinedVector :: Eq v => v -> Maybe v
+  wellDefinedVector v = if v==v then Just v else Nothing
+  wellDefinedTensor :: (TensorSpace w, Scalar w ~ Scalar v) => v⊗w -> Maybe (v⊗w)
 
 infixl 7 ⊗
 
@@ -215,6 +224,8 @@ instance Num' s => TensorSpace (ZeroDim s) where
   fmapTensor = biConst0
   fzipTensorWith = biConst0
   coerceFmapTensorProduct _ Coercion = Coercion
+  wellDefinedVector Origin = Just Origin
+  wellDefinedTensor (Tensor Origin) = Just (Tensor Origin)
 instance Num' s => LinearSpace (ZeroDim s) where
   type DualVector (ZeroDim s) = ZeroDim s
   dualSpaceWitness = case closedScalarWitness :: ClosedScalarWitness s of
@@ -445,6 +456,9 @@ instance ∀ u v . ( TensorSpace u, TensorSpace v, Scalar u ~ Scalar v )
              ( coerceFmapTensorProduct (fst<$>p) cab
              , coerceFmapTensorProduct (snd<$>p) cab ) of
           (Coercion, Coercion) -> Coercion
+  wellDefinedVector (u,v) = liftA2 (,) (wellDefinedVector u) (wellDefinedVector v)
+  wellDefinedTensor (Tensor (u,v))
+         = liftA2 ((Tensor.) . (,)) (wellDefinedTensor u) (wellDefinedTensor v)
 instance ∀ u v . ( LinearSpace u, LinearSpace v, Scalar u ~ Scalar v )
                        => LinearSpace (u,v) where
   type DualVector (u,v) = (DualVector u, DualVector v)
@@ -612,6 +626,10 @@ instance ∀ s u v . ( LinearSpace u, TensorSpace v, Scalar u ~ s, Scalar v ~ s 
          cftlp DualSpaceWitness _ c
                    = coerceFmapTensorProduct ([]::[DualVector u])
                                              (fmap c :: Coercion (v⊗a) (v⊗b))
+  wellDefinedVector = case dualSpaceWitness :: DualSpaceWitness u of
+      DualSpaceWitness -> arr asTensor >>> wellDefinedTensor >>> arr (fmap fromTensor)
+  wellDefinedTensor
+      = arr hasteLinearMap >>> wellDefinedVector >>> arr (fmap deferLinearMap)
 
 -- | @((u+>v)+>w) -> u⊗(v+>w)@
 coCurryLinearMap :: ∀ s u v w . ( LinearSpace u, Scalar u ~ s
@@ -739,6 +757,8 @@ instance ∀ s u v . (TensorSpace u, TensorSpace v, Scalar u ~ s, Scalar v ~ s)
                                (TensorProduct u (Tensor s v b))
          cftlp _ c = coerceFmapTensorProduct ([]::[u])
                                              (fmap c :: Coercion (v⊗a) (v⊗b))
+  wellDefinedVector = wellDefinedTensor
+  wellDefinedTensor = arr rassocTensor >>> wellDefinedTensor >>> arr (fmap lassocTensor)
 instance ∀ s u v . (LinearSpace u, LinearSpace v, Scalar u ~ s, Scalar v ~ s)
                        => LinearSpace (Tensor s u v) where
   type DualVector (Tensor s u v) = LinearMap s u (DualVector v)
@@ -919,6 +939,14 @@ instance ∀ s u v . (LinearSpace u, LinearSpace v, Scalar u ~ s, Scalar v ~ s)
      ScalarSpaceWitness -> bilinearFunction $ \f (g,h)
                     -> fromLinearFn $ f . ((asLinearFn$g)&&&(asLinearFn$h))
   coerceFmapTensorProduct _ Coercion = Coercion
+  wellDefinedVector = arr sampleLinearFunction >>> wellDefinedVector
+                       >>> fmap (arr applyLinear)
+  wellDefinedTensor = arr asLinearFn >>> (. applyLinear)
+                       >>> getLinearFunction sampleLinearFunction
+                       >>> wellDefinedVector
+                       >>> fmap (arr fromLinearFn <<< \m
+                                   -> sampleLinearFunction
+                                      >>> getLinearFunction applyLinear m)
 
 exposeLinearFn :: Coercion (LinearMap s (LinearFunction s u v) w)
                            (LinearFunction s (LinearFunction s u v) w)

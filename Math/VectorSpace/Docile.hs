@@ -363,7 +363,7 @@ instance (Num' s) => FiniteDimensional (ZeroDim s) where
   uncanonicallyFromDual = id
   uncanonicallyToDual = id
   
-instance (Num' s, LinearSpace s) => FiniteDimensional (V0 s) where
+instance (Num' s, Eq s, LinearSpace s) => FiniteDimensional (V0 s) where
   data SubBasis (V0 s) = V0Basis
   entireBasis = V0Basis
   enumerateSubBasis V0Basis = []
@@ -396,7 +396,7 @@ instance FiniteDimensional ℝ where
   uncanonicallyToDual = id
 
 #define FreeFiniteDimensional(V, VB, dimens, take, give)        \
-instance (Num' s, LSpace s)                            \
+instance (Num' s, Eq s, LSpace s)                            \
             => FiniteDimensional (V s) where {            \
   data SubBasis (V s) = VB deriving (Show);             \
   entireBasis = VB;                                      \
