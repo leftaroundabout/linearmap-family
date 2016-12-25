@@ -52,7 +52,7 @@ module Math.LinearMap.Category (
             , Variance, spanVariance, varianceSpanningSystem
             , dualNorm, dualNorm', dependence
             -- ** Utility
-            , densifyNorm
+            , densifyNorm, wellDefinedNorm
             -- * Solving linear equations
             , (\$), pseudoInverse, roughDet
             -- * Eigenvalue problems
@@ -390,6 +390,12 @@ densifyNorm :: ∀ v . LSpace v => Norm v -> Norm v
 densifyNorm = case dualSpaceWitness :: DualSpaceWitness v of
     DualSpaceWitness
         -> \(Norm m) -> Norm . arr $ sampleLinearFunction $ m
+
+-- | Like 'densifyNorm', but also perform a “sanity check” to eliminate NaN etc. problems.
+wellDefinedNorm :: ∀ v . LinearSpace v => Norm v -> Maybe (Norm v)
+wellDefinedNorm = case dualSpaceWitness :: DualSpaceWitness v of
+    DualSpaceWitness
+        -> \(Norm m) -> Norm <$> wellDefinedVector m
 
 data OrthonormalSystem v = OrthonormalSystem {
       orthonormalityNorm :: Norm v
