@@ -41,6 +41,8 @@ import Data.Semigroup
 import Data.VectorSpace
 import Data.Basis
 
+import Data.Void
+
 import Prelude ()
 import qualified Prelude as Hask
 
@@ -783,6 +785,7 @@ showsPrecAsRiesz = case ( scalarSpaceWitness :: ScalarSpaceWitness v
  (ScalarSpaceWitness,DualSpaceWitness)
       -> \p dv -> showParen (p>0) $ ("().<"++) . showsPrec 7 (sRiesz$dv)
 
+instance Show (LinearMap ℝ (ZeroDim ℝ) ℝ) where showsPrec = showsPrecAsRiesz
 instance Show (LinearMap ℝ (V0 ℝ) ℝ) where showsPrec = showsPrecAsRiesz
 instance Show (LinearMap ℝ ℝ ℝ) where showsPrec = showsPrecAsRiesz
 instance Show (LinearMap ℝ (V1 ℝ) ℝ) where showsPrec = showsPrecAsRiesz
@@ -802,6 +805,8 @@ instance ( RieszDecomposable x, RieszDecomposable y
   rieszDecomposition m = map (first Left) (rieszDecomposition $ fst . m)
                       ++ map (first Right) (rieszDecomposition $ snd . m)
 
+instance RieszDecomposable (ZeroDim ℝ) where
+  rieszDecomposition _ = []
 instance RieszDecomposable (V0 ℝ) where
   rieszDecomposition _ = []
 instance RieszDecomposable (V1 ℝ) where
@@ -842,7 +847,9 @@ rieszDecomposeShowsPrec p m = case rieszDecomposition m of
                                   $ foldr (\(b,dv)
                                         -> (" ^+^ "++) . showsPrecBasis ([]::[u]) 7 b
                                                        . (".<"++) . showsPrec 7 dv) s dvs
-
+                                  
+instance Show (LinearMap s v (ZeroDim s)) where
+  show _ = "zeroV"
 instance Show (LinearMap s v (V0 s)) where
   show _ = "zeroV"
 instance (FiniteDimensional v, v ~ DualVector v, Scalar v ~ ℝ, Show v)
@@ -893,6 +900,9 @@ instance ( TensorDecomposable x, TensorDecomposable y
   showsPrecBasis proxy p (Right by)
       = showParen (p>9) $ ("Right "++) . showsPrecBasis (snd<$>proxy) 10 by
 
+instance TensorDecomposable (ZeroDim ℝ) where
+  tensorDecomposition _ = []
+  showsPrecBasis _ _ = absurd
 instance TensorDecomposable (V0 ℝ) where
   tensorDecomposition _ = []
   showsPrecBasis _ _ (Mat.E q) = (V0^.q ++)
