@@ -637,7 +637,7 @@ sharedSeminormSpanningSystem nn nm
  where combined = densifyNorm $ nn<>nm
        finalise :: DualSpaceWitness v -> (v, Scalar v) -> (DualVector v, Maybe (Scalar v))
        finalise DualSpaceWitness (v, μn)
-           | μn^2 > epsilon  = (v'^*μn, Just $ sqrt (1 - μn^2)/μn)
+           | μn^2 > epsilon  = (v'^*μn, Just $ sqrt (max 0 $ 1 - μn^2)/μn)
            | otherwise       = (v', Nothing)
         where v' = combined<$|v
 
