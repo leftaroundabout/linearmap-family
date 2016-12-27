@@ -80,7 +80,7 @@ module Math.LinearMap.Category (
             , HilbertSpace, SimpleSpace
             , Num'(..)
             , Fractional'
-            , RealFrac', RealFloat'
+            , RealFrac', RealFloat', LinearShowable
             -- ** Double-dual, scalar-scalar etc. identity
             , ClosedScalarWitness(..), ScalarSpaceWitness(..), DualSpaceWitness(..)
             , LinearManifoldWitness(..)
@@ -685,3 +685,5 @@ sumSubspaceNorms = case ( dualSpaceWitness :: DualSpaceWitness u
 
 instance (SimpleSpace v, Show (DualVector v)) => Show (Norm v) where
   showsPrec p n = showParen (p>9) $ ("spanNorm "++) . shows (normSpanningSystem n)
+
+type LinearShowable v = (Show v, RieszDecomposable v)
