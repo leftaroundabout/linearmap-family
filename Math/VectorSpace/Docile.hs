@@ -21,6 +21,7 @@
 {-# LANGUAGE TupleSections        #-}
 {-# LANGUAGE LambdaCase           #-}
 {-# LANGUAGE ConstraintKinds      #-}
+{-# LANGUAGE RankNTypes           #-}
 
 module Math.VectorSpace.Docile where
 
@@ -48,6 +49,7 @@ import qualified Prelude as Hask
 
 import Control.Category.Constrained.Prelude hiding ((^))
 import Control.Arrow.Constrained
+import Control.Monad.Trans.State
 
 import Linear ( V0(V0), V1(V1), V2(V2), V3(V3), V4(V4)
               , _x, _y, _z, _w, ex, ey, ez, ew )
@@ -56,7 +58,7 @@ import Data.VectorSpace.Free
 import Math.VectorSpace.ZeroDimensional
 import qualified Linear.Matrix as Mat
 import qualified Linear.Vector as Mat
-import Control.Lens ((^.))
+import Control.Lens ((^.), Lens', lens, ReifiedLens', ReifiedLens(..))
 import Data.Coerce
 
 import Numeric.IEEE
@@ -127,7 +129,7 @@ instance (Fractional' s, SemiInner s) => SemiInner (V0 s) where
   dualBasisCandidates _ = []
   tensorDualBasisCandidates _ = []
 
-orthonormaliseDuals :: ∀ v . (SemiInner v, LSpace v, RealFrac' (Scalar v))
+orthonormaliseDuals :: ∀ v . (SemiInner v, RealFrac' (Scalar v))
                           => Scalar v -> [(v, DualVector v)]
                                       -> [(v,Maybe (DualVector v))]
 orthonormaliseDuals = od dualSpaceWitness
@@ -146,7 +148,7 @@ orthonormaliseDuals = od dualSpaceWitness
               ovl₀ = v'₀<.>^v
               ovl₁ = v'₁<.>^v
 
-dualBasis :: ∀ v . (SemiInner v, LSpace v, RealFrac' (Scalar v))
+dualBasis :: ∀ v . (SemiInner v, RealFrac' (Scalar v))
                 => [v] -> [Maybe (DualVector v)]
 dualBasis vs = snd <$> result
  where zip' ((i,v):vs) ((j,v'):ds)
@@ -207,6 +209,27 @@ dualBasis vs = snd <$> result
        vsIxed = zip [0..] vs
        lookupArr = Arr.fromList vs
        n = Arr.length lookupArr
+
+
+zipTravWith :: Hask.Traversable t => (a->b->c) -> t a -> [b] -> Maybe (t c)
+zipTravWith f = evalStateT . Hask.traverse zp
+ where zp a = do
+           bs <- get
+           case bs of
+              [] -> StateT $ const Nothing
+              (b:bs') -> put bs' >> return (f a b)
+
+embedFreeSubspace :: ∀ v t r . (SemiInner v, RealFrac' (Scalar v), Hask.Traversable t)
+            => t v -> Maybe (ReifiedLens' v (t (Scalar v)))
+embedFreeSubspace vs = fmap (\(g,s) -> Lens (lens g s)) result
+ where vsList = toList vs
+       result = fmap (genGet&&&genSet) . sequenceA $ dualBasis vsList
+       genGet vsDuals u = case zipTravWith (\_v dv -> dv<.>^u) vs vsDuals of
+                Just cs -> cs
+       genSet vsDuals u coefs = case zipTravWith (,) coefs $ zip vsList vsDuals of
+                Just updators -> foldl' (\ur (c,(v,v')) -> ur ^+^ v^*(c - v'<.>^ur))
+                                        u updators
+
 
 instance SemiInner ℝ where
   dualBasisCandidates = fmap ((`Node`[]) . second recip)

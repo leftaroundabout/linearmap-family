@@ -66,7 +66,7 @@ module Math.LinearMap.Category (
             , TensorSpace (..)
             , LinearSpace (..)
             -- ** Orthonormal systems
-            , SemiInner (..), cartesianDualBasisCandidates
+            , SemiInner (..), cartesianDualBasisCandidates, embedFreeSubspace
             -- ** Finite baseis
             , FiniteDimensional (..)
             -- * Utility
