@@ -546,6 +546,10 @@ instance ∀ s u v .
                = case decomposeLinMapWithin bu $ curryLinearMap $ muvw of
            Left (bu', mvwsg) -> let (_, (bv', ws)) = goWith bv id (mvwsg []) id
                                 in Left (TensorBasis bu' bv', ws)
+           Right mvwsg -> let (changed, (bv', ws)) = goWith bv id (mvwsg []) id
+                          in if changed
+                              then Left (TensorBasis bu bv', ws)
+                              else Right ws
           where (_, goWith) = tensorLinmapDecompositionhelpers
   recomposeSB (TensorBasis bu bv) = recomposeSBTensor bu bv
   recomposeSBTensor = rst dualSpaceWitness
