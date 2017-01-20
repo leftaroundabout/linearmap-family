@@ -50,7 +50,7 @@ library
                        constrained-categories >=0.3 && <0.4,
                        containers, vector,
                        tagged,
-                       free-vector-spaces >= 0.1.1 && < 0.2,
+                       free-vector-spaces >= 0.1.2 && < 0.2,
                        linear, lens, transformers,
                        manifolds-core >= 0.4 && < 0.5,
                        semigroups,
