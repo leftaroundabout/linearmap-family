@@ -41,6 +41,7 @@ import Data.Foldable (foldl')
 
 import Data.VectorSpace.Free
 import Data.VectorSpace.Free.FiniteSupportedSequence
+import Data.VectorSpace.Free.Sequence
 import qualified Linear.Matrix as Mat
 import qualified Linear.Vector as Mat
 import qualified Linear.Metric as Mat
@@ -48,11 +49,13 @@ import Linear ( V0(V0), V1(V1), V2(V2), V3(V3), V4(V4)
               , _x, _y, _z, _w )
 import Control.Lens ((^.))
 
+import qualified Data.Vector as Arr
 import qualified Data.Vector.Unboxed as UArr
 
 import Math.LinearMap.Asserted
 import Math.VectorSpace.ZeroDimensional
 
+import qualified GHC.Exts as GHC
 
 infixr 7 <.>^
 (<.>^) :: LinearSpace v => DualVector v -> v -> Scalar v
@@ -277,8 +280,7 @@ instance (Num' n, UArr.Unbox n) => TensorSpace (FinSuppSeq n) where
   transposeTensor = LinearFunction $ \(Tensor a)
     -> let n = length a
        in foldl' (^+^) zeroV
-        $ zipWith ( \i w -> (getLinearFunction tensorProduct w) $ FinSuppSeq
-                              $ UArr.generate n (\j -> if i==j then 1 else 0) )
+        $ zipWith ( \i w -> getLinearFunction tensorProduct w $ basisValue i )
              [0..] a
   fmapTensor = bilinearFunction $ \f (Tensor a) -> Tensor $ map (f$) a
   fzipTensorWith = bilinearFunction $ \f (Tensor a, Tensor b)
@@ -286,3 +288,38 @@ instance (Num' n, UArr.Unbox n) => TensorSpace (FinSuppSeq n) where
   coerceFmapTensorProduct _ Coercion = Coercion
   wellDefinedTensor (Tensor a) = Tensor <$> Hask.traverse wellDefinedVector a
   
+
+instance (Num' n, UArr.Unbox n) => Semimanifold (Sequence n) where
+  type Needle (Sequence n) = Sequence n
+  (.+~^) = (.+^); translateP = Tagged (.+^)
+  toInterior = pure; fromInterior = id
+
+instance (Num' n, UArr.Unbox n) => PseudoAffine (Sequence n) where
+  v.-~.w = Just $ v.-.w; (.-~!) = (.-.)
+
+instance (Num' n, UArr.Unbox n) => TensorSpace (Sequence n) where
+  type TensorProduct (Sequence n) v = [v]
+  wellDefinedVector (SoloChunk n c) = SoloChunk n <$> UArr.mapM wellDefinedVector c
+  wellDefinedVector (Sequence h r) = Sequence <$> UArr.mapM wellDefinedVector h
+                                              <*> wellDefinedVector r
+  wellDefinedTensor (Tensor a) = Tensor <$> Hask.traverse wellDefinedVector a
+  scalarSpaceWitness = case closedScalarWitness :: ClosedScalarWitness n of
+        ClosedScalarWitness -> ScalarSpaceWitness
+  linearManifoldWitness = LinearManifoldWitness BoundarylessWitness
+  zeroTensor = Tensor []
+  toFlatTensor = LinearFunction $ Tensor . GHC.toList
+  fromFlatTensor = LinearFunction $ GHC.fromList . getTensorProduct
+  addTensors (Tensor s) (Tensor t) = Tensor $ Mat.liftU2 (^+^) s t
+  scaleTensor = bilinearFunction $ \μ (Tensor t) -> Tensor $ (μ*^)<$>t
+  negateTensor = LinearFunction $ \(Tensor t) -> Tensor $ negateV<$>t
+  tensorProduct = bilinearFunction
+                    $ \v w -> Tensor $ (*^w)<$>GHC.toList v
+  transposeTensor = LinearFunction $ \(Tensor a)
+    -> let n = length a
+       in foldl' (^+^) zeroV
+        $ zipWith (\i w -> (getLinearFunction tensorProduct w) $ basisValue i)
+             [0..] a
+  fmapTensor = bilinearFunction $ \f (Tensor a) -> Tensor $ map (f$) a
+  fzipTensorWith = bilinearFunction $ \f (Tensor a, Tensor b)
+                     -> Tensor $ zipWith (curry $ arr f) a b
+  coerceFmapTensorProduct _ Coercion = Coercion
