@@ -41,7 +41,7 @@ import Data.Foldable (foldl')
 
 import Data.VectorSpace.Free
 import Data.VectorSpace.Free.FiniteSupportedSequence
-import Data.VectorSpace.Free.Sequence
+import Data.VectorSpace.Free.Sequence as Seq
 import qualified Linear.Matrix as Mat
 import qualified Linear.Vector as Mat
 import qualified Linear.Metric as Mat
@@ -323,3 +323,55 @@ instance (Num' n, UArr.Unbox n) => TensorSpace (Sequence n) where
   fzipTensorWith = bilinearFunction $ \f (Tensor a, Tensor b)
                      -> Tensor $ zipWith (curry $ arr f) a b
   coerceFmapTensorProduct _ Coercion = Coercion
+
+instance (Num' n, UArr.Unbox n) => LinearSpace (Sequence n) where
+  type DualVector (Sequence n) = FinSuppSeq n
+  dualSpaceWitness = case closedScalarWitness :: ClosedScalarWitness n of
+            ClosedScalarWitness -> DualSpaceWitness
+  linearId = LinearMap [basisValue i | i<-[0..]]
+  tensorId = LinearMap [asTensor $ fmap (LinearFunction $
+                           \w -> Tensor $ replicate (i-1) zeroV ++ [w]) $ id | i<-[0..]]
+  applyDualVector = bilinearFunction $ adv Seq.minimumChunkSize
+   where adv _ (FinSuppSeq v) (Seq.SoloChunk o q)
+               = UArr.sum $ UArr.zipWith (*) (UArr.drop o v) q
+         adv chunkSize (FinSuppSeq v) (Sequence c r)
+          | UArr.length v > chunkSize
+                       = UArr.sum (UArr.zipWith (*) v c)
+                            + adv (chunkSize*2) (FinSuppSeq $ UArr.drop chunkSize v) r
+          | otherwise  = UArr.sum $ UArr.zipWith (*) v c
+  applyLinear = bilinearFunction $ apl Seq.minimumChunkSize
+   where apl _ (LinearMap m) (Seq.SoloChunk o q)
+               = sumV $ zipWith (*^) (UArr.toList q) (drop o m)
+         apl chunkSize (LinearMap m) (Sequence c r)
+          | null mr    = sumV $ zipWith (*^) (UArr.toList c) mc
+          | otherwise  = foldl' (^+^) (apl (chunkSize*2) (LinearMap mr) r)
+                                      (zipWith (*^) (UArr.toList c) mc)
+          where (mc, mr) = splitAt chunkSize m
+  applyTensorFunctional = bilinearFunction
+       $ \(LinearMap m) (Tensor t) -> sum $ zipWith (<.>^) m t
+  applyTensorLinMap = bilinearFunction $ arr curryLinearMap >>>
+         \(LinearMap m) (Tensor t)
+             -> sumV $ zipWith (getLinearFunction . getLinearFunction applyLinear) m t
+instance (Num' n, UArr.Unbox n) => LinearSpace (FinSuppSeq n) where
+  type DualVector (FinSuppSeq n) = Sequence n
+  dualSpaceWitness = case closedScalarWitness :: ClosedScalarWitness n of
+            ClosedScalarWitness -> DualSpaceWitness
+  linearId = LinearMap [basisValue i | i<-[0..]]
+  tensorId = LinearMap [asTensor $ fmap (LinearFunction $
+                           \w -> Tensor $ replicate (i-1) zeroV ++ [w]) $ id | i<-[0..]]
+  applyDualVector = bilinearFunction $ adv Seq.minimumChunkSize
+   where adv _ (Seq.SoloChunk o q) (FinSuppSeq v)
+               = UArr.sum $ UArr.zipWith (*) q (UArr.drop o v)
+         adv chunkSize (Sequence c r) (FinSuppSeq v)
+          | UArr.length v > chunkSize
+                       = UArr.sum (UArr.zipWith (*) c v)
+                            + adv (chunkSize*2) r (FinSuppSeq $ UArr.drop chunkSize v)
+          | otherwise  = UArr.sum $ UArr.zipWith (*) c v
+  applyLinear = bilinearFunction $ \(LinearMap m) (FinSuppSeq v)
+                   -> foldl' (^+^) zeroV $ zipWith (*^) (UArr.toList v) m
+  applyTensorFunctional = bilinearFunction
+       $ \(LinearMap m) (Tensor t) -> sum $ zipWith (<.>^) m t
+  applyTensorLinMap = bilinearFunction $ arr curryLinearMap >>>
+         \(LinearMap m) (Tensor t)
+             -> sumV $ zipWith (getLinearFunction . getLinearFunction applyLinear) m t
+  
