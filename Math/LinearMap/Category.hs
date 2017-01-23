@@ -698,20 +698,16 @@ type LinearShowable v = (Show v, RieszDecomposable v)
 linearRegressionW :: ∀ s x m y
     . ( LinearSpace x, FiniteDimensional y, SimpleSpace m
       , Scalar x ~ s, Scalar y ~ s, Scalar m ~ s, RealFrac' s, UArr.Unbox s )
-         => Norm y -> (m +> (x +> y)) -> [(x,y)] -> m
+         => Norm y -> (x -> (m +> y)) -> [(x,y)] -> m
 linearRegressionW = lrw (dualSpaceWitness, dualSpaceWitness)
  where lrw :: (DualSpaceWitness y, DualSpaceWitness m)
-                -> Norm y -> (m +> (x +> y)) -> [(x,y)] -> m
+                -> Norm y -> (x -> (m +> y)) -> [(x,y)] -> m
        lrw (DualSpaceWitness, DualSpaceWitness) σy modelMap dataxy
-         = (fmap forward' $ forward :: m +> DualVector m
-           ) \$ forward' $ GHC.fromList datay
-        where forward :: m +> (FinSuppSeq s ⊗ y)
-              forward = fmap (LinearFunction $ \f -> GHC.fromList $ (f$)<$>datax) $ modelMap
-              forward' :: (FinSuppSeq s ⊗ y) -+> DualVector m
-              forward' = LinearFunction 
-                           $ GHC.toList >>> map (σy<$|) >>> GHC.fromList
-                                    >>> arr fromTensor >>> (f'$)
-               where f' :: DualVector (FinSuppSeq s ⊗ y) +> DualVector m
-                     f' = adjoint $ forward
-              (datax, datay) = unzip dataxy
+         = (arr . LinearFunction $ forward' . forward)
+             \$ forward' (snd<$>dataxy)
+        where forward :: m -> [y]
+              forward m = [modelMap x $ m | (x,_)<-dataxy]
+              forward' :: [y] -> DualVector m
+              forward' ys = sumV $ zipWith (\(x,_) y -> (adjoint $ modelMap x) $ σy<$|y)
+                                       dataxy ys
                   
