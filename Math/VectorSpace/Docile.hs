@@ -1048,7 +1048,7 @@ instance ∀ s u v .
 -- 
 -- But /not/ @(v+>w) -> (w+>v)@, in general (though in a Hilbert space, this too is
 -- equivalent, via 'riesz' isomorphism).
-adjoint :: ∀ v w . (LSpace v, LSpace w, Scalar v ~ Scalar w)
+adjoint :: ∀ v w . (LinearSpace v, LinearSpace w, Scalar v ~ Scalar w)
                => (v +> DualVector w) -+> (w +> DualVector v)
 adjoint = case ( dualSpaceWitness :: DualSpaceWitness v
                , dualSpaceWitness :: DualSpaceWitness w ) of
