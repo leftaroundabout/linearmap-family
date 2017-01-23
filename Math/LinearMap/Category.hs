@@ -28,6 +28,7 @@ module Math.LinearMap.Category (
 
             -- ** Function implementation
               LinearFunction (..), type (-+>)(), Bilinear
+            , lfun
             -- ** Tensor implementation
             , LinearMap (..), type (+>)()
             , (⊕), (>+<)
@@ -55,6 +56,7 @@ module Math.LinearMap.Category (
             , densifyNorm, wellDefinedNorm
             -- * Solving linear equations
             , (\$), pseudoInverse, roughDet
+            , linearRegressionW
             -- * Eigenvalue problems
             , eigen
             , constructEigenSystem
@@ -220,6 +222,13 @@ infixr 7 -+|>
 du-+|>v = arr . LinearFunction $ (v^*) . (du<.>^)
 
 
+
+-- | Use a function as a linear map. This is only well-defined if the function /is/
+--   linear (this condition is not checked).
+lfun :: ( EnhancedCat f (LinearFunction s)
+        , LinearSpace u, TensorSpace v, Scalar u ~ s, Scalar v ~ s
+        , Object f u, Object f v ) => (u->v) -> f u v
+lfun = arr . LinearFunction
 
 
 
