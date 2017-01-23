@@ -375,3 +375,14 @@ instance (Num' n, UArr.Unbox n) => LinearSpace (FinSuppSeq n) where
          \(LinearMap m) (Tensor t)
              -> sumV $ zipWith (getLinearFunction . getLinearFunction applyLinear) m t
   
+
+
+instance GHC.IsList (Tensor s (Sequence s) v) where
+  type Item (Tensor s (Sequence s) v) = v
+  fromList = Tensor
+  toList = getTensorProduct
+
+instance GHC.IsList (Tensor s (FinSuppSeq s) v) where
+  type Item (Tensor s (FinSuppSeq s) v) = v
+  fromList = Tensor
+  toList = getTensorProduct
