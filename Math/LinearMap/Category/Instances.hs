@@ -386,3 +386,91 @@ instance GHC.IsList (Tensor s (FinSuppSeq s) v) where
   type Item (Tensor s (FinSuppSeq s) v) = v
   fromList = Tensor
   toList = getTensorProduct
+
+
+
+newtype SymmetricTensor s v
+           = SymTensor { getSymmetricTensor :: Tensor s v v }
+
+instance (TensorSpace v, Scalar v ~ s) => AffineSpace (SymmetricTensor s v) where
+  type Diff (SymmetricTensor s v) = SymmetricTensor s v
+  (.+^) = (^+^)
+  (.-.) = (^-^)
+instance (TensorSpace v, Scalar v ~ s) => AdditiveGroup (SymmetricTensor s v) where
+  SymTensor s ^+^ SymTensor t = SymTensor $ s ^+^ t
+  zeroV = SymTensor zeroV
+  negateV (SymTensor t) = SymTensor $ negateV t
+
+instance (TensorSpace v, Scalar v ~ s)
+             => VectorSpace (SymmetricTensor s v) where
+  type Scalar (SymmetricTensor s v) = s
+  μ *^ SymTensor f = SymTensor $ μ*^f
+
+instance (TensorSpace v, Scalar v ~ s) => Semimanifold (SymmetricTensor s v) where
+  type Needle (SymmetricTensor s v) = SymmetricTensor s v
+  (.+~^) = (^+^)
+  fromInterior = id
+  toInterior = pure
+  translateP = Tagged (^+^)
+instance (TensorSpace v, Scalar v ~ s) => PseudoAffine (SymmetricTensor s v) where
+  (.-~!) = (^-^)
+instance (Num' s, TensorSpace v, Scalar v ~ s) => TensorSpace (SymmetricTensor s v) where
+  type TensorProduct (SymmetricTensor s v) x = Tensor s v (Tensor s v x)
+  wellDefinedVector (SymTensor t) = SymTensor <$> wellDefinedVector t
+  scalarSpaceWitness = case closedScalarWitness :: ClosedScalarWitness s of
+        ClosedScalarWitness -> ScalarSpaceWitness
+  linearManifoldWitness = LinearManifoldWitness BoundarylessWitness
+  zeroTensor = Tensor zeroV
+  toFlatTensor = case closedScalarWitness :: ClosedScalarWitness s of
+        ClosedScalarWitness -> LinearFunction $ \(SymTensor t)
+                                 -> Tensor $ fmap toFlatTensor $ t
+  fromFlatTensor = case closedScalarWitness :: ClosedScalarWitness s of
+        ClosedScalarWitness -> LinearFunction $ \(Tensor t)
+                     -> SymTensor $ fmap fromFlatTensor $ t
+  addTensors (Tensor f) (Tensor g) = Tensor $ f^+^g
+  subtractTensors (Tensor f) (Tensor g) = Tensor $ f^-^g
+  negateTensor = LinearFunction $ \(Tensor f) -> Tensor $ negateV f
+  scaleTensor = bilinearFunction $ \μ (Tensor f) -> Tensor $ μ *^ f
+  tensorProduct = bilinearFunction $ \(SymTensor t) g
+                    -> Tensor $ fmap (LinearFunction (⊗g)) $ t
+  transposeTensor = LinearFunction $ \(Tensor f) -> getLinearFunction (
+                            arr (fmap Coercion) . transposeTensor . arr lassocTensor) f
+  fmapTensor = bilinearFunction $ \f (Tensor t) -> Tensor $ fmap (fmap f) $ t
+  fzipTensorWith = bilinearFunction $ \f (Tensor s, Tensor t)
+                 -> Tensor $ fzipWith (fzipWith f) $ (s,t)
+  coerceFmapTensorProduct _ crc = fmap (fmap crc)
+  wellDefinedTensor (Tensor t) = Tensor <$> wellDefinedVector t
+
+instance (Num' s, LinearSpace v, Scalar v ~ s) => LinearSpace (SymmetricTensor s v) where
+  type DualVector (SymmetricTensor s v) = SymmetricTensor s (DualVector v)
+  dualSpaceWitness = case ( closedScalarWitness :: ClosedScalarWitness s
+                          , dualSpaceWitness :: DualSpaceWitness v ) of 
+          (ClosedScalarWitness, DualSpaceWitness) -> DualSpaceWitness
+  linearId = case dualSpaceWitness :: DualSpaceWitness v of
+    DualSpaceWitness -> LinearMap $ rassocTensor . asTensor
+                          . fmap (follow SymTensor . asTensor) $ id
+  tensorId = LinearMap $ asTensor . fmap asTensor . curryLinearMap
+                           . fmap asTensor
+                           . curryLinearMap
+                           . fmap (follow $ \t -> Tensor $ rassocTensor $ t)
+                           $ id
+  applyLinear = case dualSpaceWitness :: DualSpaceWitness v of
+    DualSpaceWitness -> bilinearFunction $ \(LinearMap f) (SymTensor t)
+                   -> (getLinearFunction applyLinear
+                         $ fromTensor . deferLinearMap . asLinearMap $ f) $ t
+  applyDualVector = bilinearFunction $ \(SymTensor f) (SymTensor v)
+                      -> getLinearFunction
+                           (getLinearFunction applyDualVector $ fromTensor $ f) v
+  applyTensorFunctional = case dualSpaceWitness :: DualSpaceWitness v of
+    DualSpaceWitness -> bilinearFunction $ \(LinearMap f) (Tensor t)
+                   -> getLinearFunction
+                        (getLinearFunction applyTensorFunctional
+                             $ fromTensor . fmap fromTensor $ f) t
+  applyTensorLinMap = case dualSpaceWitness :: DualSpaceWitness v of
+    DualSpaceWitness -> bilinearFunction $ \(LinearMap (Tensor f)) (Tensor t)
+                   -> getLinearFunction (getLinearFunction applyTensorLinMap
+                             $ uncurryLinearMap
+                                . fmap (uncurryLinearMap . fromTensor . fmap fromTensor)
+                                       $ LinearMap f) t  
+
+
