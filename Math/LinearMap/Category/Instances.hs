@@ -14,6 +14,7 @@
 {-# LANGUAGE TypeOperators              #-}
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
+{-# LANGUAGE StandaloneDeriving         #-}
 {-# LANGUAGE UnicodeSyntax              #-}
 {-# LANGUAGE CPP                        #-}
 {-# LANGUAGE TupleSections              #-}
@@ -391,6 +392,7 @@ instance GHC.IsList (Tensor s (FinSuppSeq s) v) where
 
 newtype SymmetricTensor s v
            = SymTensor { getSymmetricTensor :: Tensor s v v }
+deriving instance (Show (Tensor s v v)) => Show (SymmetricTensor s v)
 
 instance (TensorSpace v, Scalar v ~ s) => AffineSpace (SymmetricTensor s v) where
   type Diff (SymmetricTensor s v) = SymmetricTensor s v
@@ -474,3 +476,8 @@ instance (Num' s, LinearSpace v, Scalar v ~ s) => LinearSpace (SymmetricTensor s
                                        $ LinearMap f) t  
 
 
+
+
+squaredVector :: (Num' s, s ~ Scalar v)
+          => TensorSpace v => v -> SymmetricTensor s v
+squaredVector v = SymTensor $ v⊗v

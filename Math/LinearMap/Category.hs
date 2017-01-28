@@ -38,6 +38,8 @@ module Math.LinearMap.Category (
             , (<.>^), (-+|>)
             -- * Tensor spaces
             , Tensor (..), type (⊗)(), (⊗)
+            -- ** Symmetric
+            , SymmetricTensor(..), squaredVector
             -- * Norms
             -- $metricIntro
             , Norm(..), Seminorm

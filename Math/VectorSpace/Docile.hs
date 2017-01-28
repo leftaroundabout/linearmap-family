@@ -30,7 +30,7 @@ import Math.LinearMap.Category.Instances
 import Math.LinearMap.Asserted
 
 import Data.Tree (Tree(..), Forest)
-import Data.List (sortBy, foldl')
+import Data.List (sortBy, foldl', tails)
 import qualified Data.Set as Set
 import Data.Set (Set)
 import Data.Ord (comparing)
@@ -91,6 +91,10 @@ class LinearSpace v => SemiInner v where
   
   tensorDualBasisCandidates :: (SemiInner w, Scalar w ~ Scalar v)
                    => [(Int, v⊗w)] -> Forest (Int, DualVector (v⊗w))
+  
+  symTensorDualBasisCandidates
+        :: [(Int, SymmetricTensor (Scalar v) v)]
+               -> Forest (Int, SymmetricTensor (Scalar v) (DualVector v))
 
 cartesianDualBasisCandidates
      :: [DualVector v]  -- ^ Set of canonical basis functionals.
@@ -125,9 +129,11 @@ cartesianDualBasisCandidates dvs abss vcas = go 0 0 sorted
 instance (Fractional' s, SemiInner s) => SemiInner (ZeroDim s) where
   dualBasisCandidates _ = []
   tensorDualBasisCandidates _ = []
+  symTensorDualBasisCandidates _ = []
 instance (Fractional' s, SemiInner s) => SemiInner (V0 s) where
   dualBasisCandidates _ = []
   tensorDualBasisCandidates _ = []
+  symTensorDualBasisCandidates _ = []
 
 orthonormaliseDuals :: ∀ v . (SemiInner v, RealFrac' (Scalar v))
                           => Scalar v -> [(v, DualVector v)]
@@ -238,6 +244,9 @@ instance SemiInner ℝ where
   tensorDualBasisCandidates = map (second getTensorProduct)
                  >>> dualBasisCandidates
                  >>> fmap (fmap $ second LinearMap)
+  symTensorDualBasisCandidates = map (second getSymmetricTensor)
+                 >>> dualBasisCandidates
+                 >>> fmap (fmap $ second (arr asTensor >>> SymTensor))
 
 instance (Fractional' s, Ord s, SemiInner s) => SemiInner (V1 s) where
   dualBasisCandidates = fmap ((`Node`[]) . second recip)
@@ -246,12 +255,20 @@ instance (Fractional' s, Ord s, SemiInner s) => SemiInner (V1 s) where
   tensorDualBasisCandidates = map (second $ \(Tensor (V1 w)) -> w)
                  >>> dualBasisCandidates
                  >>> fmap (fmap . second $ LinearMap . V1)
+  symTensorDualBasisCandidates = map (second getSymmetricTensor)
+                 >>> dualBasisCandidates
+                 >>> fmap (fmap $ second (arr asTensor >>> SymTensor))
 
 instance SemiInner (V2 ℝ) where
   dualBasisCandidates = cartesianDualBasisCandidates Mat.basis (toList . fmap abs)
   tensorDualBasisCandidates = map (second $ \(Tensor (V2 x y)) -> (x,y))
                  >>> dualBasisCandidates
                  >>> map (fmap . second $ LinearMap . \(dx,dy) -> V2 dx dy)
+  symTensorDualBasisCandidates = cartesianDualBasisCandidates
+             (squaredVector<$>[V2 1 0, V2 1 1, V2 0 1])
+             (\(SymTensor (Tensor (V2 (V2 xx _)
+                                      (V2 xy yy))))
+                  -> abs <$> [xx,xy,yy])
 instance SemiInner (V3 ℝ) where
   dualBasisCandidates = cartesianDualBasisCandidates Mat.basis (toList . fmap abs)
   tensorDualBasisCandidates = map (second $ \(Tensor (V3 x y z)) -> (x,(y,z)))
@@ -301,6 +318,10 @@ instance ∀ s u v . ( SemiInner u, SemiInner v, Scalar u ~ s, Scalar v ~ s )
   tensorDualBasisCandidates = map (second $ arr rassocTensor)
                     >>> tensorDualBasisCandidates
                     >>> map (fmap . second $ arr uncurryLinearMap)
+
+instance ∀ s v . ( Num' s, SemiInner v, Scalar v ~ s )
+           => SemiInner (SymmetricTensor s v) where
+  dualBasisCandidates = symTensorDualBasisCandidates
 
 instance ∀ s u v . ( LinearSpace u, SemiInner (DualVector u), SemiInner v
                    , Scalar u ~ s, Scalar v ~ s )
@@ -618,6 +639,72 @@ tensorLinmapDecompositionhelpers = (go, goWith)
   
 deriving instance (Show (SubBasis u), Show (SubBasis v))
              => Show (SubBasis (Tensor s u v))
+
+instance ∀ s v .
+         ( FiniteDimensional v, Scalar v~s, Scalar (DualVector v)~s
+         , RealFloat' s )
+            => FiniteDimensional (SymmetricTensor s v) where
+  newtype SubBasis (SymmetricTensor s v) = SymTensBasis (SubBasis v)
+  entireBasis = SymTensBasis entireBasis
+  enumerateSubBasis (SymTensBasis b) = do
+        v:vs <- tails $ enumerateSubBasis b
+        squaredVector v : [ (squaredVector (v^+^w)
+                              ^-^ squaredVector v ^-^ squaredVector w)
+                            ^* sqrt¹₂
+                          | w <- vs ]
+   where sqrt¹₂ = sqrt 0.5
+  subbasisDimension (SymTensBasis b) = ((n-1)*n)`quot`2
+   where n = subbasisDimension b
+  decomposeLinMap = dclm dualSpaceWitness
+   where dclm (DualSpaceWitness :: DualSpaceWitness v) (LinearMap f)
+                    = (SymTensBasis bf, rmRedundant 0 $ dlw [])
+          where rmRedundant _ [] = id
+                rmRedundant k l = case splitAt n l of
+                    (row,rest) -> (sclOffdiag (drop k row)++) . rmRedundant (k+1) rest
+                n = case subbasisDimension bf of
+                      nbf | nbf == subbasisDimension bf'  -> nbf
+                (LinMapBasis bf bf', dlw)
+                    = decomposeLinMap $ asLinearMap . lassocTensor $ f
+                sclOffdiag (d:o) = d : ((sqrt2*^)<$>o)
+         sqrt2 = sqrt 2 :: s
+  recomposeSB = rclm dualSpaceWitness
+   where rclm (DualSpaceWitness :: DualSpaceWitness v) (SymTensBasis b) ws
+           = case recomposeSB (TensorBasis b b)
+                    $ mkSym (subbasisDimension b) (repeat []) ws of
+              (t, remws) -> (SymTensor t, remws)
+         mkSym _ _ [] = []
+         mkSym 0 _ _ = []
+         mkSym n (sd₀:sds) ws = let (d:o,rest) = splitAt n ws
+                                    oscld = (sqrt 0.5*)<$>o
+                                in sd₀ ++ [d] ++ oscld
+                                     ++ mkSym n (zipWith (:) oscld sds) rest
+  recomposeLinMap = rclm dualSpaceWitness
+   where rclm (DualSpaceWitness :: DualSpaceWitness v) (SymTensBasis b) ws
+           = case recomposeLinMap (LinMapBasis b b)
+                    $ mkSym (subbasisDimension b) (repeat []) ws of
+              (f, remws) -> (LinearMap $ rassocTensor . asTensor $ f, remws)
+         mkSym _ _ [] = []
+         mkSym 0 _ _ = []
+         mkSym n (sd₀:sds) ws = let (d:o,rest) = splitAt n ws
+                                    oscld = (sqrt 0.5*^)<$>o
+                                in sd₀ ++ [d] ++ oscld
+                                     ++ mkSym n (zipWith (:) oscld sds) rest
+  recomposeContraLinMap f tenss
+           = LinearMap . arr (rassocTensor . asTensor) . rcCLM dualSpaceWitness f
+                                    $ fmap getSymmetricTensor tenss
+   where rcCLM :: (Hask.Functor f, LinearSpace w, s~Scalar w)
+           => DualSpaceWitness v
+                 -> (f s->w) -> f (Tensor s (DualVector v) (DualVector v))
+                     -> LinearMap s (LinearMap s (DualVector v) v) w
+         rcCLM DualSpaceWitness f = recomposeContraLinMap f
+  uncanonicallyFromDual = case dualSpaceWitness :: DualSpaceWitness v of
+     DualSpaceWitness -> LinearFunction
+          $ \(SymTensor t) -> SymTensor $ arr fromLinearMap . uncanonicallyFromDual $ t
+  uncanonicallyToDual = case dualSpaceWitness :: DualSpaceWitness v of
+     DualSpaceWitness -> LinearFunction
+          $ \(SymTensor t) -> SymTensor $ uncanonicallyToDual . arr asLinearMap $ t
+  
+deriving instance (Show (SubBasis v)) => Show (SubBasis (SymmetricTensor s v))
 
 
 instance ∀ s u v .
