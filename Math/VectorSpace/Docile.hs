@@ -265,7 +265,7 @@ instance SemiInner (V2 ℝ) where
                  >>> dualBasisCandidates
                  >>> map (fmap . second $ LinearMap . \(dx,dy) -> V2 dx dy)
   symTensorDualBasisCandidates = cartesianDualBasisCandidates
-             (squaredVector<$>[V2 1 0, V2 1 1, V2 0 1])
+             (squareV<$>[V2 1 0, V2 1 1, V2 0 1])
              (\(SymTensor (Tensor (V2 (V2 xx _)
                                       (V2 xy yy))))
                   -> abs <$> [xx,xy,yy])
@@ -648,10 +648,8 @@ instance ∀ s v .
   entireBasis = SymTensBasis entireBasis
   enumerateSubBasis (SymTensBasis b) = do
         v:vs <- tails $ enumerateSubBasis b
-        squaredVector v : [ (squaredVector (v^+^w)
-                              ^-^ squaredVector v ^-^ squaredVector w)
-                            ^* sqrt¹₂
-                          | w <- vs ]
+        squareV v
+          : [ (squareV (v^+^w) ^-^ squareV v ^-^ squareV w) ^* sqrt¹₂ | w <- vs ]
    where sqrt¹₂ = sqrt 0.5
   subbasisDimension (SymTensBasis b) = ((n-1)*n)`quot`2
    where n = subbasisDimension b
@@ -670,25 +668,25 @@ instance ∀ s v .
   recomposeSB = rclm dualSpaceWitness
    where rclm (DualSpaceWitness :: DualSpaceWitness v) (SymTensBasis b) ws
            = case recomposeSB (TensorBasis b b)
-                    $ mkSym (subbasisDimension b) (repeat []) ws of
+                    $ mkSym (subbasisDimension b) (repeat id) ws of
               (t, remws) -> (SymTensor t, remws)
          mkSym _ _ [] = []
          mkSym 0 _ _ = []
          mkSym n (sd₀:sds) ws = let (d:o,rest) = splitAt n ws
                                     oscld = (sqrt 0.5*)<$>o
-                                in sd₀ ++ [d] ++ oscld
-                                     ++ mkSym n (zipWith (:) oscld sds) rest
+                                in sd₀ [] ++ [d] ++ oscld
+                                     ++ mkSym (n-1) (zipWith (.) sds $ (:)<$>oscld) rest
   recomposeLinMap = rclm dualSpaceWitness
    where rclm (DualSpaceWitness :: DualSpaceWitness v) (SymTensBasis b) ws
            = case recomposeLinMap (LinMapBasis b b)
-                    $ mkSym (subbasisDimension b) (repeat []) ws of
+                    $ mkSym (subbasisDimension b) (repeat id) ws of
               (f, remws) -> (LinearMap $ rassocTensor . asTensor $ f, remws)
          mkSym _ _ [] = []
          mkSym 0 _ _ = []
          mkSym n (sd₀:sds) ws = let (d:o,rest) = splitAt n ws
                                     oscld = (sqrt 0.5*^)<$>o
-                                in sd₀ ++ [d] ++ oscld
-                                     ++ mkSym n (zipWith (:) oscld sds) rest
+                                in sd₀ [] ++ [d] ++ oscld
+                                     ++ mkSym (n-1) (zipWith (.) sds $ (:)<$>oscld) rest
   recomposeContraLinMap f tenss
            = LinearMap . arr (rassocTensor . asTensor) . rcCLM dualSpaceWitness f
                                     $ fmap getSymmetricTensor tenss

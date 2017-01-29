@@ -478,6 +478,6 @@ instance (Num' s, LinearSpace v, Scalar v ~ s) => LinearSpace (SymmetricTensor s
 
 
 
-squaredVector :: (Num' s, s ~ Scalar v)
+squareV :: (Num' s, s ~ Scalar v)
           => TensorSpace v => v -> SymmetricTensor s v
-squaredVector v = SymTensor $ v⊗v
+squareV v = SymTensor $ v⊗v
