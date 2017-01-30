@@ -708,7 +708,7 @@ type LinearShowable v = (Show v, RieszDecomposable v)
 
 linearRegressionW :: ∀ s x m y
     . ( LinearSpace x, FiniteDimensional y, SimpleSpace m
-      , Scalar x ~ s, Scalar y ~ s, Scalar m ~ s, RealFrac' s, UArr.Unbox s )
+      , Scalar x ~ s, Scalar y ~ s, Scalar m ~ s, RealFrac' s )
          => Norm y -> (x -> (m +> y)) -> [(x,y)] -> m
 linearRegressionW = lrw (dualSpaceWitness, dualSpaceWitness)
  where lrw :: (DualSpaceWitness y, DualSpaceWitness m)
