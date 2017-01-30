@@ -481,3 +481,9 @@ instance (Num' s, LinearSpace v, Scalar v ~ s) => LinearSpace (SymmetricTensor s
 squareV :: (Num' s, s ~ Scalar v)
           => TensorSpace v => v -> SymmetricTensor s v
 squareV v = SymTensor $ v⊗v
+
+
+
+currySymBilin :: (LinearSpace v, Scalar v ~ s)
+             => (SymmetricTensor s v+>w) -> LinearMap s v (LinearMap s v w)
+currySymBilin (LinearMap f) = fmap fromTensor . fromTensor $ f
