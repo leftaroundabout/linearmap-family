@@ -265,7 +265,9 @@ instance SemiInner (V2 ℝ) where
                  >>> dualBasisCandidates
                  >>> map (fmap . second $ LinearMap . \(dx,dy) -> V2 dx dy)
   symTensorDualBasisCandidates = cartesianDualBasisCandidates
-             (squareV<$>[V2 1 0, V2 sqrt¹₂ sqrt¹₂, V2 0 1])
+             (SymTensor . Tensor<$>[ V2 (V2 1 0)      zeroV
+                                   , V2 (V2 0 sqrt¹₂) (V2 sqrt¹₂ 0)
+                                   , V2 zeroV         (V2 0 1)])
              (\(SymTensor (Tensor (V2 (V2 xx xy)
                                       (V2 yx yy))))
                   -> abs <$> [xx, (xy+yx)*sqrt¹₂, yy])
@@ -276,9 +278,12 @@ instance SemiInner (V3 ℝ) where
                  >>> dualBasisCandidates
                  >>> map (fmap . second $ LinearMap . \(dx,(dy,dz)) -> V3 dx dy dz)
   symTensorDualBasisCandidates = cartesianDualBasisCandidates
-             (squareV<$>[ V3 1 0 0, V3 sqrt¹₂ sqrt¹₂ 0, V3 sqrt¹₂ 0 sqrt¹₂
-                                  ,      V3 0 1 0     , V3 0 sqrt¹₂ sqrt¹₂
-                                                      ,      V3 0 0 1      ])
+             (SymTensor . Tensor<$>[ V3 (V3 1 0 0)      zeroV           zeroV
+                                   , V3 (V3 0 sqrt¹₂ 0) (V3 sqrt¹₂ 0 0) zeroV
+                                   , V3 (V3 0 0 sqrt¹₂) zeroV           (V3 sqrt¹₂ 0 0)
+                                   , V3 zeroV           (V3 0 1 0)      zeroV
+                                   , V3 zeroV           (V3 0 0 sqrt¹₂) (V3 0 sqrt¹₂ 0)
+                                   , V3 zeroV           zeroV           (V3 0 0 1)])
              (\(SymTensor (Tensor (V3 (V3 xx xy xz)
                                       (V3 yx yy yz)
                                       (V3 zx zy zz))))
@@ -292,11 +297,16 @@ instance SemiInner (V4 ℝ) where
                  >>> dualBasisCandidates
                  >>> map (fmap . second $ LinearMap . \((dx,dy),(dz,dw)) -> V4 dx dy dz dw)
   symTensorDualBasisCandidates = cartesianDualBasisCandidates
-             (squareV<$>
-      [ V4 1 0 0 0, V4 sqrt¹₂ sqrt¹₂ 0 0, V4 sqrt¹₂ 0 sqrt¹₂ 0, V4 sqrt¹₂ 0 0 sqrt¹₂
-                  ,      V4 0 1 0 0     , V4 0 sqrt¹₂ sqrt¹₂ 0, V4 0 sqrt¹₂ 0 sqrt¹₂
-                                        ,      V4 0 1 0 0     , V4 0 0 sqrt¹₂ sqrt¹₂
-                                                              ,      V4 0 0 0 1      ])
+             (SymTensor . Tensor<$>[ V4 (V4 1 0 0 0)      zeroV           zeroV zeroV
+                                   , V4 (V4 0 sqrt¹₂ 0 0) (V4 sqrt¹₂ 0 0 0) zeroV zeroV
+                                   , V4 (V4 0 0 sqrt¹₂ 0) zeroV    (V4 sqrt¹₂ 0 0 0) zeroV
+                                   , V4 (V4 0 0 0 sqrt¹₂) zeroV    zeroV (V4 sqrt¹₂ 0 0 0)
+                                   , V4 zeroV (V4 0 1 0 0)      zeroV           zeroV
+                                   , V4 zeroV (V4 0 0 sqrt¹₂ 0) (V4 0 sqrt¹₂ 0 0) zeroV
+                                   , V4 zeroV (V4 0 0 0 sqrt¹₂) zeroV (V4 0 sqrt¹₂ 0 0)
+                                   , V4 zeroV zeroV (V4 0 0 1 0)      zeroV
+                                   , V4 zeroV zeroV (V4 0 0 0 sqrt¹₂) (V4 0 0 sqrt¹₂ 0)
+                                   , V4 zeroV zeroV zeroV           (V4 0 0 0 1)])
              (\(SymTensor (Tensor (V4 (V4 xx xy xz xw)
                                       (V4 yx yy yz yw)
                                       (V4 zx zy zz zw)
