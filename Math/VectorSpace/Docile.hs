@@ -265,26 +265,64 @@ instance SemiInner (V2 ℝ) where
                  >>> dualBasisCandidates
                  >>> map (fmap . second $ LinearMap . \(dx,dy) -> V2 dx dy)
   symTensorDualBasisCandidates = cartesianDualBasisCandidates
-             (squareV<$>[V2 1 0, V2 1 1, V2 0 1])
-             (\(SymTensor (Tensor (V2 (V2 xx _)
-                                      (V2 xy yy))))
-                  -> abs <$> [xx,xy,yy])
+             (squareV<$>[V2 1 0, V2 sqrt¹₂ sqrt¹₂, V2 0 1])
+             (\(SymTensor (Tensor (V2 (V2 xx xy)
+                                      (V2 yx yy))))
+                  -> abs <$> [xx, (xy+yx)*sqrt¹₂, yy])
+   where sqrt¹₂ = sqrt 0.5
 instance SemiInner (V3 ℝ) where
   dualBasisCandidates = cartesianDualBasisCandidates Mat.basis (toList . fmap abs)
   tensorDualBasisCandidates = map (second $ \(Tensor (V3 x y z)) -> (x,(y,z)))
                  >>> dualBasisCandidates
                  >>> map (fmap . second $ LinearMap . \(dx,(dy,dz)) -> V3 dx dy dz)
+  symTensorDualBasisCandidates = cartesianDualBasisCandidates
+             (squareV<$>[ V3 1 0 0, V3 sqrt¹₂ sqrt¹₂ 0, V3 sqrt¹₂ 0 sqrt¹₂
+                                  ,      V3 0 1 0     , V3 0 sqrt¹₂ sqrt¹₂
+                                                      ,      V3 0 0 1      ])
+             (\(SymTensor (Tensor (V3 (V3 xx xy xz)
+                                      (V3 yx yy yz)
+                                      (V3 zx zy zz))))
+                  -> abs <$> [ xx, (xy+yx)*sqrt¹₂, (xz+zx)*sqrt¹₂
+                                 ,       yy      , (yz+zy)*sqrt¹₂
+                                                 ,       zz       ])
+   where sqrt¹₂ = sqrt 0.5
 instance SemiInner (V4 ℝ) where
   dualBasisCandidates = cartesianDualBasisCandidates Mat.basis (toList . fmap abs)
   tensorDualBasisCandidates = map (second $ \(Tensor (V4 x y z w)) -> ((x,y),(z,w)))
                  >>> dualBasisCandidates
                  >>> map (fmap . second $ LinearMap . \((dx,dy),(dz,dw)) -> V4 dx dy dz dw)
+  symTensorDualBasisCandidates = cartesianDualBasisCandidates
+             (squareV<$>
+      [ V4 1 0 0 0, V4 sqrt¹₂ sqrt¹₂ 0 0, V4 sqrt¹₂ 0 sqrt¹₂ 0, V4 sqrt¹₂ 0 0 sqrt¹₂
+                  ,      V4 0 1 0 0     , V4 0 sqrt¹₂ sqrt¹₂ 0, V4 0 sqrt¹₂ 0 sqrt¹₂
+                                        ,      V4 0 1 0 0     , V4 0 0 sqrt¹₂ sqrt¹₂
+                                                              ,      V4 0 0 0 1      ])
+             (\(SymTensor (Tensor (V4 (V4 xx xy xz xw)
+                                      (V4 yx yy yz yw)
+                                      (V4 zx zy zz zw)
+                                      (V4 wx wy wz ww))))
+                  -> abs <$> [ xx, (xy+yx)*sqrt¹₂, (xz+zx)*sqrt¹₂, (xw+wx)*sqrt¹₂
+                                 ,       yy      , (yz+zy)*sqrt¹₂, (yw+wy)*sqrt¹₂
+                                                 ,       zz      , (zw+wz)*sqrt¹₂
+                                                                 ,       ww       ])
+   where sqrt¹₂ = sqrt 0.5
 
-instance ∀ u v . ( SemiInner u, SemiInner v, Scalar u ~ Scalar v ) => SemiInner (u,v) where
+infixl 4 ⊗<$>
+(⊗<$>) :: ( Num' s
+          , Object (LinearFunction s) u
+          , Object (LinearFunction s) v
+          , Object (LinearFunction s) w )
+             => LinearFunction s v w -> Tensor s u v -> Tensor s u w
+f⊗<$>t = fmap f $ t
+
+instance ∀ u v . ( SemiInner u, SemiInner v, Scalar u ~ Scalar v, Num' (Scalar u) )
+                      => SemiInner (u,v) where
   dualBasisCandidates = fmap (\(i,(u,v))->((i,u),(i,v))) >>> unzip
               >>> dualBasisCandidates *** dualBasisCandidates
               >>> combineBaseis (dualSpaceWitness,dualSpaceWitness) False mempty
-   where combineBaseis :: (DualSpaceWitness u, DualSpaceWitness v) -> Bool -> Set Int
+   where combineBaseis :: (DualSpaceWitness u, DualSpaceWitness v)
+                 -> Bool    -- ^ “Bias flag”: iff True, v will be preferred.
+                 -> Set Int -- ^ Set of already-assigned basis indices.
                  -> ( Forest (Int, DualVector u)
                     , Forest (Int, DualVector v) )
                    -> Forest (Int, (DualVector u, DualVector v))
@@ -305,6 +343,60 @@ instance ∀ u v . ( SemiInner u, SemiInner v, Scalar u ~ Scalar v ) => SemiInne
                        : combineBaseis wit True forbidden (bu, abv)
          combineBaseis wit _ forbidden (bu, []) = combineBaseis wit False forbidden (bu,[])
          combineBaseis wit _ forbidden ([], bv) = combineBaseis wit True forbidden ([],bv)
+  symTensorDualBasisCandidates = fmap (\(i,SymTensor (Tensor (u_uv, v_uv)))
+                                    -> ( (i, snd ⊗<$> u_uv)
+                                       ,((i, SymTensor $ fst ⊗<$> u_uv)
+                                       , (i, SymTensor $ snd ⊗<$> v_uv))) )
+                                      >>> unzip >>> second unzip
+            >>> dualBasisCandidates *** dualBasisCandidates *** dualBasisCandidates
+            >>> combineBaseis (dualSpaceWitness,dualSpaceWitness) (Just False) mempty
+   where combineBaseis :: (DualSpaceWitness u, DualSpaceWitness v)
+                 -> Maybe Bool  -- ^ @Just True@: prefer v⊗v, @Nothing@: prefer u⊗v
+                 -> Set Int
+                 -> ( Forest (Int, LinearMap (Scalar u) u (DualVector v))
+                    ,(Forest (Int, SymmetricTensor (Scalar u) (DualVector u))
+                    , Forest (Int, SymmetricTensor (Scalar v) (DualVector v))) )
+                   -> Forest (Int, SymmetricTensor (Scalar u) (DualVector u, DualVector v))
+         combineBaseis _ _ _ ([], ([],[])) = []
+         combineBaseis wit@(DualSpaceWitness,DualSpaceWitness)
+                         Nothing forbidden
+                           (Node (i, duv) buv' : abuv, (bu, bv))
+            | i`Set.member`forbidden 
+                 = combineBaseis wit Nothing forbidden (abuv, (bu, bv))
+            | otherwise
+                 = Node (i, SymTensor $ Tensor
+                             ( (zeroV&&&id)⊗<$>(asTensor$duv)
+                             , (id&&&zeroV)⊗<$>(transposeTensor$asTensor$duv) ) )
+                        (combineBaseis wit (Just False)
+                                 (Set.insert i forbidden) (buv', (bu, bv)))
+                       : combineBaseis wit Nothing forbidden (abuv, (bu, bv))
+         combineBaseis wit Nothing forbidden ([], (bu, bv))
+              = combineBaseis wit (Just False) forbidden ([], (bu, bv))
+         combineBaseis wit@(DualSpaceWitness,DualSpaceWitness)
+                         (Just False) forbidden
+                           (buv, (Node (i,SymTensor du) bu' : abu, bv))
+            | i`Set.member`forbidden 
+                 = combineBaseis wit (Just False) forbidden (buv, (abu, bv))
+            | otherwise
+                 = Node (i, SymTensor $ Tensor ((id&&&zeroV)⊗<$> du, zeroV))
+                        (combineBaseis wit (Just True)
+                                 (Set.insert i forbidden) (buv, (bu', bv)))
+                       : combineBaseis wit (Just False) forbidden (buv, (abu, bv))
+         combineBaseis wit (Just False) forbidden (buv, ([], bv))
+              = combineBaseis wit (Just True) forbidden (buv, ([], bv))
+         combineBaseis wit@(DualSpaceWitness,DualSpaceWitness)
+                         (Just True) forbidden
+                           (buv, (bu, Node (i,SymTensor dv) bv' : abv))
+            | i`Set.member`forbidden 
+                 = combineBaseis wit (Just True) forbidden (buv, (bu, abv))
+            | otherwise
+                 = Node (i, SymTensor $ Tensor (zeroV, (zeroV&&&id)⊗<$> dv))
+                        (combineBaseis wit Nothing
+                                 (Set.insert i forbidden) (buv, (bu, bv')))
+                       : combineBaseis wit (Just True) forbidden (buv, (bu, abv))
+         combineBaseis wit (Just True) forbidden (buv, (bu, []))
+              = combineBaseis wit Nothing forbidden (buv, (bu, []))
+                                  
   tensorDualBasisCandidates = case scalarSpaceWitness :: ScalarSpaceWitness u of
      ScalarSpaceWitness -> map (second $ \(Tensor (tu, tv)) -> (tu, tv))
                           >>> dualBasisCandidates
