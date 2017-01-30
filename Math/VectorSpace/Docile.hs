@@ -671,7 +671,7 @@ instance ∀ s v .
                     $ mkSym (subbasisDimension b) (repeat id) ws of
               (t, remws) -> (SymTensor t, remws)
          mkSym _ _ [] = []
-         mkSym 0 _ _ = []
+         mkSym 0 _ ws = ws
          mkSym n (sd₀:sds) ws = let (d:o,rest) = splitAt n ws
                                     oscld = (sqrt 0.5*)<$>o
                                 in sd₀ [] ++ [d] ++ oscld
@@ -682,7 +682,7 @@ instance ∀ s v .
                     $ mkSym (subbasisDimension b) (repeat id) ws of
               (f, remws) -> (LinearMap $ rassocTensor . asTensor $ f, remws)
          mkSym _ _ [] = []
-         mkSym 0 _ _ = []
+         mkSym 0 _ ws = ws
          mkSym n (sd₀:sds) ws = let (d:o,rest) = splitAt n ws
                                     oscld = (sqrt 0.5*^)<$>o
                                 in sd₀ [] ++ [d] ++ oscld
