@@ -482,6 +482,9 @@ squareV :: (Num' s, s ~ Scalar v)
           => TensorSpace v => v -> SymmetricTensor s v
 squareV v = SymTensor $ v⊗v
 
+squareVs :: (Num' s, s ~ Scalar v)
+          => TensorSpace v => [v] -> SymmetricTensor s v
+squareVs vs = SymTensor $ tensorProducts [(v,v) | v<-vs]
 
 
 type v⊗〃+>w = LinearMap (Scalar v) (SymmetricTensor (Scalar v) v) w

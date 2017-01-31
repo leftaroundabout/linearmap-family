@@ -39,7 +39,7 @@ module Math.LinearMap.Category (
             -- * Tensor spaces
             , Tensor (..), type (⊗)(), (⊗)
             -- ** Symmetric
-            , SymmetricTensor(..), squareV
+            , SymmetricTensor(..), squareV, squareVs
             , type (⊗〃+>)(), currySymBilin
             -- * Norms
             -- $metricIntro

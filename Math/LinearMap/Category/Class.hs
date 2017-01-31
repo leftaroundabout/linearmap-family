@@ -80,6 +80,11 @@ class (VectorSpace v, PseudoAffine v) => TensorSpace v where
                 => (v ⊗ w) -+> (v ⊗ w)
   tensorProduct :: (TensorSpace w, Scalar w ~ Scalar v)
                 => Bilinear v w (v ⊗ w)
+  tensorProducts :: (TensorSpace w, Scalar w ~ Scalar v)
+                => [(v,w)] -> (v ⊗ w)
+  tensorProducts vws = sumV [ getLinearFunction (
+                              getLinearFunction tensorProduct v) w
+                            | (v,w) <- vws ]
   transposeTensor :: (TensorSpace w, Scalar w ~ Scalar v)
                 => (v ⊗ w) -+> (w ⊗ v)
   fmapTensor :: (TensorSpace w, TensorSpace x, Scalar w ~ Scalar v, Scalar x ~ Scalar v)
