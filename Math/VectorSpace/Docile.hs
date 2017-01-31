@@ -37,6 +37,7 @@ import Data.Ord (comparing)
 import Data.List (maximumBy, unfoldr)
 import qualified Data.Vector as Arr
 import Data.Foldable (toList)
+import Data.List (transpose)
 import Data.Semigroup
 
 import Data.VectorSpace
@@ -757,16 +758,21 @@ instance ∀ s v .
    where n = subbasisDimension b
   decomposeLinMap = dclm dualSpaceWitness
    where dclm (DualSpaceWitness :: DualSpaceWitness v) (LinearMap f)
-                    = (SymTensBasis bf, rmRedundant 0 $ dlw [])
+                    = (SymTensBasis bf, rmRedundant 0 . symmetrise $ dlw [])
           where rmRedundant _ [] = id
-                rmRedundant k l = case splitAt n l of
-                    (row,rest) -> (sclOffdiag (drop k row)++) . rmRedundant (k+1) rest
+                rmRedundant k (row:rest)
+                    = (sclOffdiag (drop k row)++) . rmRedundant (k+1) rest
+                symmetrise l = zipWith (zipWith (^+^)) lm $ transpose lm
+                 where lm = matr l
+                matr [] = []
+                matr l = case splitAt n l of
+                    (row,rest) -> row : matr rest
                 n = case subbasisDimension bf of
                       nbf | nbf == subbasisDimension bf'  -> nbf
                 (LinMapBasis bf bf', dlw)
                     = decomposeLinMap $ asLinearMap . lassocTensor $ f
-                sclOffdiag (d:o) = d : ((sqrt2*^)<$>o)
-         sqrt2 = sqrt 2 :: s
+                sclOffdiag (d:o) = 0.5*^d : ((^*sqrt¹₂)<$>o)
+         sqrt¹₂ = sqrt 0.5 :: s
   recomposeSB = rclm dualSpaceWitness
    where rclm (DualSpaceWitness :: DualSpaceWitness v) (SymTensBasis b) ws
            = case recomposeSB (TensorBasis b b)
