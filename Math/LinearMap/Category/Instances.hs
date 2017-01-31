@@ -484,6 +484,7 @@ squareV v = SymTensor $ v⊗v
 
 
 
-currySymBilin :: (LinearSpace v, Scalar v ~ s)
-             => (SymmetricTensor s v+>w) -> LinearMap s v (LinearMap s v w)
-currySymBilin (LinearMap f) = fmap fromTensor . fromTensor $ f
+type v⊗〃+>w = LinearMap (Scalar v) (SymmetricTensor (Scalar v) v) w
+
+currySymBilin :: LinearSpace v => (v⊗〃+>w) -+> (v+>(v+>w))
+currySymBilin = LinearFunction . arr $ fmap fromTensor . fromTensor . flout LinearMap
