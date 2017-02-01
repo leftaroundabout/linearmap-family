@@ -837,6 +837,29 @@ instance ∀ s v .
                  -> (f s->w) -> f (Tensor s (DualVector v) (DualVector v))
                      -> LinearMap s (LinearMap s (DualVector v) v) w
          rcCLM DualSpaceWitness f = recomposeContraLinMap f
+  recomposeContraLinMapTensor = rcCLMT'
+   where rcCLMT' :: ∀ f u w . (Hask.Functor f, LinearSpace w, s~Scalar w
+                                            , FiniteDimensional u, s~Scalar u)
+                    => (f s->w) -> f (SymmetricTensor s v +> DualVector u)
+                                  -> (SymmetricTensor s v ⊗ u) +> w
+         rcCLMT' f tenss
+           = LinearMap . arr (fmap rassocTensor . rassocTensor . asTensor)
+                 . rcCLMT (dualSpaceWitness, dualSpaceWitness) f
+                      $ fmap getLinearMap tenss
+          where rcCLMT :: (DualSpaceWitness v, DualSpaceWitness u)
+                 -> (f s->w) -> f (Tensor s (DualVector v)
+                                            (Tensor s (DualVector v) (DualVector u)))
+                  -- -> LinearMap s (Tensor s (SymmetricTensor s v) u) w
+                  --  ∼ TensorProduct (LinearMap s (SymmetricTensor s v) (DualVector u)) w
+                  --  ⩵ TensorProduct (SymmetricTensor s (DualVector v)) (DualVector u ⊗ w)
+                  --  ⩵ Tensor s (DualVector v) (DualVector v ⊗ (DualVector u ⊗ w))
+                     -> LinearMap s (LinearMap s (DualVector v)
+                                                 (LinearMap s (DualVector v) u)) w
+                  --  ∼ Tensor s (Tensor s (DualVector v)
+                  --                       (DualVector v ⊗ DualVector u)) w
+                  --  ∼ Tensor s (DualVector v)
+                  --             (Tensor s (DualVector v ⊗ DualVector u) w)
+                rcCLMT (DualSpaceWitness, DualSpaceWitness) f = recomposeContraLinMap f
   uncanonicallyFromDual = case dualSpaceWitness :: DualSpaceWitness v of
      DualSpaceWitness -> LinearFunction
           $ \(SymTensor t) -> SymTensor $ arr fromLinearMap . uncanonicallyFromDual $ t
