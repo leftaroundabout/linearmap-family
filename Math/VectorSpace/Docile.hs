@@ -22,6 +22,7 @@
 {-# LANGUAGE LambdaCase           #-}
 {-# LANGUAGE ConstraintKinds      #-}
 {-# LANGUAGE RankNTypes           #-}
+{-# LANGUAGE EmptyCase            #-}
 
 module Math.VectorSpace.Docile where
 
@@ -96,6 +97,21 @@ class LinearSpace v => SemiInner v where
   symTensorDualBasisCandidates
         :: [(Int, SymmetricTensor (Scalar v) v)]
                -> Forest (Int, SymmetricTensor (Scalar v) (DualVector v))
+  
+  symTensorTensorDualBasisCandidates :: ∀ w . (SemiInner w, Scalar w ~ Scalar v)
+        => [(Int, SymmetricTensor (Scalar v) v ⊗ w)]
+               -> Forest (Int, SymmetricTensor (Scalar v) v +> DualVector w)
+  -- Delegate to the transposed tensor. This is a hack that will sooner or
+  -- later catch up with us. TODO: make a proper implementation.
+  symTensorTensorDualBasisCandidates
+              = case ( dualSpaceWitness :: DualSpaceWitness v
+                     , dualSpaceWitness :: DualSpaceWitness w
+                     , scalarSpaceWitness :: ScalarSpaceWitness v ) of
+         (DualSpaceWitness, DualSpaceWitness, ScalarSpaceWitness)
+             -> map (second $ getLinearFunction transposeTensor)
+                  >>> dualBasisCandidates
+                  >>> fmap (fmap . second $
+                        arr asTensor >>> arr transposeTensor >>> arr fromTensor)
 
 cartesianDualBasisCandidates
      :: [DualVector v]  -- ^ Set of canonical basis functionals.
@@ -425,6 +441,8 @@ instance ∀ s u v . ( SemiInner u, SemiInner v, Scalar u ~ s, Scalar v ~ s )
 instance ∀ s v . ( Num' s, SemiInner v, Scalar v ~ s )
            => SemiInner (SymmetricTensor s v) where
   dualBasisCandidates = symTensorDualBasisCandidates
+  tensorDualBasisCandidates = symTensorTensorDualBasisCandidates
+  symTensorTensorDualBasisCandidates = case () of {}
 
 instance ∀ s u v . ( LinearSpace u, SemiInner (DualVector u), SemiInner v
                    , Scalar u ~ s, Scalar v ~ s )
@@ -795,6 +813,22 @@ instance ∀ s v .
                                     oscld = (sqrt 0.5*^)<$>o
                                 in sd₀ [] ++ [d] ++ oscld
                                      ++ mkSym (n-1) (zipWith (.) sds $ (:)<$>oscld) rest
+  recomposeSBTensor = rcst
+   where rcst :: ∀ w . (FiniteDimensional w, Scalar w ~ s)
+                => SubBasis (SymmetricTensor s v) -> SubBasis w
+                   -> [s] -> (Tensor s (SymmetricTensor s v) w, [s])
+         rcst (SymTensBasis b) bw μs
+           = case recomposeSBTensor (TensorBasis b b) bw
+                    $ mkSym (subbasisDimension bw) (subbasisDimension b) (repeat id) μs of
+              (Tensor t, remws) -> ( Tensor $ Tensor t
+                                      :: Tensor s (SymmetricTensor s v) w
+                                   , remws )
+         mkSym _ _ _ [] = []
+         mkSym _ 0 _ ws = ws
+         mkSym nw n (sd₀:sds) ws = let (d:o,rest) = multiSplit nw n ws
+                                       oscld = map (sqrt 0.5*)<$>o
+                                   in concat (sd₀ []) ++ d ++ concat oscld
+                                       ++ mkSym nw (n-1) (zipWith (.) sds $ (:)<$>oscld) rest
   recomposeContraLinMap f tenss
            = LinearMap . arr (rassocTensor . asTensor) . rcCLM dualSpaceWitness f
                                     $ fmap getSymmetricTensor tenss
@@ -1247,3 +1281,11 @@ adjoint = case ( dualSpaceWitness :: DualSpaceWitness v
                , dualSpaceWitness :: DualSpaceWitness w ) of
    (DualSpaceWitness, DualSpaceWitness)
           -> arr fromTensor . transposeTensor . arr asTensor
+
+
+
+
+multiSplit :: Int -> Int -> [a] -> ([[a]], [a])
+multiSplit chunkSize 0 l = ([],l)
+multiSplit chunkSize nChunks l = case splitAt chunkSize l of
+    (chunk, rest) -> first (chunk:) $ multiSplit chunkSize (nChunks-1) rest
