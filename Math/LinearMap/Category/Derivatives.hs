@@ -62,11 +62,12 @@ infixr 7 *∂, /∂, .∂
 q*∂𝑚 = lens (\a -> a^.𝑚 $ q)
            (\a v -> (a & 𝑚 .~ arr (LinearFunction $ \q' -> v ^* (q'^/!q))) )
 
-(.∂) :: ∀ s x . ( Num' s, LinearSpace x, s ~ Scalar x )
+(.∂) :: ∀ s x z . ( Fractional' s, LinearSpace x, s ~ Scalar x, LinearSpace z, s ~ Scalar z )
             => (∀ w . (LinearSpace w, Scalar w ~ s) => Lens' (TensorProduct x w) w)
-                  -> Lens' x s -> Lens' (SymmetricTensor s x) s
+                  -> Lens' x z -> Lens' (SymmetricTensor s x) z
 𝑤.∂𝑦 = case closedScalarWitness :: ClosedScalarWitness s of
      ClosedScalarWitness -> lens
-            (\(SymTensor t) -> (getTensorProduct $ fmap (LinearFunction (^.𝑦)) $ t)^.𝑤)
-            (\(SymTensor (Tensor t)) s -> SymTensor . Tensor $ (𝑤.𝑦.~s) t)
+            (\(SymTensor t)
+               -> (getTensorProduct $ fmap (LinearFunction (^.𝑦)) $ t)^.𝑤 ^* 0.5)
+            (\(SymTensor (Tensor t)) z -> SymTensor . Tensor $ (𝑤.𝑦.~z^*2) t)
   
