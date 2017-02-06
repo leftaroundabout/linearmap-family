@@ -45,7 +45,7 @@ import Math.LinearMap.Category.Class
 
 import Control.Lens
 
-infixr 7 *∂, /∂
+infixr 7 *∂, /∂, .∂
 (/∂) :: ∀ s x y v q
           . ( Num' s, LinearSpace x, LinearSpace y, LinearSpace v, LinearSpace q
             , s ~ Scalar x, s ~ Scalar y, s ~ Scalar v, s ~ Scalar q )
@@ -62,3 +62,11 @@ infixr 7 *∂, /∂
 q*∂𝑚 = lens (\a -> a^.𝑚 $ q)
            (\a v -> (a & 𝑚 .~ arr (LinearFunction $ \q' -> v ^* (q'^/!q))) )
 
+(.∂) :: ∀ s x . ( Num' s, LinearSpace x, s ~ Scalar x )
+            => (∀ w . (LinearSpace w, Scalar w ~ s) => Lens' (TensorProduct x w) w)
+                  -> Lens' x s -> Lens' (SymmetricTensor s x) s
+𝑤.∂𝑦 = case closedScalarWitness :: ClosedScalarWitness s of
+     ClosedScalarWitness -> lens
+            (\(SymTensor t) -> (getTensorProduct $ fmap (LinearFunction (^.𝑦)) $ t)^.𝑤)
+            (\(SymTensor (Tensor t)) s -> SymTensor . Tensor $ (𝑤.𝑦.~s) t)
+  
