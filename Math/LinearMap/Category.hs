@@ -226,14 +226,6 @@ du-+|>v = arr . LinearFunction $ (v^*) . (du<.>^)
 
 
 
--- | Use a function as a linear map. This is only well-defined if the function /is/
---   linear (this condition is not checked).
-lfun :: ( EnhancedCat f (LinearFunction s)
-        , LinearSpace u, TensorSpace v, Scalar u ~ s, Scalar v ~ s
-        , Object f u, Object f v ) => (u->v) -> f u v
-lfun = arr . LinearFunction
-
-
 
 -- $metricIntro
 -- A norm is a way to quantify the magnitude/length of different vectors,

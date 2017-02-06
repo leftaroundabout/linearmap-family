@@ -1024,3 +1024,11 @@ instance (TensorSpace u, TensorSpace v, s~Scalar u, s~Scalar v)
   (.+^) = (^+^)
 
   
+-- | Use a function as a linear map. This is only well-defined if the function /is/
+--   linear (this condition is not checked).
+lfun :: ( EnhancedCat f (LinearFunction s)
+        , LinearSpace u, TensorSpace v, Scalar u ~ s, Scalar v ~ s
+        , Object f u, Object f v ) => (u->v) -> f u v
+lfun = arr . LinearFunction
+
+
