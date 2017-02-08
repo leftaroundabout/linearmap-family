@@ -703,15 +703,30 @@ linearRegressionW :: ∀ s x m y
     . ( LinearSpace x, FiniteDimensional y, SimpleSpace m
       , Scalar x ~ s, Scalar y ~ s, Scalar m ~ s, RealFrac' s )
          => Norm y -> (x -> (m +> y)) -> [(x,y)] -> m
-linearRegressionW = lrw (dualSpaceWitness, dualSpaceWitness)
+linearRegressionW σy modelMap = fst . linearRegressionWVar σy modelMap
+
+linearRegressionWVar :: ∀ s x m y
+    . ( LinearSpace x, FiniteDimensional y, SimpleSpace m
+      , Scalar x ~ s, Scalar y ~ s, Scalar m ~ s, RealFrac' s )
+         => Norm y -> (x -> (m +> y)) -> [(x,y)] -> (m, [DualVector m])
+linearRegressionWVar = lrw (dualSpaceWitness, dualSpaceWitness)
  where lrw :: (DualSpaceWitness y, DualSpaceWitness m)
-                -> Norm y -> (x -> (m +> y)) -> [(x,y)] -> m
+                -> Norm y -> (x -> (m +> y)) -> [(x,y)] -> (m, [DualVector m])
        lrw (DualSpaceWitness, DualSpaceWitness) σy modelMap dataxy
-         = (arr . LinearFunction $ forward' . forward)
-             \$ forward' (snd<$>dataxy)
-        where forward :: m -> [y]
+         = ( leastSquareSol, deviations )
+        where leastSquareSol = (lfun $ forward' . forward)
+                                 \$ forward' (snd<$>dataxy)
+              forward :: m -> [y]
               forward m = [modelMap x $ m | (x,_)<-dataxy]
               forward' :: [y] -> DualVector m
-              forward' ys = sumV $ zipWith (\(x,_) y -> (adjoint $ modelMap x) $ σy<$|y)
-                                       dataxy ys
+              forward' = sumV . zipWith (\my y -> my $ σy<$|y) modelGens
+              modelGens :: [DualVector y +> DualVector m]
+              modelGens = ((adjoint$) . modelMap . fst)<$>dataxy
+              deviations = zipWith ($) modelGens
+                           [ dy ^/ (dy<.>^δy)
+                           | (x,yd) <- dataxy
+                           , let ym = modelMap x $ leastSquareSol
+                                 δy = yd ^-^ ym
+                                 dy = σy<$|δy
+                           ]
                   
