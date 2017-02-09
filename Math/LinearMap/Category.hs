@@ -134,6 +134,7 @@ import qualified Data.Vector.Unboxed as UArr
 import Numeric.IEEE
 
 import qualified GHC.Exts as GHC
+import qualified Data.Type.Coercion as GHC
 
 -- $linmapIntro
 -- This library deals with linear functions, i.e. functions @f :: v -> w@
@@ -698,6 +699,15 @@ type LinearShowable v = (Show v, RieszDecomposable v)
 
 
 
+symmetricConvexPolytopeRepresentatives :: ∀ v . SimpleSpace v => [DualVector v] -> [v]
+symmetricConvexPolytopeRepresentatives dvs
+         = [v^/η | (v,η) <- candidates, all ((<=η) . abs . (<.>^v)) dvs]
+ where nmv :: Norm v
+       nmv = spanNorm dvs
+       nmv' = dualNorm nmv
+       candidates :: [(v, Scalar v)]
+       candidates = [ (v, dv<.>^v) | dv <- dvs
+                                   , let v = GHC.sym coerceDoubleDual $ nmv'<$|dv ]
 
 linearRegressionW :: ∀ s x m y
     . ( LinearSpace x, FiniteDimensional y, SimpleSpace m
