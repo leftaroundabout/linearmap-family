@@ -703,28 +703,29 @@ linearRegressionW :: ∀ s x m y
     . ( LinearSpace x, FiniteDimensional y, SimpleSpace m
       , Scalar x ~ s, Scalar y ~ s, Scalar m ~ s, RealFrac' s )
          => Norm y -> (x -> (m +> y)) -> [(x,y)] -> m
-linearRegressionW σy modelMap = fst . linearRegressionWVar σy modelMap
+linearRegressionW σy modelMap = fst . linearRegressionWVar modelMap . map (second (,σy))
 
 linearRegressionWVar :: ∀ s x m y
     . ( LinearSpace x, FiniteDimensional y, SimpleSpace m
       , Scalar x ~ s, Scalar y ~ s, Scalar m ~ s, RealFrac' s )
-         => Norm y -> (x -> (m +> y)) -> [(x,y)] -> (m, [DualVector m])
+         => (x -> (m +> y)) -> [(x, (y, Norm y))] -> (m, [DualVector m])
 linearRegressionWVar = lrw (dualSpaceWitness, dualSpaceWitness)
  where lrw :: (DualSpaceWitness y, DualSpaceWitness m)
-                -> Norm y -> (x -> (m +> y)) -> [(x,y)] -> (m, [DualVector m])
-       lrw (DualSpaceWitness, DualSpaceWitness) σy modelMap dataxy
+                -> (x -> (m +> y)) -> [(x, (y, Norm y))] -> (m, [DualVector m])
+       lrw (DualSpaceWitness, DualSpaceWitness) modelMap dataxy
          = ( leastSquareSol, deviations )
-        where leastSquareSol = (lfun $ forward' . forward)
-                                 \$ forward' (snd<$>dataxy)
+        where leastSquareSol = (lfun $ forward' . zipWith ((<$|) . snd . snd) dataxy
+                                          . forward)
+                                 \$ forward' [σy<$|y | (_,(y,σy)) <- dataxy]
               forward :: m -> [y]
               forward m = [modelMap x $ m | (x,_)<-dataxy]
-              forward' :: [y] -> DualVector m
-              forward' = sumV . zipWith (\my y -> my $ σy<$|y) modelGens
+              forward' :: [DualVector y] -> DualVector m
+              forward' = sumV . zipWith ($) modelGens
               modelGens :: [DualVector y +> DualVector m]
               modelGens = ((adjoint$) . modelMap . fst)<$>dataxy
               deviations = zipWith ($) modelGens
                            [ dy ^/ (dy<.>^δy)
-                           | (x,yd) <- dataxy
+                           | (x,(yd,σy)) <- dataxy
                            , let ym = modelMap x $ leastSquareSol
                                  δy = yd ^-^ ym
                                  dy = σy<$|δy
