@@ -59,7 +59,7 @@ module Math.LinearMap.Category (
             , densifyNorm, wellDefinedNorm
             -- * Solving linear equations
             , (\$), pseudoInverse, roughDet
-            , linearRegressionW
+            , linearRegressionW, linearRegressionWVar
             -- * Eigenvalue problems
             , eigen
             , constructEigenSystem
@@ -95,6 +95,7 @@ module Math.LinearMap.Category (
             , summandSpaceNorms, sumSubspaceNorms
             , sharedNormSpanningSystem, sharedSeminormSpanningSystem
             , sharedSeminormSpanningSystem'
+            , symmetricConvexPolytopeRepresentatives
             ) where
 
 import Math.LinearMap.Category.Class
@@ -733,11 +734,14 @@ linearRegressionWVar = lrw (dualSpaceWitness, dualSpaceWitness)
               forward' = sumV . zipWith ($) modelGens
               modelGens :: [DualVector y +> DualVector m]
               modelGens = ((adjoint$) . modelMap . fst)<$>dataxy
-              deviations = zipWith ($) modelGens
-                           [ dy ^/ (dy<.>^δy)
-                           | (x,(yd,σy)) <- dataxy
-                           , let ym = modelMap x $ leastSquareSol
-                                 δy = yd ^-^ ym
-                                 dy = σy<$|δy
+              deviations = [ m $ dy ^/ ψ
+                           | (m,(dy,ψ)) <- zip modelGens ddys
+                           , ψ > 0
                            ]
+              ddys = [ (dy, ψ) | (x,(yd,σy)) <- dataxy
+                               , let ym = modelMap x $ leastSquareSol
+                                     δy = yd ^-^ ym
+                                     dy = σy<$|δy
+                                     ψ = dy<.>^δy
+                     ]
                   
