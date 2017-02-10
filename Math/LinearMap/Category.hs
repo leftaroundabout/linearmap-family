@@ -95,7 +95,7 @@ module Math.LinearMap.Category (
             , summandSpaceNorms, sumSubspaceNorms
             , sharedNormSpanningSystem, sharedSeminormSpanningSystem
             , sharedSeminormSpanningSystem'
-            , symmetricConvexPolytopeRepresentatives
+            , convexPolytopeRepresentatives
             ) where
 
 import Math.LinearMap.Category.Class
@@ -700,9 +700,9 @@ type LinearShowable v = (Show v, RieszDecomposable v)
 
 
 
-symmetricConvexPolytopeRepresentatives :: ∀ v . SimpleSpace v => [DualVector v] -> [v]
-symmetricConvexPolytopeRepresentatives dvs
-         = [v^/η | (v,η) <- candidates, all ((<=η) . abs . (<.>^v)) dvs]
+convexPolytopeRepresentatives :: ∀ v . SimpleSpace v => [DualVector v] -> [v]
+convexPolytopeRepresentatives dvs
+         = [v^/η | (v,η) <- candidates, all ((<=η) . (<.>^v)) dvs]
  where nmv :: Norm v
        nmv = spanNorm dvs
        nmv' = dualNorm nmv
