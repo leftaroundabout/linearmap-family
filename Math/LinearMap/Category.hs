@@ -95,6 +95,7 @@ module Math.LinearMap.Category (
             , summandSpaceNorms, sumSubspaceNorms
             , sharedNormSpanningSystem, sharedSeminormSpanningSystem
             , sharedSeminormSpanningSystem'
+            , convexPolytopeHull
             , convexPolytopeRepresentatives
             ) where
 
@@ -712,15 +713,26 @@ type LinearShowable v = (Show v, RieszDecomposable v)
 
 
 
+convexPolytopeHull :: ∀ v . SimpleSpace v => [v] -> [DualVector v]
+convexPolytopeHull vs = case dualSpaceWitness :: DualSpaceWitness v of
+         DualSpaceWitness
+             -> [dv^/η | (dv,η) <- candidates, all ((<=η) . (dv<.>^)) vs]
+ where vrv = spanVariance vs
+       nmv = dualNorm' vrv
+       candidates :: [(DualVector v, Scalar v)]
+       candidates = [ (dv, dv<.>^v) | v <- vs
+                                   , let dv = nmv<$|v ]
+
 convexPolytopeRepresentatives :: ∀ v . SimpleSpace v => [DualVector v] -> [v]
 convexPolytopeRepresentatives dvs
-         = [v^/η | (v,η) <- candidates, all ((<=η) . (<.>^v)) dvs]
+         = [v^/η | ((v,η),dv) <- zip candidates dvs
+                 , all (\(w,ψ) -> dv<.>^w <= ψ) candidates]
  where nmv :: Norm v
        nmv = spanNorm dvs
-       nmv' = dualNorm nmv
+       vrv = dualNorm nmv
        candidates :: [(v, Scalar v)]
        candidates = [ (v, dv<.>^v) | dv <- dvs
-                                   , let v = dv|&>nmv' ]
+                                   , let v = dv|&>vrv ]
 
 linearRegressionW :: ∀ s x m y
     . ( LinearSpace x, FiniteDimensional y, SimpleSpace m
