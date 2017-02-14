@@ -53,7 +53,7 @@ module Math.LinearMap.Category (
             , normSpanningSystem
             , normSpanningSystem'
             -- ** Variances
-            , Variance, spanVariance, varianceSpanningSystem
+            , Variance, spanVariance, (|&>), varianceSpanningSystem
             , dualNorm, dualNorm', dependence
             -- ** Utility
             , densifyNorm, wellDefinedNorm
@@ -376,6 +376,8 @@ infixr 0 <$|, |$|
 -- @
 -- ('euclideanNorm' '<$|' v) '<.>^' w  ≡  v '<.>' w
 -- @
+-- 
+--   See also '|&>'.
 (<$|) :: LSpace v => Norm v -> v -> DualVector v
 Norm m <$| v = m-+$>v
 
@@ -391,6 +393,16 @@ normSq (Norm m) v = (m-+$>v)<.>^v
 -- @
 (|$|) :: (LSpace v, Floating (Scalar v)) => Seminorm v -> v -> Scalar v
 (|$|) m = sqrt . normSq m
+
+infixl 1 |&>
+-- | Flipped, “ket” version of '<$|'.
+-- 
+-- @
+-- v '<.>^' (w |&> 'euclideanNorm')  ≡  v '<.>' w
+-- @
+(|&>) :: LSpace v => DualVector v -> Variance v -> v
+dv |&> Norm m = GHC.sym coerceDoubleDual $ m-+$>dv
+
 
 -- | 'spanNorm' / 'spanVariance' are inefficient if the number of vectors
 --   is similar to the dimension of the space, or even larger than it.
@@ -708,7 +720,7 @@ convexPolytopeRepresentatives dvs
        nmv' = dualNorm nmv
        candidates :: [(v, Scalar v)]
        candidates = [ (v, dv<.>^v) | dv <- dvs
-                                   , let v = GHC.sym coerceDoubleDual $ nmv'<$|dv ]
+                                   , let v = dv|&>nmv' ]
 
 linearRegressionW :: ∀ s x m y
     . ( LinearSpace x, FiniteDimensional y, SimpleSpace m
