@@ -24,7 +24,8 @@
 {-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE DefaultSignatures          #-}
 
-module Math.LinearMap.Category.Derivatives where
+module Math.LinearMap.Category.Derivatives
+    {-# WARNING "These lenses will probably change their domain in the future." #-} where
 
 import Data.VectorSpace
 import Data.VectorSpace.Free
