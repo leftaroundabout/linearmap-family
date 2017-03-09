@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/leftaroundabout/linearmap-family.svg?branch=master)](https://travis-ci.org/leftaroundabout/linearmap-family)
+
 This project has two goals:
 
 ### To give Haskell a competitive, _native_ linear algebra library
