@@ -1,0 +1,12 @@
+flags: {}
+packages:
+- location: './'
+- location:
+    git: https://github.com/leftaroundabout/constrained-categories.git
+    commit: master
+- location:
+    git: https://github.com/leftaroundabout/free-vector-spaces.git
+    commit: master
+extra-deps:
+- manifolds-core-0.4.1.0
+resolver: lts-8.0
