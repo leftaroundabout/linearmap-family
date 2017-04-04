@@ -59,7 +59,7 @@ module Math.LinearMap.Category (
             , densifyNorm, wellDefinedNorm
             -- * Solving linear equations
             , (\$), pseudoInverse, roughDet
-            , linearRegressionW, linearRegressionWVar
+            , linearRegressionW, linearRegressionWExtremeVar
             -- * Eigenvalue problems
             , eigen
             , constructEigenSystem
@@ -738,13 +738,19 @@ linearRegressionW :: ∀ s x m y
     . ( LinearSpace x, FiniteDimensional y, SimpleSpace m
       , Scalar x ~ s, Scalar y ~ s, Scalar m ~ s, RealFrac' s )
          => Norm y -> (x -> (m +> y)) -> [(x,y)] -> m
-linearRegressionW σy modelMap = fst . linearRegressionWVar modelMap . map (second (,σy))
+linearRegressionW σy modelMap = fst . linearRegressionWExtremeVar modelMap . map (second (,σy))
 
 linearRegressionWVar :: ∀ s x m y
     . ( LinearSpace x, FiniteDimensional y, SimpleSpace m
       , Scalar x ~ s, Scalar y ~ s, Scalar m ~ s, RealFrac' s )
          => (x -> (m +> y)) -> [(x, (y, Norm y))] -> (m, [DualVector m])
-linearRegressionWVar = lrw (dualSpaceWitness, dualSpaceWitness)
+linearRegressionWVar = undefined
+
+linearRegressionWExtremeVar :: ∀ s x m y
+    . ( LinearSpace x, FiniteDimensional y, SimpleSpace m
+      , Scalar x ~ s, Scalar y ~ s, Scalar m ~ s, RealFrac' s )
+         => (x -> (m +> y)) -> [(x, (y, Norm y))] -> (m, [DualVector m])
+linearRegressionWExtremeVar = lrw (dualSpaceWitness, dualSpaceWitness)
  where lrw :: (DualSpaceWitness y, DualSpaceWitness m)
                 -> (x -> (m +> y)) -> [(x, (y, Norm y))] -> (m, [DualVector m])
        lrw (DualSpaceWitness, DualSpaceWitness) modelMap dataxy
@@ -758,10 +764,13 @@ linearRegressionWVar = lrw (dualSpaceWitness, dualSpaceWitness)
               forward' = sumV . zipWith ($) modelGens
               modelGens :: [DualVector y +> DualVector m]
               modelGens = ((adjoint$) . modelMap . fst)<$>dataxy
-              deviations = [ m $ dy ^/ ψ
+              deviations :: [DualVector m]
+              deviations = [ m $ dy ^/ (-ρ*(1+ρ))
                            | (m,(dy,ψ)) <- zip modelGens ddys
                            , ψ > 0
+                           , let ρ = sqrt ψ
                            ]
+              ddys :: [(DualVector y, s)]
               ddys = [ (dy, ψ) | (x,(yd,σy)) <- dataxy
                                , let ym = modelMap x $ leastSquareSol
                                      δy = yd ^-^ ym
