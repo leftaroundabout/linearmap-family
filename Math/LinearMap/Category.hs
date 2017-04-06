@@ -589,8 +589,12 @@ orthonormalityError me vs = normSq me $ orthogonalComplementProj me vs $ sumV vs
 
 normSpanningSystem :: SimpleSpace v
                => Seminorm v -> [DualVector v]
-normSpanningSystem me@(Norm m)
-     = catMaybes . map snd . orthonormaliseDuals 0
+normSpanningSystem = map snd . normSpanningSystems
+
+normSpanningSystems :: SimpleSpace v
+               => Seminorm v -> [(v, DualVector v)]
+normSpanningSystems me@(Norm m)
+     = catMaybes . map (\(v,d)->(v,)<$>d) . orthonormaliseDuals 0
          . map (id&&&(m-+$>)) $ normSpanningSystem' me
 
 normSpanningSystem' :: (FiniteDimensional v, IEEE (Scalar v))
@@ -735,7 +739,7 @@ convexPolytopeRepresentatives dvs
                                    , let v = dv|&>vrv ]
 
 linearRegressionW :: ∀ s x m y
-    . ( LinearSpace x, FiniteDimensional y, SimpleSpace m
+    . ( LinearSpace x, SimpleSpace y, SimpleSpace m
       , Scalar x ~ s, Scalar y ~ s, Scalar m ~ s, RealFrac' s )
          => Norm y -> (x -> (m +> y)) -> [(x,y)] -> m
 linearRegressionW σy modelMap = fst . linearRegressionWExtremeVar modelMap . map (second (,σy))
@@ -747,7 +751,7 @@ linearRegressionWVar :: ∀ s x m y
 linearRegressionWVar = undefined
 
 linearRegressionWExtremeVar :: ∀ s x m y
-    . ( LinearSpace x, FiniteDimensional y, SimpleSpace m
+    . ( LinearSpace x, SimpleSpace y, SimpleSpace m
       , Scalar x ~ s, Scalar y ~ s, Scalar m ~ s, RealFrac' s )
          => (x -> (m +> y)) -> [(x, (y, Norm y))] -> (m, [DualVector m])
 linearRegressionWExtremeVar = lrw (dualSpaceWitness, dualSpaceWitness)
@@ -765,16 +769,12 @@ linearRegressionWExtremeVar = lrw (dualSpaceWitness, dualSpaceWitness)
               modelGens :: [DualVector y +> DualVector m]
               modelGens = ((adjoint$) . modelMap . fst)<$>dataxy
               deviations :: [DualVector m]
-              deviations = [ m $ dy ^/ (-ρ*(1+ρ))
-                           | (m,(dy,ψ)) <- zip modelGens ddys
-                           , ψ > 0
-                           , let ρ = sqrt ψ
+              deviations = [ m $ dy ^/ ψ | ((x,(yd,σy)),m) <- zip dataxy modelGens
+                                         , let ym = modelMap x $ leastSquareSol
+                                               δy = yd ^-^ ym
+                                         , (eεy, dεy) <- normSpanningSystems σy
+                                         , let eδy = δy ^+^ eεy^*signum (dεy<.>^δy)
+                                               dy = σy<$|eδy
+                                               ψ = dy<.>^δy
                            ]
-              ddys :: [(DualVector y, s)]
-              ddys = [ (dy, ψ) | (x,(yd,σy)) <- dataxy
-                               , let ym = modelMap x $ leastSquareSol
-                                     δy = yd ^-^ ym
-                                     dy = σy<$|δy
-                                     ψ = dy<.>^δy
-                     ]
                   
