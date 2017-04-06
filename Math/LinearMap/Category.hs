@@ -96,7 +96,7 @@ module Math.LinearMap.Category (
             , sharedNormSpanningSystem, sharedSeminormSpanningSystem
             , sharedSeminormSpanningSystem'
             , convexPolytopeHull
-            , convexPolytopeRepresentatives
+            , symmetricConvexPolytopeRepresentatives
             ) where
 
 import Math.LinearMap.Category.Class
@@ -727,10 +727,10 @@ convexPolytopeHull vs = case dualSpaceWitness :: DualSpaceWitness v of
        candidates = [ (dv, dv<.>^v) | v <- vs
                                    , let dv = nmv<$|v ]
 
-convexPolytopeRepresentatives :: ∀ v . SimpleSpace v => [DualVector v] -> [v]
-convexPolytopeRepresentatives dvs
+symmetricConvexPolytopeRepresentatives :: ∀ v . SimpleSpace v => [DualVector v] -> [v]
+symmetricConvexPolytopeRepresentatives dvs
          = [v^/η | ((v,η),dv) <- zip candidates dvs
-                 , all (\(w,ψ) -> dv<.>^w <= ψ) candidates]
+                 , all (\(w,ψ) -> abs (dv<.>^w) <= ψ) candidates]
  where nmv :: Norm v
        nmv = spanNorm dvs
        vrv = dualNorm nmv
