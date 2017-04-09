@@ -735,8 +735,8 @@ symmetricConvexPolytopeRepresentatives dvs
        nmv = spanNorm dvs
        vrv = dualNorm nmv
        candidates :: [(v, Scalar v)]
-       candidates = [ (v, dv<.>^v) | dv <- dvs
-                                   , let v = dv|&>vrv ]
+       candidates = [ (v, abs $ dv<.>^v) | dv <- dvs
+                                         , let v = dv|&>vrv ]
 
 linearRegressionW :: ∀ s x m y
     . ( LinearSpace x, SimpleSpace y, SimpleSpace m
