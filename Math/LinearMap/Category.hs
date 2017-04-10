@@ -105,7 +105,7 @@ import Math.LinearMap.Asserted
 import Math.VectorSpace.Docile
 
 import Data.Tree (Tree(..), Forest)
-import Data.List (sortBy, foldl', permutations)
+import Data.List (sortBy, foldl')
 import qualified Data.Set as Set
 import Data.Set (Set)
 import Data.Ord (comparing)
@@ -736,14 +736,19 @@ symmetricPolytopeOuterVertices dvs
        withSomeVect :: [(DualVector v, v)]
        withSomeVect = [ (dv, v) | dv <- dvs
                                 , let v = dv|&>vrv ]
-       (candidates, _) = multiSplit d d . concat . permutations
-                           $ withSomeVect ++ fmap negateV withSomeVect
+       (candidates, _) = multiSplit d (2*d) . concat . deinterlacions $ withSomeVect
        d = subbasisDimension (entireBasis :: SubBasis v)
        seekExtreme p₀ [] = p₀
        seekExtreme p₀ ((dv, v) : cs)
            = seekExtreme (p₀^+^vn) [(dw, w ^-^ v^*((dv<.>^w) / lv)) | (dw, w) <- cs]
         where vn = v ^* ((1 - dv<.>^p₀) / lv)
               lv = dv<.>^v
+
+deinterlacions :: SimpleSpace a => [(DualVector a, a)] -> [[(DualVector a, a)]]
+deinterlacions l = l : deinterlacions (e ++ map negateV o)
+ where (e,o) = deinterlace l
+       deinterlace (a:b:xs) = (a:)***(b:) $ deinterlace xs
+       deinterlace xs = ([],xs)
        
 linearRegressionW :: ∀ s x m y
     . ( LinearSpace x, SimpleSpace y, SimpleSpace m
