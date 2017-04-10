@@ -729,7 +729,7 @@ convexPolytopeHull vs = case dualSpaceWitness :: DualSpaceWitness v of
 
 symmetricPolytopeOuterVertices :: ∀ v . SimpleSpace v => [DualVector v] -> [v]
 symmetricPolytopeOuterVertices dvs
-         = [ seekExtreme group | group <- candidates ]
+         = [ seekExtreme zeroV group | group <- candidates ]
  where nmv :: Norm v
        nmv = spanNorm dvs
        vrv = dualNorm nmv
@@ -739,10 +739,11 @@ symmetricPolytopeOuterVertices dvs
        (candidates, _) = multiSplit d d . concat . permutations
                            $ withSomeVect ++ fmap negateV withSomeVect
        d = subbasisDimension (entireBasis :: SubBasis v)
-       seekExtreme [] = zeroV
-       seekExtreme ((dv, v) : cs)
-           = vn ^+^ seekExtreme [(dw, w ^-^ vn^*(dv<.>^w)) | (dw, w) <- cs]
-        where vn = v ^/ dv<.>^v
+       seekExtreme p₀ [] = p₀
+       seekExtreme p₀ ((dv, v) : cs)
+           = seekExtreme (p₀^+^vn) [(dw, w ^-^ v^*((dv<.>^w) / lv)) | (dw, w) <- cs]
+        where vn = v ^* ((1 - dv<.>^p₀) / lv)
+              lv = dv<.>^v
        
 linearRegressionW :: ∀ s x m y
     . ( LinearSpace x, SimpleSpace y, SimpleSpace m
