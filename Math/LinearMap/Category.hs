@@ -96,7 +96,7 @@ module Math.LinearMap.Category (
             , sharedNormSpanningSystem, sharedSeminormSpanningSystem
             , sharedSeminormSpanningSystem'
             , convexPolytopeHull
-            , symmetricConvexPolytopeRepresentatives
+            , symmetricPolytopeOuterVertices
             ) where
 
 import Math.LinearMap.Category.Class
@@ -105,7 +105,7 @@ import Math.LinearMap.Asserted
 import Math.VectorSpace.Docile
 
 import Data.Tree (Tree(..), Forest)
-import Data.List (sortBy, foldl')
+import Data.List (sortBy, foldl', permutations)
 import qualified Data.Set as Set
 import Data.Set (Set)
 import Data.Ord (comparing)
@@ -727,17 +727,23 @@ convexPolytopeHull vs = case dualSpaceWitness :: DualSpaceWitness v of
        candidates = [ (dv, dv<.>^v) | v <- vs
                                    , let dv = nmv<$|v ]
 
-symmetricConvexPolytopeRepresentatives :: ∀ v . SimpleSpace v => [DualVector v] -> [v]
-symmetricConvexPolytopeRepresentatives dvs
-         = [v^/η | ((v,η),dv) <- zip candidates dvs
-                 , all (\(w,ψ) -> abs (dv<.>^w) <= ψ) candidates]
+symmetricPolytopeOuterVertices :: ∀ v . SimpleSpace v => [DualVector v] -> [v]
+symmetricPolytopeOuterVertices dvs
+         = [ seekExtreme group | group <- candidates ]
  where nmv :: Norm v
        nmv = spanNorm dvs
        vrv = dualNorm nmv
-       candidates :: [(v, Scalar v)]
-       candidates = [ (v, abs $ dv<.>^v) | dv <- dvs
-                                         , let v = dv|&>vrv ]
-
+       withSomeVect :: [(DualVector v, v)]
+       withSomeVect = [ (dv, v) | dv <- dvs
+                                , let v = dv|&>vrv ]
+       (candidates, _) = multiSplit d d . concat . permutations
+                           $ withSomeVect ++ fmap negateV withSomeVect
+       d = subbasisDimension (entireBasis :: SubBasis v)
+       seekExtreme [] = zeroV
+       seekExtreme ((dv, v) : cs)
+           = vn ^+^ seekExtreme [(dw, w ^-^ vn^*(dv<.>^w)) | (dw, w) <- cs]
+        where vn = v ^/ dv<.>^v
+       
 linearRegressionW :: ∀ s x m y
     . ( LinearSpace x, SimpleSpace y, SimpleSpace m
       , Scalar x ~ s, Scalar y ~ s, Scalar m ~ s, RealFrac' s )
