@@ -233,6 +233,10 @@ dualBasis vs = snd <$> result
        lookupArr = Arr.fromList vs
        n = Arr.length lookupArr
 
+dualBasis' :: ∀ v . (LinearSpace v, SemiInner (DualVector v), RealFrac' (Scalar v))
+                => [DualVector v] -> [Maybe v]
+dualBasis' = case dualSpaceWitness :: DualSpaceWitness v of
+      DualSpaceWitness -> dualBasis
 
 zipTravWith :: Hask.Traversable t => (a->b->c) -> t a -> [b] -> Maybe (t c)
 zipTravWith f = evalStateT . Hask.traverse zp
