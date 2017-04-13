@@ -59,7 +59,9 @@ module Math.LinearMap.Category (
             , densifyNorm, wellDefinedNorm
             -- * Solving linear equations
             , (\$), pseudoInverse, roughDet
-            , linearRegressionW, linearRegressionWExtremeVar
+            , linearRegressionW, linearRegression
+            , LinearRegressionResult
+            , linearFit_χν², linearFit_bestModel, linearFit_modelUncertainty 
             -- * Eigenvalue problems
             , eigen
             , constructEigenSystem
@@ -750,43 +752,66 @@ deinterlacions l = l : deinterlacions (e ++ map negateV o)
        deinterlace (a:b:xs) = (a:)***(b:) $ deinterlace xs
        deinterlace xs = ([],xs)
        
+-- | Simple wrapper of 'linearRegression'.
 linearRegressionW :: ∀ s x m y
     . ( LinearSpace x, SimpleSpace y, SimpleSpace m
       , Scalar x ~ s, Scalar y ~ s, Scalar m ~ s, RealFrac' s )
          => Norm y -> (x -> (m +> y)) -> [(x,y)] -> m
-linearRegressionW σy modelMap = fst . linearRegressionWExtremeVar modelMap . map (second (,σy))
+linearRegressionW σy modelMap = linearFit_bestModel
+                                   . linearRegression modelMap . map (second (,σy))
+
+data LinearRegressionResult x y m = LinearRegressionResult {
+          linearFit_χν² :: Scalar m 
+           -- ^ How well the data uncertainties match the deviations from the model's
+           --   synthetic data.
+           -- @
+           -- χν² = 1/ν · ∑ δy² / σy²
+           -- @
+           --   Where @ν@ is the number of degrees of freedom (data values minus model
+           --   parameters), @δy = m x - yd@ is the deviation from given data to
+           --   the data the model would predict (for each sample point), and @σy@ is
+           --   the a-priori measurement uncertainty of the data points. 
+           -- 
+           --   Values @χν²>1@ indicate that the data could not be described satisfyingly;
+           --   @χν²≪1@ suggests overfitting or that the data uncertainties have
+           --   been postulated too high.
+           -- 
+           -- <http://adsabs.harvard.edu/abs/1997ieas.book.....T>
+        , linearFit_bestModel :: m
+           -- ^ The model that best corresponds to the data, in a least-squares
+           --   sense WRT the supplied norm on the data points. In other words,
+           --   this is the model that minimises @∑ δy² / σy²@.
+        , linearFit_modelUncertainty :: Norm m
+        }
 
 linearRegressionWVar :: ∀ s x m y
     . ( LinearSpace x, FiniteDimensional y, SimpleSpace m
       , Scalar x ~ s, Scalar y ~ s, Scalar m ~ s, RealFrac' s )
          => (x -> (m +> y)) -> [(x, (y, Norm y))] -> (m, [DualVector m])
-linearRegressionWVar = undefined
+linearRegressionWVar = case True of False -> undefined
 
-linearRegressionWExtremeVar :: ∀ s x m y
+linearRegression :: ∀ s x m y
     . ( LinearSpace x, SimpleSpace y, SimpleSpace m
       , Scalar x ~ s, Scalar y ~ s, Scalar m ~ s, RealFrac' s )
-         => (x -> (m +> y)) -> [(x, (y, Norm y))] -> (m, [DualVector m])
-linearRegressionWExtremeVar = lrw (dualSpaceWitness, dualSpaceWitness)
+         => (x -> (m +> y)) -> [(x, (y, Norm y))] -> LinearRegressionResult x y m
+linearRegression = lrw (dualSpaceWitness, dualSpaceWitness)
  where lrw :: (DualSpaceWitness y, DualSpaceWitness m)
-                -> (x -> (m +> y)) -> [(x, (y, Norm y))] -> (m, [DualVector m])
+                -> (x -> (m +> y)) -> [(x, (y, Norm y))] -> LinearRegressionResult x y m
        lrw (DualSpaceWitness, DualSpaceWitness) modelMap dataxy
-         = ( leastSquareSol, deviations )
+         = LinearRegressionResult (χ²/fromIntegral ν) leastSquareSol σm
         where leastSquareSol = (lfun $ forward' . zipWith ((<$|) . snd . snd) dataxy
                                           . forward)
                                  \$ forward' [σy<$|y | (_,(y,σy)) <- dataxy]
+              χ² = sum [normSq σy δy | (x, (yd, σy)) <- dataxy
+                                     , let δy = yd ^-^ (modelMap x $ leastSquareSol) ]
+              ν = length dataxy - subbasisDimension (entireBasis :: SubBasis m)
               forward :: m -> [y]
               forward m = [modelMap x $ m | (x,_)<-dataxy]
               forward' :: [DualVector y] -> DualVector m
-              forward' = sumV . zipWith ($) modelGens
-              modelGens :: [DualVector y +> DualVector m]
-              modelGens = ((adjoint$) . modelMap . fst)<$>dataxy
-              deviations :: [DualVector m]
-              deviations = [ m $ dy ^/ ψ | ((x,(yd,σy)),m) <- zip dataxy modelGens
-                                         , let ym = modelMap x $ leastSquareSol
-                                               δy = yd ^-^ ym
-                                         , (eεy, dεy) <- normSpanningSystems σy
-                                         , let eδy = δy ^+^ eεy^*signum (dεy<.>^δy)
-                                               dy = σy<$|eδy
-                                               ψ = dy<.>^δy
-                           ]
+              forward' = sumV . zipWith (($) . snd) modelGens
+              modelGens :: [(m +> y, DualVector y +> DualVector m)]
+              modelGens = ((id&&&arr adjoint) . modelMap . fst)<$>dataxy
+              σm :: Norm m
+              σm = mconcat [ Norm . arr $ m . (fmap ny $ m')
+                           | ((_,(_,Norm ny)), (m',m)) <- zip dataxy modelGens ]
                   
