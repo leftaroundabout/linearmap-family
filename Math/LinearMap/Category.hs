@@ -807,7 +807,8 @@ linearRegression = lrw (dualSpaceWitness, dualSpaceWitness)
                                  \$ forward' [σy<$|y | (_,(y,σy)) <- dataxy]
               χ² = sum [normSq σy δy | (x, (yd, σy)) <- dataxy
                                      , let δy = yd ^-^ (modelMap x $ leastSquareSol) ]
-              ν = length dataxy - subbasisDimension (entireBasis :: SubBasis m)
+              ν = length dataxy * subbasisDimension (entireBasis :: SubBasis y)
+                  - subbasisDimension (entireBasis :: SubBasis m)
               forward :: m -> [y]
               forward m = [modelMap x $ m | (x,_)<-dataxy]
               forward' :: [DualVector y] -> DualVector m
