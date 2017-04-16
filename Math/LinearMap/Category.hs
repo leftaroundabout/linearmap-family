@@ -777,6 +777,9 @@ data LinearRegressionResult x y m = LinearRegressionResult {
            --   been postulated too high.
            -- 
            -- <http://adsabs.harvard.edu/abs/1997ieas.book.....T>
+           -- 
+           --   If the model is exactly determined or even underdetermined (i.e. @ν≤0@)
+           --   then @χν²@ is undefined.
         , linearFit_bestModel :: m
            -- ^ The model that best corresponds to the data, in a least-squares
            --   sense WRT the supplied norm on the data points. In other words,
