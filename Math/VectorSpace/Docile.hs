@@ -776,7 +776,9 @@ instance ∀ s v .
         squareV v
           : [ (squareV (v^+^w) ^-^ squareV v ^-^ squareV w) ^* sqrt¹₂ | w <- vs ]
    where sqrt¹₂ = sqrt 0.5
-  subbasisDimension (SymTensBasis b) = ((n-1)*n)`quot`2
+  subbasisDimension (SymTensBasis b) = (n*(n+1))`quot`2
+                           -- dim Sym(𝑘,𝑉) = nCr (dim 𝑉 + 𝑘 - 1, 𝑘)
+                           -- dim Sym(2,𝑉) = nCr (𝑛 + 1, 2) = 𝑛⋅(𝑛+1)/2
    where n = subbasisDimension b
   decomposeLinMap = dclm dualSpaceWitness
    where dclm (DualSpaceWitness :: DualSpaceWitness v) (LinearMap f)
