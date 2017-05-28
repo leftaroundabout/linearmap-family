@@ -43,6 +43,8 @@ import Math.Manifold.Core.PseudoAffine
 import Math.LinearMap.Asserted
 import Math.VectorSpace.ZeroDimensional
 
+import qualified GHC.Generics as Gnrx
+
 data ClosedScalarWitness s where
   ClosedScalarWitness :: (Scalar s ~ s, DualVector s ~ s) => ClosedScalarWitness s
 
@@ -289,6 +291,17 @@ fromLinearMap :: ∀ s v w . (LinearSpace v, Scalar v ~ s)
            => Coercion (LinearMap s (DualVector v) w) (Tensor s v w)
 fromLinearMap = case dualSpaceWitness :: DualSpaceWitness v of
                 DualSpaceWitness -> Coercion
+
+
+pseudoFmapTensorLHS :: (TensorProduct v w ~ TensorProduct v' w)
+           => c v v' -> Coercion (Tensor s v w) (Tensor s v' w)
+pseudoFmapTensorLHS _ = Coercion
+
+envTensorLHSCoercion :: ( TensorProduct v w ~ TensorProduct v' w
+                        , TensorProduct v w' ~ TensorProduct v' w' )
+           => c v v' -> LinearFunction s' (Tensor s v w) (Tensor s v w')
+                     -> LinearFunction s' (Tensor s v' w) (Tensor s v' w')
+envTensorLHSCoercion i (LinearFunction f) = LinearFunction $ coerce f
 
 -- | Infix synonym for 'LinearMap', without explicit mention of the scalar type.
 type v +> w = LinearMap (Scalar v) v w
@@ -1031,4 +1044,49 @@ lfun :: ( EnhancedCat f (LinearFunction s)
         , Object f u, Object f v ) => (u->v) -> f u v
 lfun = arr . LinearFunction
 
+
+genericTensorspaceError :: a
+genericTensorspaceError = error "GHC.Generics types can not be used as tensor spaces."
+
+instance ∀ v s . TensorSpace v => TensorSpace (Gnrx.Rec0 v s) where
+  type TensorProduct (Gnrx.Rec0 v s) w = TensorProduct v w
+  wellDefinedVector = fmap Gnrx.K1 . wellDefinedVector . Gnrx.unK1
+  wellDefinedTensor = arr (fmap $ pseudoFmapTensorLHS Gnrx.K1)
+                         . wellDefinedTensor . arr (pseudoFmapTensorLHS Gnrx.unK1)
+  scalarSpaceWitness = genericTensorspaceError
+  linearManifoldWitness = genericTensorspaceError
+  zeroTensor = pseudoFmapTensorLHS Gnrx.K1 $ zeroTensor
+  toFlatTensor = LinearFunction $ Gnrx.unK1 >>> getLinearFunction toFlatTensor
+                   >>> arr (pseudoFmapTensorLHS Gnrx.K1)
+  fromFlatTensor = LinearFunction $ Gnrx.K1 <<< getLinearFunction fromFlatTensor
+                   <<< arr (pseudoFmapTensorLHS Gnrx.unK1)
+  addTensors (Tensor s) (Tensor t)
+       = pseudoFmapTensorLHS Gnrx.K1 $ addTensors (Tensor s) (Tensor t)
+  scaleTensor = LinearFunction $ \μ -> envTensorLHSCoercion Gnrx.K1
+                                         $ scaleTensor-+$>μ
+  negateTensor = envTensorLHSCoercion Gnrx.K1 negateTensor
+  tensorProduct = bilinearFunction $ \(Gnrx.K1 v) w
+                      -> pseudoFmapTensorLHS Gnrx.K1
+                           $ (tensorProduct-+$>v)-+$>w
+  transposeTensor = tT
+   where tT :: ∀ w . (TensorSpace w, Scalar w ~ Scalar v)
+                => (Gnrx.Rec0 v s ⊗ w) -+> (w ⊗ Gnrx.Rec0 v s)
+         tT = LinearFunction
+           $ arr (Coercion . coerceFmapTensorProduct ([]::[w])
+                                    (Coercion :: Coercion v (Gnrx.Rec0 v s)) . Coercion)
+              . getLinearFunction transposeTensor . arr (pseudoFmapTensorLHS Gnrx.unK1)
+  fmapTensor = LinearFunction $
+         \f -> envTensorLHSCoercion Gnrx.K1 (fmapTensor-+$>f)
+  fzipTensorWith = bilinearFunction $
+         \f (wt, xt) -> pseudoFmapTensorLHS Gnrx.K1
+                        $ (fzipTensorWith-+$>f)
+                         -+$>( pseudoFmapTensorLHS Gnrx.unK1 $ wt
+                             , pseudoFmapTensorLHS Gnrx.unK1 $ xt )
+  coerceFmapTensorProduct = cmtp
+   where cmtp :: ∀ p a b . Hask.Functor p
+             => p (Gnrx.Rec0 v s) -> Coercion a b
+               -> Coercion (TensorProduct (Gnrx.Rec0 v s) a)
+                           (TensorProduct (Gnrx.Rec0 v s) b)
+         cmtp p crc = case coerceFmapTensorProduct ([]::[v]) crc of
+                  Coercion -> Coercion
 

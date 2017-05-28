@@ -47,7 +47,7 @@ library
                        Math.VectorSpace.Docile
   other-extensions:    FlexibleInstances, UndecidableInstances, FunctionalDependencies, TypeOperators, TypeFamilies
   build-depends:       base >=4.8 && <5,
-                       vector-space >=0.10 && <0.11,
+                       vector-space >0.10.4 && <0.12,
                        constrained-categories >=0.3 && <0.4,
                        containers, vector,
                        tagged,
