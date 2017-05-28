@@ -53,7 +53,7 @@ library
                        tagged,
                        free-vector-spaces >= 0.1.2 && < 0.2,
                        linear, lens, transformers,
-                       manifolds-core >= 0.4 && < 0.5,
+                       manifolds-core >= 0.4.3 && < 0.5,
                        semigroups,
                        ieee754 >= 0.7 && < 0.9
   -- hs-source-dirs:      
