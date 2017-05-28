@@ -1090,3 +1090,47 @@ instance ∀ v s . TensorSpace v => TensorSpace (Gnrx.Rec0 v s) where
          cmtp p crc = case coerceFmapTensorProduct ([]::[v]) crc of
                   Coercion -> Coercion
 
+instance ∀ i c f p . TensorSpace (f p) => TensorSpace (Gnrx.M1 i c f p) where
+  type TensorProduct (Gnrx.M1 i c f p) w = TensorProduct (f p) w
+  wellDefinedVector = fmap Gnrx.M1 . wellDefinedVector . Gnrx.unM1
+  wellDefinedTensor = arr (fmap $ pseudoFmapTensorLHS Gnrx.M1)
+                         . wellDefinedTensor . arr (pseudoFmapTensorLHS Gnrx.unM1)
+  scalarSpaceWitness = genericTensorspaceError
+  linearManifoldWitness = genericTensorspaceError
+  zeroTensor = pseudoFmapTensorLHS Gnrx.M1 $ zeroTensor
+  toFlatTensor = LinearFunction $ Gnrx.unM1 >>> getLinearFunction toFlatTensor
+                   >>> arr (pseudoFmapTensorLHS Gnrx.M1)
+  fromFlatTensor = LinearFunction $ Gnrx.M1 <<< getLinearFunction fromFlatTensor
+                   <<< arr (pseudoFmapTensorLHS Gnrx.unM1)
+  addTensors (Tensor s) (Tensor t)
+       = pseudoFmapTensorLHS Gnrx.M1 $ addTensors (Tensor s) (Tensor t)
+  scaleTensor = LinearFunction $ \μ -> envTensorLHSCoercion Gnrx.M1
+                                         $ scaleTensor-+$>μ
+  negateTensor = envTensorLHSCoercion Gnrx.M1 negateTensor
+  tensorProduct = bilinearFunction $ \(Gnrx.M1 v) w
+                      -> pseudoFmapTensorLHS Gnrx.M1
+                           $ (tensorProduct-+$>v)-+$>w
+  transposeTensor = tT
+   where tT :: ∀ w . (TensorSpace w, Scalar w ~ Scalar (f p))
+                => (Gnrx.M1 i c f p ⊗ w) -+> (w ⊗ Gnrx.M1 i c f p)
+         tT = LinearFunction
+           $ arr (Coercion . coerceFmapTensorProduct ([]::[w])
+                                (Coercion :: Coercion (f p) (Gnrx.M1 i c f p)) . Coercion)
+              . getLinearFunction transposeTensor . arr (pseudoFmapTensorLHS Gnrx.unM1)
+  fmapTensor = LinearFunction $
+         \f -> envTensorLHSCoercion Gnrx.M1 (fmapTensor-+$>f)
+  fzipTensorWith = bilinearFunction $
+         \f (wt, xt) -> pseudoFmapTensorLHS Gnrx.M1
+                        $ (fzipTensorWith-+$>f)
+                         -+$>( pseudoFmapTensorLHS Gnrx.unM1 $ wt
+                             , pseudoFmapTensorLHS Gnrx.unM1 $ xt )
+  coerceFmapTensorProduct = cmtp
+   where cmtp :: ∀ ぴ a b . Hask.Functor ぴ
+             => ぴ (Gnrx.M1 i c f p) -> Coercion a b
+               -> Coercion (TensorProduct (Gnrx.M1 i c f p) a)
+                           (TensorProduct (Gnrx.M1 i c f p) b)
+         cmtp p crc = case coerceFmapTensorProduct ([]::[f p]) crc of
+                  Coercion -> Coercion
+
+
+
