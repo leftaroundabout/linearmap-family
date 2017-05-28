@@ -44,6 +44,7 @@ import Math.LinearMap.Asserted
 import Math.VectorSpace.ZeroDimensional
 
 import qualified GHC.Generics as Gnrx
+import GHC.Generics (Generic, (:*:)((:*:)))
 
 data ClosedScalarWitness s where
   ClosedScalarWitness :: (Scalar s ~ s, DualVector s ~ s) => ClosedScalarWitness s
@@ -1132,5 +1133,43 @@ instance ∀ i c f p . TensorSpace (f p) => TensorSpace (Gnrx.M1 i c f p) where
          cmtp p crc = case coerceFmapTensorProduct ([]::[f p]) crc of
                   Coercion -> Coercion
 
+instance ∀ f g p . ( TensorSpace (f p), TensorSpace (g p), Scalar (f p) ~ Scalar (g p) )
+                       => TensorSpace ((f:*:g) p) where
+  type TensorProduct ((f:*:g) p) w = (f p⊗w, g p⊗w)
+  scalarSpaceWitness = case ( scalarSpaceWitness :: ScalarSpaceWitness (f p)
+                            , scalarSpaceWitness :: ScalarSpaceWitness (g p) ) of
+       (ScalarSpaceWitness, ScalarSpaceWitness) -> ScalarSpaceWitness
+  linearManifoldWitness = genericTensorspaceError
+  zeroTensor = Tensor (zeroTensor, zeroTensor)
+  scaleTensor = bilinearFunction $ \μ (Tensor (v,w)) ->
+                 Tensor ( (scaleTensor-+$>μ)-+$>v, (scaleTensor-+$>μ)-+$>w )
+  negateTensor = LinearFunction $ \(Tensor (v,w))
+          -> Tensor (negateTensor-+$>v, negateTensor-+$>w)
+  addTensors (Tensor (fu, fv)) (Tensor (fu', fv'))
+           = Tensor (fu ^+^ fu', fv ^+^ fv')
+  subtractTensors (Tensor (fu, fv)) (Tensor (fu', fv'))
+          = Tensor (fu ^-^ fu', fv ^-^ fv')
+  toFlatTensor = LinearFunction
+      $ \(u:*:v) -> Tensor (toFlatTensor-+$>u, toFlatTensor-+$>v)
+  fromFlatTensor = LinearFunction
+      $ \(Tensor (u,v)) -> (fromFlatTensor-+$>u):*:(fromFlatTensor-+$>v)
+  tensorProduct = bilinearFunction $ \(u:*:v) w ->
+      Tensor ((tensorProduct-+$>u)-+$>w, (tensorProduct-+$>v)-+$>w)
+  transposeTensor = LinearFunction $ \(Tensor (uw,vw))
+        -> (fzipTensorWith-+$>LinearFunction (\(u,v)->u:*:v))
+             -+$>(transposeTensor-+$>uw,transposeTensor-+$>vw)
+  fmapTensor = bilinearFunction $
+     \f (Tensor (uw,vw)) -> Tensor ((fmapTensor-+$>f)-+$>uw, (fmapTensor-+$>f)-+$>vw)
+  fzipTensorWith = bilinearFunction
+               $ \f (Tensor (uw, vw), Tensor (ux, vx))
+                      -> Tensor ( (fzipTensorWith-+$>f)-+$>(uw,ux)
+                                , (fzipTensorWith-+$>f)-+$>(vw,vx) )
+  coerceFmapTensorProduct p cab = case
+             ( coerceFmapTensorProduct ((\(u:*:_)->u)<$>p) cab
+             , coerceFmapTensorProduct ((\(_:*:v)->v)<$>p) cab ) of
+          (Coercion, Coercion) -> Coercion
+  wellDefinedVector (u:*:v) = liftA2 (:*:) (wellDefinedVector u) (wellDefinedVector v)
+  wellDefinedTensor (Tensor (u,v))
+         = liftA2 ((Tensor.) . (,)) (wellDefinedTensor u) (wellDefinedTensor v)
 
 
