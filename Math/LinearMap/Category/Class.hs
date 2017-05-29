@@ -21,6 +21,7 @@
 {-# LANGUAGE UnicodeSyntax              #-}
 {-# LANGUAGE TupleSections              #-}
 {-# LANGUAGE StandaloneDeriving         #-}
+{-# LANGUAGE DeriveGeneric              #-}
 {-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE DefaultSignatures          #-}
 
@@ -1251,3 +1252,188 @@ instance (LinearSpace v, Num (Scalar v)) => LinearSpace (Gnrx.Rec0 v s) where
   applyTensorLinMap = bilinearFunction $ \(LinearMap f) t
                 -> (applyTensorLinMap-+$>LinearMap f)-+$>pseudoFmapTensorLHS Gnrx.unK1 $ t
 
+instance (LinearSpace (f p), Num (Scalar (f p))) => LinearSpace (Gnrx.M1 i c f p) where
+  type DualVector (Gnrx.M1 i c f p) = DualVector (f p)
+  dualSpaceWitness = genericTensorspaceError
+  linearId = pseudoPrecomposeLinmap Gnrx.unM1
+                . fmap (follow Gnrx.M1) $ linearId
+  applyDualVector = bilinearFunction $ \dv (Gnrx.M1 v) -> (applyDualVector-+$>dv)-+$>v
+  applyLinear = bilinearFunction $ \(LinearMap f) (Gnrx.M1 v)
+                      -> (applyLinear-+$>LinearMap f)-+$>v
+  tensorId = pseudoPrecomposeLinmap (pseudoFmapTensorLHS Gnrx.unM1)
+                . fmap (pseudoFmapTensorLHS Gnrx.M1) $ tensorId
+  applyTensorFunctional = bilinearFunction $ \(LinearMap f) t ->
+              (applyTensorFunctional-+$>LinearMap f)-+$>pseudoFmapTensorLHS Gnrx.unM1 $ t
+  applyTensorLinMap = bilinearFunction $ \(LinearMap f) t
+                -> (applyTensorLinMap-+$>LinearMap f)-+$>pseudoFmapTensorLHS Gnrx.unM1 $ t
+
+data GenericTupleDual f g p
+    = GenericTupleDual !(DualVector (f p)) !(DualVector (g p)) deriving (Generic)
+instance (AdditiveGroup (DualVector (f p)), AdditiveGroup (DualVector (g p)))
+    => AdditiveGroup (GenericTupleDual f g p)
+instance ( VectorSpace (DualVector (f p)), VectorSpace (DualVector (g p))
+         , Scalar (DualVector (f p)) ~ Scalar (DualVector (g p)) )
+    => VectorSpace (GenericTupleDual f g p)
+instance ( InnerSpace (DualVector (f p)), InnerSpace (DualVector (g p))
+         , Scalar (DualVector (f p)) ~ Scalar (DualVector (g p))
+         , Num (Scalar (DualVector (f p))) )
+    => InnerSpace (GenericTupleDual f g p)
+instance (AdditiveGroup (DualVector (f p)), AdditiveGroup (DualVector (g p)))
+    => AffineSpace (GenericTupleDual f g p) where
+  type Diff (GenericTupleDual f g p) = GenericTupleDual f g p
+  (.+^) = (^+^)
+  (.-.) = (^-^)
+instance (AdditiveGroup (DualVector (f p)), AdditiveGroup (DualVector (g p)))
+    => Semimanifold (GenericTupleDual f g p) where
+  type Needle (GenericTupleDual f g p) = GenericTupleDual f g p
+  (.+~^) = (^+^)
+  fromInterior = id
+  toInterior = pure
+  translateP = Tagged (^+^)
+instance (AdditiveGroup (DualVector (f p)), AdditiveGroup (DualVector (g p)))
+    => PseudoAffine (GenericTupleDual f g p) where
+  p.-~.q = Just $ p.-.q
+  (.-~!) = (.-.)
+
+instance ( LinearSpace (f p), LinearSpace (g p)
+         , VectorSpace (DualVector (f p)), VectorSpace (DualVector (g p))
+         , Scalar (f p) ~ Scalar (DualVector (f p))
+         , Scalar (g p) ~ Scalar (DualVector (g p))
+         , Scalar (DualVector (f p)) ~ Scalar (DualVector (g p)) )
+    => TensorSpace (GenericTupleDual f g p) where
+  type TensorProduct (GenericTupleDual f g p) w = (f p+>w, g p+>w)
+  wellDefinedVector = case ( dualSpaceWitness :: DualSpaceWitness (f p)
+                           , dualSpaceWitness :: DualSpaceWitness (g p) ) of
+      (DualSpaceWitness, DualSpaceWitness)
+       -> \(GenericTupleDual fv gv)
+           -> liftA2 GenericTupleDual (wellDefinedVector fv) (wellDefinedVector gv)
+  wellDefinedTensor = case ( dualSpaceWitness :: DualSpaceWitness (f p)
+                           , dualSpaceWitness :: DualSpaceWitness (g p) ) of
+      (DualSpaceWitness, DualSpaceWitness)
+       -> \(Tensor (ft, gt))
+        -> Tensor <$> liftA2 (,) (fmap fromTensor $ wellDefinedTensor (fromLinearMap $ ft))
+                                 (fmap fromTensor $ wellDefinedTensor (fromLinearMap $ gt))
+  scalarSpaceWitness = case scalarSpaceWitness :: ScalarSpaceWitness (f p) of
+        ScalarSpaceWitness -> ScalarSpaceWitness
+  linearManifoldWitness = LinearManifoldWitness BoundarylessWitness
+  zeroTensor = case ( linearManifoldWitness :: LinearManifoldWitness (f p)
+                    , dualSpaceWitness :: DualSpaceWitness (f p)
+                    , dualSpaceWitness :: DualSpaceWitness (g p) ) of
+       ( LinearManifoldWitness BoundarylessWitness
+        ,DualSpaceWitness, DualSpaceWitness )
+           -> Tensor (fromTensor $ zeroTensor, fromTensor $ zeroTensor)
+  toFlatTensor = case ( scalarSpaceWitness :: ScalarSpaceWitness (f p)
+                      , dualSpaceWitness :: DualSpaceWitness (f p)
+                      , dualSpaceWitness :: DualSpaceWitness (g p) ) of
+       (ScalarSpaceWitness, DualSpaceWitness, DualSpaceWitness)
+          -> LinearFunction $ \(GenericTupleDual tf tg)
+            -> Tensor ( toLinearForm $ tf, toLinearForm $ tg )
+  fromFlatTensor = case ( scalarSpaceWitness :: ScalarSpaceWitness (f p)
+                        , dualSpaceWitness :: DualSpaceWitness (f p)
+                        , dualSpaceWitness :: DualSpaceWitness (g p) ) of
+       (ScalarSpaceWitness, DualSpaceWitness, DualSpaceWitness)
+          -> LinearFunction $ \(Tensor (tf,tg))
+            -> GenericTupleDual (fromLinearForm $ tf) (fromLinearForm $ tg)
+  addTensors (Tensor (sf,sg)) (Tensor (tf,tg)) = Tensor (sf^+^tf, sg^+^tg)
+  negateTensor = LinearFunction $ \(Tensor (tf,tg))
+                   -> Tensor (negateV tf, negateV tg)
+  scaleTensor = bilinearFunction $ \μ (Tensor (tf,tg)) -> Tensor (μ*^tf, μ*^tg)
+  tensorProduct = case ( scalarSpaceWitness :: ScalarSpaceWitness (f p)
+                       , dualSpaceWitness :: DualSpaceWitness (f p)
+                       , dualSpaceWitness :: DualSpaceWitness (g p) ) of
+       (ScalarSpaceWitness, DualSpaceWitness, DualSpaceWitness)
+          -> bilinearFunction $ \(GenericTupleDual fw gw) x
+                   -> Tensor (fromTensor $ fw⊗x, fromTensor $ gw⊗x)
+  transposeTensor = case ( scalarSpaceWitness :: ScalarSpaceWitness (f p)
+                         , dualSpaceWitness :: DualSpaceWitness (f p)
+                         , dualSpaceWitness :: DualSpaceWitness (g p) ) of
+       (ScalarSpaceWitness, DualSpaceWitness, DualSpaceWitness)
+          -> LinearFunction $ \(Tensor (fw, gw))
+                     -> (fzipTensorWith-+$>LinearFunction`id`uncurry GenericTupleDual)
+                       -+$> ( transposeTensor-+$>asTensor $ fw
+                            , transposeTensor-+$>asTensor $ gw )
+  fmapTensor = case ( scalarSpaceWitness :: ScalarSpaceWitness (f p)
+                    , dualSpaceWitness :: DualSpaceWitness (f p)
+                    , dualSpaceWitness :: DualSpaceWitness (g p) ) of
+       (ScalarSpaceWitness, DualSpaceWitness, DualSpaceWitness)
+          -> bilinearFunction $ \f (Tensor (fw, gw))
+                 -> Tensor ( fromTensor $ (fmapTensor-+$>f) -+$> asTensor $ fw
+                           , fromTensor $ (fmapTensor-+$>f) -+$> asTensor $ gw )
+  fzipTensorWith = case ( scalarSpaceWitness :: ScalarSpaceWitness (f p)
+                        , dualSpaceWitness :: DualSpaceWitness (f p)
+                        , dualSpaceWitness :: DualSpaceWitness (g p) ) of
+       (ScalarSpaceWitness, DualSpaceWitness, DualSpaceWitness)
+          -> bilinearFunction $ \f (Tensor (fw, gw), Tensor (fx, gx))
+                 -> Tensor ( fromTensor $ (fzipTensorWith-+$>f) -+$> ( asTensor $ fw
+                                                                     , asTensor $ fx )
+                           , fromTensor $ (fzipTensorWith-+$>f) -+$> ( asTensor $ gw
+                                                                     , asTensor $ gx ) )
+  coerceFmapTensorProduct p cab = case ( dualSpaceWitness :: DualSpaceWitness (f p)
+                                       , dualSpaceWitness :: DualSpaceWitness (g p) ) of
+       (DualSpaceWitness, DualSpaceWitness) -> case
+             ( coerceFmapTensorProduct ((\(GenericTupleDual u _)->u)<$>p) cab
+             , coerceFmapTensorProduct ((\(GenericTupleDual _ v)->v)<$>p) cab ) of
+          (Coercion, Coercion) -> Coercion
+  
+
+
+instance ∀ f g p . ( LinearSpace (f p), LinearSpace (g p), Scalar (f p) ~ Scalar (g p) )
+                       => LinearSpace ((f:*:g) p) where
+  type DualVector ((f:*:g) p) = GenericTupleDual f g p
+  
+  dualSpaceWitness = genericTensorspaceError
+  linearId = case ( scalarSpaceWitness :: ScalarSpaceWitness (f p)
+                  , dualSpaceWitness :: DualSpaceWitness (f p)
+                  , dualSpaceWitness :: DualSpaceWitness (g p) ) of
+       (ScalarSpaceWitness, DualSpaceWitness, DualSpaceWitness)
+             -> LinearMap ( arr $ LinearFunction (\vf->(vf:*:zeroV))
+                          , arr $ LinearFunction (\vg->(zeroV:*:vg)) )
+  tensorId = tI scalarSpaceWitness dualSpaceWitness dualSpaceWitness dualSpaceWitness
+   where tI :: ∀ w . (LinearSpace w, Scalar w ~ Scalar (f p))
+                 => ScalarSpaceWitness (f p) -> DualSpaceWitness (f p)
+                     -> DualSpaceWitness (g p) -> DualSpaceWitness w
+                       -> (((f:*:g) p)⊗w)+>(((f:*:g) p)⊗w)
+         tI ScalarSpaceWitness DualSpaceWitness DualSpaceWitness DualSpaceWitness 
+              = LinearMap
+            ( arr $ LinearFunction (\vf -> asTensor
+             $ arr (LinearFunction $ \w -> Tensor (vf⊗w, zeroV)))
+            , arr $ LinearFunction (\vg -> asTensor
+             $ arr (LinearFunction $ \w -> Tensor (zeroV, vg⊗w))) )
+  sampleLinearFunction = case ( scalarSpaceWitness :: ScalarSpaceWitness (f p)
+                              , dualSpaceWitness :: DualSpaceWitness (f p)
+                              , dualSpaceWitness :: DualSpaceWitness (g p) ) of
+       (ScalarSpaceWitness, DualSpaceWitness, DualSpaceWitness)
+              -> LinearFunction $ \f -> LinearMap
+                   ( sampleLinearFunction -+$> LinearFunction`id`
+                       \vf -> f -+$> (vf:*:zeroV)
+                   , sampleLinearFunction -+$> LinearFunction`id`
+                       \vg -> f -+$> (zeroV:*:vg) )
+  applyDualVector = case ( scalarSpaceWitness :: ScalarSpaceWitness (f p)
+                         , dualSpaceWitness :: DualSpaceWitness (f p)
+                         , dualSpaceWitness :: DualSpaceWitness (g p) ) of
+       (ScalarSpaceWitness, DualSpaceWitness, DualSpaceWitness)
+              -> bilinearFunction $ \(GenericTupleDual du dv) (u:*:v)
+                      -> ((applyDualVector-+$>du)-+$>u) ^+^ ((applyDualVector-+$>dv)-+$>v)
+  applyLinear = case ( scalarSpaceWitness :: ScalarSpaceWitness (f p)
+                     , dualSpaceWitness :: DualSpaceWitness (f p)
+                     , dualSpaceWitness :: DualSpaceWitness (g p) ) of
+       (ScalarSpaceWitness, DualSpaceWitness, DualSpaceWitness)
+              -> bilinearFunction $ \(LinearMap (fu, fv)) (u:*:v)
+                      -> ((applyLinear-+$>fu)-+$>u) ^+^ ((applyLinear-+$>fv)-+$>v)
+  composeLinear = case ( dualSpaceWitness :: DualSpaceWitness (f p)
+                       , dualSpaceWitness :: DualSpaceWitness (g p) ) of
+       (DualSpaceWitness, DualSpaceWitness)
+              -> bilinearFunction $ \f (LinearMap (fu, fv))
+                    -> LinearMap ( (composeLinear-+$>f)-+$>fu
+                                 , (composeLinear-+$>f)-+$>fv )
+  applyTensorFunctional = case ( dualSpaceWitness :: DualSpaceWitness (f p)
+                               , dualSpaceWitness :: DualSpaceWitness (g p) ) of
+     (DualSpaceWitness, DualSpaceWitness) -> bilinearFunction $
+                  \(LinearMap (fu,fv)) (Tensor (tu,tv))
+          -> ((applyTensorFunctional-+$>fu)-+$>tu) + ((applyTensorFunctional-+$>fu)-+$>tu)
+  applyTensorLinMap = case ( dualSpaceWitness :: DualSpaceWitness (f p)
+                           , dualSpaceWitness :: DualSpaceWitness (g p) ) of
+     (DualSpaceWitness, DualSpaceWitness) -> bilinearFunction`id`
+             \(LinearMap (fu,fv)) (Tensor (tu,tv))
+          -> ((applyTensorLinMap -+$> uncurryLinearMap . fmap fromTensor $ fu)-+$>tu)
+           ^+^ ((applyTensorLinMap -+$> uncurryLinearMap . fmap fromTensor $ fv)-+$>tv)
