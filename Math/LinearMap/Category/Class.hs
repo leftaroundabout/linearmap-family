@@ -298,11 +298,22 @@ pseudoFmapTensorLHS :: (TensorProduct v w ~ TensorProduct v' w)
            => c v v' -> Coercion (Tensor s v w) (Tensor s v' w)
 pseudoFmapTensorLHS _ = Coercion
 
+pseudoPrecomposeLinmap :: (TensorProduct (DualVector v) w ~ TensorProduct (DualVector v') w)
+           => c v' v -> Coercion (LinearMap s v w) (LinearMap s v' w)
+pseudoPrecomposeLinmap _ = Coercion
+
 envTensorLHSCoercion :: ( TensorProduct v w ~ TensorProduct v' w
                         , TensorProduct v w' ~ TensorProduct v' w' )
            => c v v' -> LinearFunction s' (Tensor s v w) (Tensor s v w')
                      -> LinearFunction s' (Tensor s v' w) (Tensor s v' w')
 envTensorLHSCoercion i (LinearFunction f) = LinearFunction $ coerce f
+
+envLinmapPrecomposeCoercion
+       :: ( TensorProduct (DualVector v) w ~ TensorProduct (DualVector v') w
+          , TensorProduct (DualVector v) w' ~ TensorProduct (DualVector v') w' )
+           => c v' v -> LinearFunction s' (LinearMap s v w) (LinearMap s v w')
+                     -> LinearFunction s' (LinearMap s v' w) (LinearMap s v' w')
+envLinmapPrecomposeCoercion i (LinearFunction f) = LinearFunction $ coerce f
 
 -- | Infix synonym for 'LinearMap', without explicit mention of the scalar type.
 type v +> w = LinearMap (Scalar v) v w
@@ -1226,5 +1237,17 @@ instance ∀ m . ( Semimanifold m, TensorSpace (Needle (Gnrx.Rep m ()))
                   Coercion -> Coercion
 
 instance (LinearSpace v, Num (Scalar v)) => LinearSpace (Gnrx.Rec0 v s) where
-  type DualVector (Gnrx.Rec0 v s) = 
+  type DualVector (Gnrx.Rec0 v s) = DualVector v
+  dualSpaceWitness = genericTensorspaceError
+  linearId = pseudoPrecomposeLinmap Gnrx.unK1
+                . fmap (follow Gnrx.K1) $ linearId
+  applyDualVector = bilinearFunction $ \dv (Gnrx.K1 v) -> (applyDualVector-+$>dv)-+$>v
+  applyLinear = bilinearFunction $ \(LinearMap f) (Gnrx.K1 v)
+                      -> (applyLinear-+$>LinearMap f)-+$>v
+  tensorId = pseudoPrecomposeLinmap (pseudoFmapTensorLHS Gnrx.unK1)
+                . fmap (pseudoFmapTensorLHS Gnrx.K1) $ tensorId
+  applyTensorFunctional = bilinearFunction $ \(LinearMap f) t ->
+              (applyTensorFunctional-+$>LinearMap f)-+$>pseudoFmapTensorLHS Gnrx.unK1 $ t
+  applyTensorLinMap = bilinearFunction $ \(LinearMap f) t
+                -> (applyTensorLinMap-+$>LinearMap f)-+$>pseudoFmapTensorLHS Gnrx.unK1 $ t
 
