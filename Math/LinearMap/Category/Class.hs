@@ -1437,3 +1437,142 @@ instance ∀ f g p . ( LinearSpace (f p), LinearSpace (g p), Scalar (f p) ~ Scal
              \(LinearMap (fu,fv)) (Tensor (tu,tv))
           -> ((applyTensorLinMap -+$> uncurryLinearMap . fmap fromTensor $ fu)-+$>tu)
            ^+^ ((applyTensorLinMap -+$> uncurryLinearMap . fmap fromTensor $ fv)-+$>tv)
+
+
+newtype GenericNeedle' m
+    = GenericNeedle' { getGenericNeedle' :: DualVector (Needle (Gnrx.Rep m ())) }
+        deriving (Generic)
+instance AdditiveGroup (DualVector (Needle (Gnrx.Rep m ())))
+      => AdditiveGroup (GenericNeedle' m)
+instance ( VectorSpace (DualVector (Needle (Gnrx.Rep m ())))
+         , Scalar (Needle m) ~ Scalar (DualVector (Needle (Gnrx.Rep m ()))) )
+      => VectorSpace (GenericNeedle' m) where
+  type Scalar (GenericNeedle' m) = Scalar (Needle m)
+instance AdditiveGroup (DualVector (Needle (Gnrx.Rep m ())))
+      => AffineSpace (GenericNeedle' m) where
+  type Diff (GenericNeedle' m) = GenericNeedle' m
+  (.-.) = (^-^)
+  (.+^) = (^+^)
+instance AdditiveGroup (DualVector (Needle (Gnrx.Rep m ())))
+    => Semimanifold (GenericNeedle' m) where
+  type Interior (GenericNeedle' m) = GenericNeedle' m
+  type Needle (GenericNeedle' m) = GenericNeedle' m
+  toInterior = pure
+  fromInterior = id
+  translateP = Tagged (^+^)
+  (.+~^) = (^+^)
+instance AdditiveGroup (DualVector (Needle (Gnrx.Rep m ())))
+    => PseudoAffine (GenericNeedle' m) where
+  p.-~.q = pure (p^-^q)
+  (.-~!) = (^-^)
+instance ∀ m . ( Semimanifold m, TensorSpace (DualVector (Needle (Gnrx.Rep m ())))
+               , Scalar (Needle m) ~ Scalar (DualVector (Needle (Gnrx.Rep m ()))) )
+                  => TensorSpace (GenericNeedle' m) where
+  type TensorProduct (GenericNeedle' m) w
+         = TensorProduct (DualVector (Needle (Gnrx.Rep m ()))) w
+  wellDefinedVector = fmap GenericNeedle' . wellDefinedVector . getGenericNeedle'
+  wellDefinedTensor = arr (fmap $ pseudoFmapTensorLHS GenericNeedle')
+                         . wellDefinedTensor . arr (pseudoFmapTensorLHS getGenericNeedle')
+  scalarSpaceWitness = case scalarSpaceWitness
+                    :: ScalarSpaceWitness (DualVector (Needle (Gnrx.Rep m ()))) of
+          ScalarSpaceWitness -> ScalarSpaceWitness
+  linearManifoldWitness = case linearManifoldWitness
+                    :: LinearManifoldWitness (DualVector (Needle (Gnrx.Rep m ()))) of
+          LinearManifoldWitness BoundarylessWitness
+              -> LinearManifoldWitness BoundarylessWitness
+  zeroTensor = pseudoFmapTensorLHS GenericNeedle' $ zeroTensor
+  toFlatTensor = LinearFunction $ arr (pseudoFmapTensorLHS GenericNeedle')
+                             . getLinearFunction toFlatTensor
+                             . getGenericNeedle'
+  fromFlatTensor = LinearFunction $ arr (pseudoFmapTensorLHS getGenericNeedle')
+                             >>> getLinearFunction fromFlatTensor
+                             >>> GenericNeedle'
+  addTensors (Tensor s) (Tensor t)
+       = pseudoFmapTensorLHS GenericNeedle' $ addTensors (Tensor s) (Tensor t)
+  scaleTensor = LinearFunction $ \μ -> envTensorLHSCoercion GenericNeedle'
+                                         $ scaleTensor-+$>μ
+  negateTensor = envTensorLHSCoercion GenericNeedle' negateTensor
+  tensorProduct = bilinearFunction $ \(GenericNeedle' v) w
+                      -> pseudoFmapTensorLHS GenericNeedle'
+                           $ (tensorProduct-+$>v)-+$>w
+  transposeTensor = tT
+   where tT :: ∀ w . (TensorSpace w, Scalar w ~ Scalar (Needle m))
+                => (GenericNeedle' m ⊗ w) -+> (w ⊗ GenericNeedle' m)
+         tT = LinearFunction
+           $ arr (Coercion . coerceFmapTensorProduct ([]::[w])
+                              (Coercion :: Coercion (DualVector (Needle (Gnrx.Rep m ())))
+                                                    (GenericNeedle' m)) . Coercion)
+              . getLinearFunction transposeTensor . arr (pseudoFmapTensorLHS getGenericNeedle')
+  fmapTensor = LinearFunction $
+         \f -> envTensorLHSCoercion GenericNeedle' (fmapTensor-+$>f)
+  fzipTensorWith = bilinearFunction $
+         \f (wt, xt) -> pseudoFmapTensorLHS GenericNeedle'
+                        $ (fzipTensorWith-+$>f)
+                         -+$>( pseudoFmapTensorLHS getGenericNeedle' $ wt
+                             , pseudoFmapTensorLHS getGenericNeedle' $ xt )
+  coerceFmapTensorProduct = cmtp
+   where cmtp :: ∀ p a b . Hask.Functor p
+             => p (GenericNeedle' m) -> Coercion a b
+               -> Coercion (TensorProduct (GenericNeedle' m) a)
+                           (TensorProduct (GenericNeedle' m) b)
+         cmtp p crc = case coerceFmapTensorProduct
+                              ([]::[DualVector (Needle (Gnrx.Rep m ()))]) crc of
+                  Coercion -> Coercion
+
+
+instance ∀ s m . ( Num' s
+                 , Semimanifold m, LinearSpace (Needle (Gnrx.Rep m ()))
+                 , Scalar (Needle m) ~ s
+                 , Scalar (Needle (Gnrx.Rep m ())) ~ s )
+                  => LinearSpace (GenericNeedle m) where
+  type DualVector (GenericNeedle m) = GenericNeedle' m
+  linearId = fmap (follow GenericNeedle) . pseudoPrecomposeLinmap getGenericNeedle
+               $ linearId
+  dualSpaceWitness = case ( closedScalarWitness :: ClosedScalarWitness s
+                          , dualSpaceWitness :: DualSpaceWitness (Needle (Gnrx.Rep m ())) ) of
+              (ClosedScalarWitness, DualSpaceWitness) -> DualSpaceWitness
+  applyDualVector = bilinearFunction $ \(GenericNeedle' dv) (GenericNeedle v)
+                        -> (applyDualVector-+$>dv)-+$>v
+  applyLinear = bilinearFunction $ \(LinearMap f) (GenericNeedle v)
+                      -> (applyLinear-+$>LinearMap f)-+$>v
+  tensorId = pseudoPrecomposeLinmap (pseudoFmapTensorLHS getGenericNeedle)
+                . fmap (pseudoFmapTensorLHS GenericNeedle) $ tensorId
+  applyTensorFunctional = bilinearFunction $ \(LinearMap f) t ->
+              (applyTensorFunctional-+$>LinearMap f)
+                 -+$>pseudoFmapTensorLHS getGenericNeedle $ t
+  applyTensorLinMap = bilinearFunction $ \(LinearMap f) t
+                -> (applyTensorLinMap-+$>LinearMap f)
+                    -+$>pseudoFmapTensorLHS getGenericNeedle $ t
+
+instance ∀ s m . ( Num' s
+                 , Semimanifold m
+                 , LinearSpace (Needle (Gnrx.Rep m ()))
+                 , TensorSpace (DualVector (Needle (Gnrx.Rep m ())))
+                 , Scalar (Needle m) ~ s
+                 , Scalar (Needle (Gnrx.Rep m ())) ~ s
+                 , Scalar (DualVector (Needle (Gnrx.Rep m ()))) ~ s )
+                  => LinearSpace (GenericNeedle' m) where
+  type DualVector (GenericNeedle' m) = GenericNeedle m
+  linearId = case dualSpaceWitness :: DualSpaceWitness (Needle (Gnrx.Rep m ())) of
+       DualSpaceWitness -> fmap (follow GenericNeedle')
+                         . pseudoPrecomposeLinmap getGenericNeedle' $ linearId
+  dualSpaceWitness = case ( closedScalarWitness :: ClosedScalarWitness s
+                          , dualSpaceWitness :: DualSpaceWitness (Needle (Gnrx.Rep m ())) ) of
+              (ClosedScalarWitness, DualSpaceWitness) -> DualSpaceWitness
+  applyDualVector = case dualSpaceWitness :: DualSpaceWitness (Needle (Gnrx.Rep m ())) of
+       DualSpaceWitness -> bilinearFunction $ \(GenericNeedle dv) (GenericNeedle' v)
+                        -> (applyDualVector-+$>dv)-+$>v
+  applyLinear = case dualSpaceWitness :: DualSpaceWitness (Needle (Gnrx.Rep m ())) of
+       DualSpaceWitness -> bilinearFunction $ \(LinearMap f) (GenericNeedle' v)
+                      -> (applyLinear-+$>LinearMap f)-+$>v
+  tensorId = case dualSpaceWitness :: DualSpaceWitness (Needle (Gnrx.Rep m ())) of
+       DualSpaceWitness -> pseudoPrecomposeLinmap (pseudoFmapTensorLHS getGenericNeedle')
+                . fmap (pseudoFmapTensorLHS GenericNeedle') $ tensorId
+  applyTensorFunctional = case dualSpaceWitness :: DualSpaceWitness (Needle (Gnrx.Rep m ())) of
+       DualSpaceWitness -> bilinearFunction $ \(LinearMap f) t ->
+              (applyTensorFunctional-+$>LinearMap f)
+                 -+$>pseudoFmapTensorLHS getGenericNeedle' $ t
+  applyTensorLinMap = case dualSpaceWitness :: DualSpaceWitness (Needle (Gnrx.Rep m ())) of
+       DualSpaceWitness -> bilinearFunction $ \(LinearMap f) t
+                -> (applyTensorLinMap-+$>LinearMap f)
+                    -+$>pseudoFmapTensorLHS getGenericNeedle' $ t
