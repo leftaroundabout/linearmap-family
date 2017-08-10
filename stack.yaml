@@ -7,6 +7,10 @@ packages:
 - location:
     git: https://github.com/leftaroundabout/free-vector-spaces.git
     commit: master
+- location:
+    git: https://github.com/conal/vector-space.git
+    commit: 261136006f19039a75e20f16d94c7c95a8dc6f42
 extra-deps:
-- manifolds-core-0.4.1.0
+- manifolds-core-0.4.3.0
+- vector-space-0.11
 resolver: lts-8.0
