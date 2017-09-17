@@ -2,6 +2,9 @@ flags: {}
 packages:
 - location: './'
 - location:
+    git: https://github.com/leftaroundabout/manifolds.git
+    commit: master
+- location:
     git: https://github.com/leftaroundabout/constrained-categories.git
     commit: master
 - location:
