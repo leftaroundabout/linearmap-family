@@ -1075,6 +1075,15 @@ instance Show (LinearMap ℝ (V1 ℝ) ℝ) where showsPrec = showsPrecAsRiesz
 instance Show (LinearMap ℝ (V2 ℝ) ℝ) where showsPrec = showsPrecAsRiesz
 instance Show (LinearMap ℝ (V3 ℝ) ℝ) where showsPrec = showsPrecAsRiesz
 instance Show (LinearMap ℝ (V4 ℝ) ℝ) where showsPrec = showsPrecAsRiesz
+instance ∀ s v w .
+         ( FiniteDimensional v, InnerSpace v, Show v
+         , FiniteDimensional w, InnerSpace w, Show w
+         , Scalar v ~ s, Scalar w ~ s
+         , HasBasis s, Basis s ~ () )
+         => Show (LinearMap s (v,w) s ) where
+  showsPrec = case ( dualSpaceWitness :: DualSpaceWitness v
+                   , dualSpaceWitness :: DualSpaceWitness w ) of
+      (DualSpaceWitness, DualSpaceWitness) -> showsPrecAsRiesz
 
 class TensorDecomposable u => RieszDecomposable u where
   rieszDecomposition :: (FiniteDimensional v, v ~ DualVector v, Scalar v ~ Scalar u)
