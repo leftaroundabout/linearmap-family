@@ -105,6 +105,7 @@ import Math.LinearMap.Category.Class
 import Math.LinearMap.Category.Instances
 import Math.LinearMap.Asserted
 import Math.VectorSpace.Docile
+import Math.LinearMap.Category.TensorQuot
 
 import Data.Tree (Tree(..), Forest)
 import Data.List (sortBy, foldl')
@@ -421,18 +422,6 @@ wellDefinedNorm :: ∀ v . LinearSpace v => Norm v -> Maybe (Norm v)
 wellDefinedNorm = case dualSpaceWitness :: DualSpaceWitness v of
     DualSpaceWitness
         -> \(Norm m) -> Norm <$> wellDefinedVector m
-
-
-infixl 7 ·
--- | Generalised multiplication operation. In any space, this subsumes '*^' and – for
---   scalars – therefore also '*'.
---   In a suitable 'InnerSpace', it also subsumes '<.>'. (“Suitable” are “homogeneous”
---   spaces such as 'V3', but not e.g. tuples.)
-(·) :: ∀ v w . (LinearSpace v, TensorSpace w, Scalar v ~ Scalar w)
-          => v -> TensorProduct (DualVector v) w -> w
-v·f = (applyLinear -+$> (LinearMap f :: v+>w)) -+$> v
-{-# INLINE (·) #-}
-
 
 data OrthonormalSystem v = OrthonormalSystem {
       orthonormalityNorm :: Norm v
