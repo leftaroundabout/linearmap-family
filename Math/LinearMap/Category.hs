@@ -82,7 +82,7 @@ module Math.LinearMap.Category (
             -- ** Tensors with basis decomposition
             , (.⊗)
             -- ** Hilbert space operations
-            , DualSpace, riesz, coRiesz, showsPrecAsRiesz, (.<)
+            , (·), DualSpace, riesz, coRiesz, showsPrecAsRiesz, (.<)
             -- ** Constraint synonyms
             , HilbertSpace, SimpleSpace
             , Num'(..)
@@ -421,6 +421,18 @@ wellDefinedNorm :: ∀ v . LinearSpace v => Norm v -> Maybe (Norm v)
 wellDefinedNorm = case dualSpaceWitness :: DualSpaceWitness v of
     DualSpaceWitness
         -> \(Norm m) -> Norm <$> wellDefinedVector m
+
+
+infixl 7 ·
+-- | Generalised multiplication operation. In any space, this subsumes '*^' and – for
+--   scalars – therefore also '*'.
+--   In a suitable 'InnerSpace', it also subsumes '<.>'. (“Suitable” are “homogeneous”
+--   spaces such as 'V3', but not e.g. tuples.)
+(·) :: ∀ v w . (LinearSpace v, TensorSpace w, Scalar v ~ Scalar w)
+          => v -> TensorProduct (DualVector v) w -> w
+v·f = (applyLinear -+$> (LinearMap f :: v+>w)) -+$> v
+{-# INLINE (·) #-}
+
 
 data OrthonormalSystem v = OrthonormalSystem {
       orthonormalityNorm :: Norm v
