@@ -32,7 +32,7 @@ import Data.VectorSpace.Free
 
 infixl 7 ·
 
-class (TensorSpace v, TensorSpace w) => TensorQuot v w where
+class (TensorSpace v, VectorSpace w) => TensorQuot v w where
   type v ⨸ w :: *
   -- | Generalised multiplication operation. This subsumes '<.>^' and '*^'.
   --   For scalars therefore also '*', and for 'InnerSpace', '<.>'.
@@ -66,3 +66,16 @@ FreeTensorQuot(V1)
 FreeTensorQuot(V2)
 FreeTensorQuot(V3)
 FreeTensorQuot(V4)
+
+instance ∀ s x y v w .
+    ( TensorSpace v, TensorSpace w, v ~ x, LinearSpace y
+    , TensorQuot x v, TensorQuot y w, (x⨸v) ~ s, (y⨸w) ~ s
+    , Scalar x ~ s, Scalar y ~ s, Scalar v ~ s, Scalar w ~ s )
+      => TensorQuot (Tensor s x y) (Tensor s v w) where
+  type Tensor s x y ⨸ Tensor s v w = s
+  μ·t = (fmapTensor-+$>lfun(μ·))-+$>t
+instance ( LinearSpace x, LinearSpace y
+         , s ~ Double, Scalar x ~ s, Scalar y ~ s )
+      => TensorQuot (Tensor s x y) Double where
+  type (Tensor s x y) ⨸ Double = DualVector (Tensor s x y)
+  f·t = (applyTensorFunctional-+$>f)-+$>t
