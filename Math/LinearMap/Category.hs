@@ -84,7 +84,7 @@ module Math.LinearMap.Category (
             -- ** Hilbert space operations
             , (·), DualSpace, riesz, coRiesz, showsPrecAsRiesz, (.<)
             -- ** Constraint synonyms
-            , HilbertSpace, SimpleSpace
+            , HilbertSpace, SimpleSpace, RealSpace
             , Num'(..)
             , Fractional'
             , RealFrac', RealFloat', LinearShowable
@@ -451,6 +451,12 @@ orthogonalComplementProj :: LSpace v => Norm v -> [v] -> (v-+>v)
 orthogonalComplementProj (Norm m)
       = orthogonalComplementProj' . map (id &&& (m-+$>))
 
+
+-- | A space in which you can use '·' both for scaling with a real number,
+--   and as dot-product for obtaining such a number.
+type RealSpace v = ( LinearSpace v, Scalar v ~ ℝ
+                   , TensorQuot v ℝ, (v⨸ℝ) ~ DualVector v
+                   , TensorQuot v v, (v⨸v) ~ ℝ )
 
 
 data Eigenvector v = Eigenvector {
