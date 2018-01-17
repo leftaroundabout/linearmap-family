@@ -65,6 +65,8 @@ import Data.Coerce
 
 import Numeric.IEEE
 
+import Data.CallStack
+
 
 
 
@@ -246,16 +248,25 @@ zipTravWith f = evalStateT . Hask.traverse zp
               [] -> StateT $ const Nothing
               (b:bs') -> put bs' >> return (f a b)
 
-embedFreeSubspace :: ∀ v t r . (SemiInner v, RealFrac' (Scalar v), Hask.Traversable t)
+embedFreeSubspace :: ∀ v t r . (HasCallStack, SemiInner v, RealFrac' (Scalar v), Hask.Traversable t)
             => t v -> Maybe (ReifiedLens' v (t (Scalar v)))
 embedFreeSubspace vs = fmap (\(g,s) -> Lens (lens g s)) result
  where vsList = toList vs
        result = fmap (genGet&&&genSet) . sequenceA $ dualBasis vsList
        genGet vsDuals u = case zipTravWith (\_v dv -> dv<.>^u) vs vsDuals of
                 Just cs -> cs
+                Nothing -> error $ "Cannot map into free subspace using a set of "
+                                 ++ show (length vsList)
+                                 ++ " vectors and " ++ show (length vsDuals)
+                                 ++ " dual vectors."
        genSet vsDuals u coefs = case zipTravWith (,) coefs $ zip vsList vsDuals of
                 Just updators -> foldl' (\ur (c,(v,v')) -> ur ^+^ v^*(c - v'<.>^ur))
                                         u updators
+                Nothing -> error $ "Cannot map from free subspace using a set of "
+                                 ++ show (length vsList)
+                                 ++ " vectors, " ++ show (length vsDuals)
+                                 ++ " dual vectors and "
+                                 ++ show (length coefs) ++ " coefficients."
 
 
 instance SemiInner ℝ where
