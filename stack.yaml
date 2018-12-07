@@ -4,6 +4,6 @@ packages:
 extra-deps:
 - manifolds-core-0.4.4.0
 - constrained-categories-0.3.0.1
-- vector-space-0.11
+- vector-space-0.15
 - free-vector-spaces-0.1.4.0
 resolver: lts-8.0
