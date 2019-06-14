@@ -1,10 +1,11 @@
 flags: {}
 packages:
-- location: './'
+- './'
 extra-deps:
-- manifolds-core-0.4.4.0
-- constrained-categories-0.3.0.1
+- manifolds-core-0.5.0.3
+- constrained-categories-0.4.0.0
+- trivial-constraint-0.4.0.0
 - vector-space-0.15
 - free-vector-spaces-0.1.5.0
 - pragmatic-show-0.1.2.0
-resolver: lts-8.0
+resolver: lts-12.0
