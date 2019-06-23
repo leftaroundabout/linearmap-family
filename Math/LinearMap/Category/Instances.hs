@@ -57,6 +57,7 @@ import Math.LinearMap.Asserted
 import Math.VectorSpace.ZeroDimensional
 
 import qualified GHC.Exts as GHC
+import qualified GHC.Generics as GHC
 
 infixr 7 <.>^
 (<.>^) :: LinearSpace v => DualVector v -> v -> Scalar v
@@ -491,3 +492,61 @@ type v⊗〃+>w = LinearMap (Scalar v) (SymmetricTensor (Scalar v) v) w
 
 currySymBilin :: LinearSpace v => (v⊗〃+>w) -+> (v+>(v+>w))
 currySymBilin = LinearFunction . arr $ fmap fromTensor . fromTensor . flout LinearMap
+
+
+
+
+
+newtype LinearApplicativeSpace f y
+    = LinearApplicativeSpace { getLinearApplicativeSpace :: f y }
+
+instance ( GHC.Generic1 f, TensorSpace y
+         , TensorSpace (f y), Scalar (f y) ~ Scalar y
+         , Monoidal f (LinearFunction (Scalar y)) (LinearFunction (Scalar y)) )
+     => AffineSpace (LinearApplicativeSpace f y) where
+  type Diff (LinearApplicativeSpace f y) = LinearApplicativeSpace f y
+  (.+^) = (^+^)
+  (.-.) = (^-^)
+
+instance ∀ f y . ( GHC.Generic1 f, TensorSpace y
+                 , TensorSpace (f y), Scalar (f y) ~ Scalar y
+                 , Monoidal f (LinearFunction (Scalar y)) (LinearFunction (Scalar y)) )
+     => AdditiveGroup (LinearApplicativeSpace f y) where
+  zeroV = LinearApplicativeSpace $ getLinearFunction
+             ( fmap zeroV
+              . (pureUnit :: LinearFunction (Scalar y) (ZeroDim (Scalar y))
+                                                       (f (ZeroDim (Scalar y)))) ) zeroV
+  LinearApplicativeSpace a^+^LinearApplicativeSpace b
+    = LinearApplicativeSpace
+     $ getLinearFunction
+           (fzipWith (LinearFunction $ uncurry (^+^)))
+           (a,b)
+  LinearApplicativeSpace a^-^LinearApplicativeSpace b
+    = LinearApplicativeSpace
+     $ getLinearFunction
+           (fzipWith (LinearFunction $ uncurry (^-^)))
+           (a,b)
+  negateV (LinearApplicativeSpace a) = LinearApplicativeSpace
+       $ getLinearFunction (fmap $ LinearFunction negateV) a
+
+instance ( GHC.Generic1 f, TensorSpace y
+         , TensorSpace (f y), Scalar (f y) ~ Scalar y
+         , Monoidal f (LinearFunction (Scalar y)) (LinearFunction (Scalar y)) )
+     => VectorSpace (LinearApplicativeSpace f y) where
+  type Scalar (LinearApplicativeSpace f y) = Scalar y
+  (*^) = undefined
+
+instance ( GHC.Generic1 f, TensorSpace y
+         , TensorSpace (f y), Scalar (f y) ~ Scalar y
+         , Monoidal f (LinearFunction (Scalar y)) (LinearFunction (Scalar y)) )
+     => Semimanifold (LinearApplicativeSpace f y) where
+  type Needle (LinearApplicativeSpace f y) = LinearApplicativeSpace f y
+  type Interior (LinearApplicativeSpace f y) = LinearApplicativeSpace f y
+  toInterior = Just; fromInterior = id
+  translateP = Tagged (^+^)
+
+instance ( GHC.Generic1 f, TensorSpace y
+         , TensorSpace (f y), Scalar (f y) ~ Scalar y
+         , Monoidal f (LinearFunction (Scalar y)) (LinearFunction (Scalar y)) )
+     => PseudoAffine (LinearApplicativeSpace f y) where
+  (.-~!) = (.-.)
