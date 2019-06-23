@@ -1,9 +1,9 @@
 -- |
 -- Module      : Math.LinearMap.Category.Instances
--- Copyright   : (c) Justus Sagemüller 2016
+-- Copyright   : (c) Justus Sagemüller 2016-2019
 -- License     : GPL v3
 -- 
--- Maintainer  : (@) sagemueller $ geo.uni-koeln.de
+-- Maintainer  : (@) jsag $ hvl.no
 -- Stability   : experimental
 -- Portability : portable
 -- 
