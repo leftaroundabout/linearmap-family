@@ -550,3 +550,12 @@ instance ( GHC.Generic1 f, TensorSpace y
          , Monoidal f (LinearFunction (Scalar y)) (LinearFunction (Scalar y)) )
      => PseudoAffine (LinearApplicativeSpace f y) where
   (.-~!) = (.-.)
+
+
+
+instance (InnerSpace v, Scalar v ~ ℝ, TensorSpace v)
+              => InnerSpace (Tensor ℝ ℝ v) where
+  Tensor t <.> Tensor u = t <.> u
+
+instance (Show v) => Show (Tensor ℝ ℝ v) where
+  showsPrec p (Tensor t) = showParen (p>9) $ ("Tensor "++) . showsPrec 10 t
