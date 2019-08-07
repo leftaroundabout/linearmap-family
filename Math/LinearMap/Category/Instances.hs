@@ -56,6 +56,8 @@ import qualified Data.Vector.Unboxed as UArr
 import Math.LinearMap.Asserted
 import Math.VectorSpace.ZeroDimensional
 
+import qualified Test.QuickCheck as QC
+
 import qualified GHC.Exts as GHC
 import qualified GHC.Generics as GHC
 
@@ -559,3 +561,8 @@ instance (InnerSpace v, Scalar v ~ ℝ, TensorSpace v)
 
 instance (Show v) => Show (Tensor ℝ ℝ v) where
   showsPrec p (Tensor t) = showParen (p>9) $ ("Tensor "++) . showsPrec 10 t
+
+instance (QC.Arbitrary v, Scalar v ~ ℝ) => QC.Arbitrary (Tensor ℝ ℝ v) where
+  arbitrary = Tensor <$> QC.arbitrary
+  shrink (Tensor t) = Tensor <$> QC.shrink t
+
