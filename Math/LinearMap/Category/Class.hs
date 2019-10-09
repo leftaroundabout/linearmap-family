@@ -43,6 +43,7 @@ import Data.Tagged
 import Math.Manifold.Core.PseudoAffine
 import Math.LinearMap.Asserted
 import Math.VectorSpace.ZeroDimensional
+import Data.VectorSpace.Free
 
 import qualified GHC.Generics as Gnrx
 import GHC.Generics (Generic, (:*:)((:*:)))
@@ -50,7 +51,7 @@ import GHC.Generics (Generic, (:*:)((:*:)))
 data ClosedScalarWitness s where
   ClosedScalarWitness :: (Scalar s ~ s, DualVector s ~ s) => ClosedScalarWitness s
 
-class (Num s, LinearSpace s) => Num' s where
+class (Num s, LinearSpace s, FreeVectorSpace s) => Num' s where
   closedScalarWitness :: ClosedScalarWitness s
 
 data ScalarSpaceWitness v where
