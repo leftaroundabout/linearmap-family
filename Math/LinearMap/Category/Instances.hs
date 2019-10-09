@@ -68,45 +68,46 @@ f<.>^v = (applyDualVector-+$>f)-+$>v
 
 type ℝ = Double
 
-instance Num' ℝ where
-  closedScalarWitness = ClosedScalarWitness
+#define LinearScalarSpace(S) \
+instance Num' (S) where {closedScalarWitness = ClosedScalarWitness}; \
+instance TensorSpace (S) where { \
+  type TensorProduct (S) w = w; \
+  scalarSpaceWitness = ScalarSpaceWitness; \
+  linearManifoldWitness = LinearManifoldWitness BoundarylessWitness; \
+  zeroTensor = Tensor zeroV; \
+  scaleTensor = bilinearFunction $ \μ (Tensor t) -> Tensor $ μ*^t; \
+  addTensors (Tensor v) (Tensor w) = Tensor $ v ^+^ w; \
+  subtractTensors (Tensor v) (Tensor w) = Tensor $ v ^-^ w; \
+  negateTensor = pretendLike Tensor lNegateV; \
+  toFlatTensor = follow Tensor; \
+  fromFlatTensor = flout Tensor; \
+  tensorProduct = LinearFunction $ \μ -> follow Tensor . scaleWith μ; \
+  transposeTensor = toFlatTensor . flout Tensor; \
+  fmapTensor = LinearFunction $ pretendLike Tensor; \
+  fzipTensorWith = LinearFunction \
+                   $ \f -> follow Tensor <<< f <<< flout Tensor *** flout Tensor; \
+  coerceFmapTensorProduct _ Coercion = Coercion; \
+  wellDefinedTensor (Tensor w) = Tensor <$> wellDefinedVector w }; \
+instance LinearSpace (S) where { \
+  type DualVector (S) = (S); \
+  dualSpaceWitness = DualSpaceWitness; \
+  linearId = LinearMap 1; \
+  tensorId = uncurryLinearMap $ LinearMap $ fmap (follow Tensor) -+$> id; \
+  idTensor = Tensor 1; \
+  fromLinearForm = flout LinearMap; \
+  coerceDoubleDual = Coercion; \
+  contractTensorMap = flout Tensor . flout LinearMap; \
+  contractMapTensor = flout LinearMap . flout Tensor; \
+  applyDualVector = scale; \
+  applyLinear = LinearFunction $ \(LinearMap w) -> scaleV w; \
+  applyTensorFunctional = bilinearFunction $ \(LinearMap du) (Tensor u) -> du<.>^u; \
+  applyTensorLinMap = bilinearFunction $ \fℝuw (Tensor u) \
+                        -> let LinearMap fuw = curryLinearMap $ fℝuw \
+                           in (applyLinear-+$>fuw) -+$> u; \
+  composeLinear = bilinearFunction $ \f (LinearMap g) \
+                     -> LinearMap $ (applyLinear-+$>f)-+$>g }
 
-instance TensorSpace ℝ where
-  type TensorProduct ℝ w = w
-  scalarSpaceWitness = ScalarSpaceWitness
-  linearManifoldWitness = LinearManifoldWitness BoundarylessWitness
-  zeroTensor = Tensor zeroV
-  scaleTensor = bilinearFunction $ \μ (Tensor t) -> Tensor $ μ*^t
-  addTensors (Tensor v) (Tensor w) = Tensor $ v ^+^ w
-  subtractTensors (Tensor v) (Tensor w) = Tensor $ v ^-^ w
-  negateTensor = pretendLike Tensor lNegateV
-  toFlatTensor = follow Tensor
-  fromFlatTensor = flout Tensor
-  tensorProduct = LinearFunction $ \μ -> follow Tensor . scaleWith μ
-  transposeTensor = toFlatTensor . flout Tensor
-  fmapTensor = LinearFunction $ pretendLike Tensor
-  fzipTensorWith = LinearFunction
-                   $ \f -> follow Tensor <<< f <<< flout Tensor *** flout Tensor
-  coerceFmapTensorProduct _ Coercion = Coercion
-  wellDefinedTensor (Tensor w) = Tensor <$> wellDefinedVector w
-instance LinearSpace ℝ where
-  type DualVector ℝ = ℝ
-  dualSpaceWitness = DualSpaceWitness
-  linearId = LinearMap 1
-  tensorId = uncurryLinearMap $ LinearMap $ fmap (follow Tensor) -+$> id
-  idTensor = Tensor 1
-  fromLinearForm = flout LinearMap
-  coerceDoubleDual = Coercion
-  contractTensorMap = flout Tensor . flout LinearMap
-  contractMapTensor = flout LinearMap . flout Tensor
-  applyDualVector = scale
-  applyLinear = LinearFunction $ \(LinearMap w) -> scaleV w
-  applyTensorFunctional = bilinearFunction $ \(LinearMap du) (Tensor u) -> du<.>^u
-  applyTensorLinMap = bilinearFunction $ \fℝuw (Tensor u)
-                        -> let LinearMap fuw = curryLinearMap $ fℝuw
-                           in (applyLinear-+$>fuw) -+$> u
-  composeLinear = bilinearFunction $ \f (LinearMap g)
-                     -> LinearMap $ (applyLinear-+$>f)-+$>g
+LinearScalarSpace(ℝ)
 
 #define FreeLinearSpace(V, LV, tp, tenspl, tenid, dspan, contraction, contraaction)  \
 instance Num s => Semimanifold (V s) where {  \
