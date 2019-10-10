@@ -71,7 +71,7 @@ data LinearManifoldWitness v where
 class (VectorSpace v, PseudoAffine v) => TensorSpace v where
   -- | The internal representation of a 'Tensor' product.
   -- 
-  -- For euclidean spaces, this is generally constructed by replacing each @s@
+  -- For Euclidean spaces, this is generally constructed by replacing each @s@
   -- scalar field in the @v@ vector with an entire @w@ vector. I.e., you have
   -- then a “nested vector” or, if @v@ is a @DualVector@ / “row vector”, a matrix.
   type TensorProduct v w :: *
