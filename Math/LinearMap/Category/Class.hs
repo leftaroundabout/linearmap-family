@@ -83,13 +83,22 @@ class (VectorSpace v, PseudoAffine v) => TensorSpace v where
   fromFlatTensor :: (v ⊗ Scalar v) -+> v
   addTensors :: (TensorSpace w, Scalar w ~ Scalar v)
                 => (v ⊗ w) -> (v ⊗ w) -> v ⊗ w
+  default addTensors :: AdditiveGroup (TensorProduct v w) => (v ⊗ w) -> (v ⊗ w) -> v ⊗ w
+  addTensors (Tensor vw₀) (Tensor vw₁) = Tensor $ vw₀ ^+^ vw₁
   subtractTensors :: (TensorSpace v, TensorSpace w, Scalar w ~ Scalar v)
                 => (v ⊗ w) -> (v ⊗ w) -> v ⊗ w
-  subtractTensors m n = addTensors m (getLinearFunction negateTensor n)
+  default subtractTensors :: AdditiveGroup (TensorProduct v w) => (v ⊗ w) -> (v ⊗ w) -> v ⊗ w
+  subtractTensors (Tensor vw₀) (Tensor vw₁) = Tensor $ vw₀ ^-^ vw₁
   scaleTensor :: (TensorSpace w, Scalar w ~ Scalar v)
                 => Bilinear (Scalar v) (v ⊗ w) (v ⊗ w)
+  default scaleTensor
+      :: (VectorSpace (TensorProduct v w), Scalar (TensorProduct v w) ~ Scalar v)
+           => Bilinear (Scalar v) (v ⊗ w) (v ⊗ w)
+  scaleTensor = bilinearFunction $ \μ (Tensor vw) -> Tensor $ μ*^vw
   negateTensor :: (TensorSpace w, Scalar w ~ Scalar v)
                 => (v ⊗ w) -+> (v ⊗ w)
+  default negateTensor :: AdditiveGroup (TensorProduct v w) => (v ⊗ w) -+> (v ⊗ w)
+  negateTensor = LinearFunction $ \(Tensor vw) -> Tensor $ negateV vw
   tensorProduct :: (TensorSpace w, Scalar w ~ Scalar v)
                 => Bilinear v w (v ⊗ w)
   tensorProducts :: (TensorSpace w, Scalar w ~ Scalar v)
@@ -1044,6 +1053,8 @@ instance ∀ v s . TensorSpace v => TensorSpace (Gnrx.Rec0 v s) where
                    <<< arr (pseudoFmapTensorLHS Gnrx.unK1)
   addTensors (Tensor s) (Tensor t)
        = pseudoFmapTensorLHS Gnrx.K1 $ addTensors (Tensor s) (Tensor t)
+  subtractTensors (Tensor s) (Tensor t)
+       = pseudoFmapTensorLHS Gnrx.K1 $ subtractTensors (Tensor s) (Tensor t)
   scaleTensor = LinearFunction $ \μ -> envTensorLHSCoercion Gnrx.K1
                                          $ scaleTensor-+$>μ
   negateTensor = envTensorLHSCoercion Gnrx.K1 negateTensor
@@ -1086,6 +1097,8 @@ instance ∀ i c f p . TensorSpace (f p) => TensorSpace (Gnrx.M1 i c f p) where
                    <<< arr (pseudoFmapTensorLHS Gnrx.unM1)
   addTensors (Tensor s) (Tensor t)
        = pseudoFmapTensorLHS Gnrx.M1 $ addTensors (Tensor s) (Tensor t)
+  subtractTensors (Tensor s) (Tensor t)
+       = pseudoFmapTensorLHS Gnrx.M1 $ subtractTensors (Tensor s) (Tensor t)
   scaleTensor = LinearFunction $ \μ -> envTensorLHSCoercion Gnrx.M1
                                          $ scaleTensor-+$>μ
   negateTensor = envTensorLHSCoercion Gnrx.M1 negateTensor
@@ -1177,6 +1190,8 @@ instance ∀ m . ( Semimanifold m, TensorSpace (Needle (VRep m))
                              >>> GenericNeedle
   addTensors (Tensor s) (Tensor t)
        = pseudoFmapTensorLHS GenericNeedle $ addTensors (Tensor s) (Tensor t)
+  subtractTensors (Tensor s) (Tensor t)
+       = pseudoFmapTensorLHS GenericNeedle $ subtractTensors (Tensor s) (Tensor t)
   scaleTensor = LinearFunction $ \μ -> envTensorLHSCoercion GenericNeedle
                                          $ scaleTensor-+$>μ
   negateTensor = envTensorLHSCoercion GenericNeedle negateTensor
@@ -1458,6 +1473,8 @@ instance ∀ m . ( Semimanifold m, TensorSpace (DualVector (Needle (VRep m)))
                              >>> GenericNeedle'
   addTensors (Tensor s) (Tensor t)
        = pseudoFmapTensorLHS GenericNeedle' $ addTensors (Tensor s) (Tensor t)
+  subtractTensors (Tensor s) (Tensor t)
+       = pseudoFmapTensorLHS GenericNeedle' $ subtractTensors (Tensor s) (Tensor t)
   scaleTensor = LinearFunction $ \μ -> envTensorLHSCoercion GenericNeedle'
                                          $ scaleTensor-+$>μ
   negateTensor = envTensorLHSCoercion GenericNeedle' negateTensor
