@@ -50,11 +50,16 @@ import GHC.Generics (Generic, (:*:)((:*:)))
 
 data ClosedScalarWitness s where
   ClosedScalarWitness :: (Scalar s ~ s, DualVector s ~ s) => ClosedScalarWitness s
+data TrivialTensorWitness s w where
+  TrivialTensorWitness :: w ~ TensorProduct s w => TrivialTensorWitness s w
 
 class (Num s, LinearSpace s, FreeVectorSpace s) => Num' s where
   closedScalarWitness :: ClosedScalarWitness s
   default closedScalarWitness :: (Scalar s ~ s, DualVector s ~ s) => ClosedScalarWitness s
   closedScalarWitness = ClosedScalarWitness
+  trivialTensorWitness :: TrivialTensorWitness s w
+  default trivialTensorWitness :: (w ~ TensorProduct s w) => TrivialTensorWitness s w
+  trivialTensorWitness = TrivialTensorWitness
 
 data ScalarSpaceWitness v where
   ScalarSpaceWitness :: (Num' (Scalar v), Scalar (Scalar v) ~ Scalar v)
