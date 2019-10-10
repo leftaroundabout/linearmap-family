@@ -53,6 +53,8 @@ data ClosedScalarWitness s where
 
 class (Num s, LinearSpace s, FreeVectorSpace s) => Num' s where
   closedScalarWitness :: ClosedScalarWitness s
+  default closedScalarWitness :: (Scalar s ~ s, DualVector s ~ s) => ClosedScalarWitness s
+  closedScalarWitness = ClosedScalarWitness
 
 data ScalarSpaceWitness v where
   ScalarSpaceWitness :: (Num' (Scalar v), Scalar (Scalar v) ~ Scalar v)
