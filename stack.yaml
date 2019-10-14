@@ -2,7 +2,7 @@ flags: {}
 packages:
 - './'
 extra-deps:
-- manifolds-core-0.5.0.3
+- manifolds-core-0.5.0.4
 - constrained-categories-0.4.0.0
 - trivial-constraint-0.4.0.0
 - vector-space-0.15
