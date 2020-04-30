@@ -2,7 +2,7 @@
 -- documentation, see http://haskell.org/cabal/users-guide/
 
 name:                linearmap-category
-version:             0.4.0.0
+version:             0.4.0.1
 synopsis:            Native, complete, matrix-free linear algebra.
 description:         The term /numerical linear algebra/ is often used almost
                      synonymous with /matrix modifications/. However, what's interesting
