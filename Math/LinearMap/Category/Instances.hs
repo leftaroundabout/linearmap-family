@@ -108,6 +108,7 @@ instance LinearSpace (S) where { \
                      -> LinearMap $ (applyLinear-+$>f)-+$>g }
 
 LinearScalarSpace(ℝ)
+LinearScalarSpace(Float)
 LinearScalarSpace(Rational)
 
 #define FreeLinearSpace(V, LV, tp, tenspl, tenid, dspan, contraction, contraaction)  \
