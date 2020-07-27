@@ -24,6 +24,7 @@
 {-# LANGUAGE DeriveGeneric              #-}
 {-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE DefaultSignatures          #-}
+{-# LANGUAGE CPP                        #-}
 
 module Math.LinearMap.Category.Class where
 
@@ -66,7 +67,11 @@ data ScalarSpaceWitness v where
                           => ScalarSpaceWitness v
 data LinearManifoldWitness v where
   LinearManifoldWitness :: (Needle v ~ v, AffineSpace v, Diff v ~ v)
-                         => BoundarylessWitness v -> LinearManifoldWitness v
+                         =>
+#if !MIN_VERSION_manifolds_core(0,6,0)
+                           BoundarylessWitness v ->
+#endif
+                           LinearManifoldWitness v
   
 class (VectorSpace v, PseudoAffine v) => TensorSpace v where
   -- | The internal representation of a 'Tensor' product.
@@ -237,7 +242,10 @@ instance Num' s => TensorSpace (ZeroDim s) where
   type TensorProduct (ZeroDim s) v = ZeroDim s
   scalarSpaceWitness = case closedScalarWitness :: ClosedScalarWitness s of
                 ClosedScalarWitness -> ScalarSpaceWitness
-  linearManifoldWitness = LinearManifoldWitness BoundarylessWitness
+  linearManifoldWitness = LinearManifoldWitness
+#if !MIN_VERSION_manifolds_core(0,6,0)
+                                BoundarylessWitness
+#endif
   zeroTensor = Tensor Origin
   toFlatTensor = LinearFunction $ \Origin -> Tensor Origin
   fromFlatTensor = LinearFunction $ \(Tensor Origin) -> Origin
@@ -375,10 +383,12 @@ instance ∀ v w s . (LinearSpace v, TensorSpace w, Scalar v~s, Scalar w~s)
 instance ∀ v w s . (LinearSpace v, TensorSpace w, Scalar v~s, Scalar w~s)
                => Semimanifold (LinearMap s v w) where
   type Needle (LinearMap s v w) = LinearMap s v w
+#if !MIN_VERSION_manifolds_core(0,6,0)
   toInterior = pure
   fromInterior = id
-  (.+~^) = (^+^)
   translateP = Tagged (^+^)
+#endif
+  (.+~^) = (^+^)
 instance ∀ v w s . (LinearSpace v, TensorSpace w, Scalar v~s, Scalar w~s)
                => PseudoAffine (LinearMap s v w) where
   f.-~.g = return $ f^-^g
@@ -397,10 +407,12 @@ instance (TensorSpace v, TensorSpace w, Scalar v~s, Scalar w~s)
 instance (TensorSpace v, TensorSpace w, Scalar v~s, Scalar w~s)
                => Semimanifold (Tensor s v w) where
   type Needle (Tensor s v w) = Tensor s v w
+#if !MIN_VERSION_manifolds_core(0,6,0)
   toInterior = pure
   fromInterior = id
-  (.+~^) = (^+^)
   translateP = Tagged (^+^)
+#endif
+  (.+~^) = (^+^)
 instance (TensorSpace v, TensorSpace w, Scalar v~s, Scalar w~s)
                => PseudoAffine (Tensor s v w) where
   f.-~.g = return $ f^-^g
@@ -475,9 +487,19 @@ instance ∀ u v . ( TensorSpace u, TensorSpace v, Scalar u ~ Scalar v )
        (ScalarSpaceWitness, ScalarSpaceWitness) -> ScalarSpaceWitness
   linearManifoldWitness = case ( linearManifoldWitness :: LinearManifoldWitness u
                             , linearManifoldWitness :: LinearManifoldWitness v ) of
-       ( LinearManifoldWitness BoundarylessWitness
-        ,LinearManifoldWitness BoundarylessWitness )
-         -> LinearManifoldWitness BoundarylessWitness
+       ( LinearManifoldWitness
+#if !MIN_VERSION_manifolds_core(0,6,0)
+          BoundarylessWitness
+#endif
+        ,LinearManifoldWitness
+#if !MIN_VERSION_manifolds_core(0,6,0)
+          BoundarylessWitness
+#endif
+        )
+         -> LinearManifoldWitness
+#if !MIN_VERSION_manifolds_core(0,6,0)
+             BoundarylessWitness
+#endif
   zeroTensor = zeroTensor <⊕ zeroTensor
   scaleTensor = bilinearFunction $ \μ (Tensor (v,w)) ->
                  Tensor ( (scaleTensor-+$>μ)-+$>v, (scaleTensor-+$>μ)-+$>w )
@@ -616,9 +638,19 @@ instance ∀ s u v . ( LinearSpace u, TensorSpace v, Scalar u ~ s, Scalar v ~ s 
                                , linearManifoldWitness :: LinearManifoldWitness u
                                , linearManifoldWitness :: LinearManifoldWitness v ) of
        ( ScalarSpaceWitness
-        ,LinearManifoldWitness BoundarylessWitness
-        ,LinearManifoldWitness BoundarylessWitness )
-         -> LinearManifoldWitness BoundarylessWitness
+        ,LinearManifoldWitness
+#if !MIN_VERSION_manifolds_core(0,6,0)
+           BoundarylessWitness
+#endif
+        ,LinearManifoldWitness
+#if !MIN_VERSION_manifolds_core(0,6,0)
+           BoundarylessWitness
+#endif
+        )
+         -> LinearManifoldWitness
+#if !MIN_VERSION_manifolds_core(0,6,0)
+             BoundarylessWitness
+#endif
   zeroTensor = deferLinearMap $ zeroV
   toFlatTensor = case scalarSpaceWitness :: ScalarSpaceWitness u of
        ScalarSpaceWitness -> arr deferLinearMap . fmap toFlatTensor
@@ -745,9 +777,19 @@ instance ∀ s u v . (TensorSpace u, TensorSpace v, Scalar u ~ s, Scalar v ~ s)
        (ScalarSpaceWitness, ScalarSpaceWitness) -> ScalarSpaceWitness
   linearManifoldWitness = case ( linearManifoldWitness :: LinearManifoldWitness u
                              , linearManifoldWitness :: LinearManifoldWitness v ) of
-       ( LinearManifoldWitness BoundarylessWitness
-        ,LinearManifoldWitness BoundarylessWitness )
-         -> LinearManifoldWitness BoundarylessWitness
+       ( LinearManifoldWitness
+#if !MIN_VERSION_manifolds_core(0,6,0)
+            BoundarylessWitness
+#endif
+        ,LinearManifoldWitness
+#if !MIN_VERSION_manifolds_core(0,6,0)
+            BoundarylessWitness
+#endif
+        )
+         -> LinearManifoldWitness
+#if !MIN_VERSION_manifolds_core(0,6,0)
+             BoundarylessWitness
+#endif
   zeroTensor = lassocTensor $ zeroTensor
   toFlatTensor = case scalarSpaceWitness :: ScalarSpaceWitness u of
     ScalarSpaceWitness -> arr lassocTensor . fmap toFlatTensor
@@ -913,9 +955,19 @@ instance ∀ s u v . (LinearSpace u, LinearSpace v, Scalar u ~ s, Scalar v ~ s)
        (ScalarSpaceWitness, ScalarSpaceWitness) -> ScalarSpaceWitness
   linearManifoldWitness = case ( linearManifoldWitness :: LinearManifoldWitness u
                              , linearManifoldWitness :: LinearManifoldWitness v ) of
-       ( LinearManifoldWitness BoundarylessWitness
-        ,LinearManifoldWitness BoundarylessWitness )
-         -> LinearManifoldWitness BoundarylessWitness
+       ( LinearManifoldWitness
+#if !MIN_VERSION_manifolds_core(0,6,0)
+          BoundarylessWitness
+#endif
+        ,LinearManifoldWitness
+#if !MIN_VERSION_manifolds_core(0,6,0)
+          BoundarylessWitness
+#endif
+        )
+         -> LinearManifoldWitness
+#if !MIN_VERSION_manifolds_core(0,6,0)
+             BoundarylessWitness
+#endif
   zeroTensor = fromLinearFn $ const0
   toFlatTensor = case scalarSpaceWitness :: ScalarSpaceWitness u of
      ScalarSpaceWitness -> fmap fromLinearFn $ applyDualVector
@@ -1179,8 +1231,14 @@ instance ∀ m . ( Semimanifold m, TensorSpace (Needle (VRep m))
           ScalarSpaceWitness -> ScalarSpaceWitness
   linearManifoldWitness = case linearManifoldWitness
                                :: LinearManifoldWitness (Needle (VRep m)) of
-          LinearManifoldWitness BoundarylessWitness
-              -> LinearManifoldWitness BoundarylessWitness
+          LinearManifoldWitness
+#if !MIN_VERSION_manifolds_core(0,6,0)
+           BoundarylessWitness
+#endif
+              -> LinearManifoldWitness
+#if !MIN_VERSION_manifolds_core(0,6,0)
+                  BoundarylessWitness
+#endif
   zeroTensor = pseudoFmapTensorLHS GenericNeedle $ zeroTensor
   toFlatTensor = LinearFunction $ arr (pseudoFmapTensorLHS GenericNeedle)
                              . getLinearFunction toFlatTensor
@@ -1271,9 +1329,11 @@ instance (AdditiveGroup (DualVector (f p)), AdditiveGroup (DualVector (g p)))
     => Semimanifold (GenericTupleDual f g p) where
   type Needle (GenericTupleDual f g p) = GenericTupleDual f g p
   (.+~^) = (^+^)
+#if !MIN_VERSION_manifolds_core(0,6,0)
   fromInterior = id
   toInterior = pure
   translateP = Tagged (^+^)
+#endif
 instance (AdditiveGroup (DualVector (f p)), AdditiveGroup (DualVector (g p)))
     => PseudoAffine (GenericTupleDual f g p) where
   p.-~.q = Just $ p.-.q
@@ -1299,11 +1359,17 @@ instance ( LinearSpace (f p), LinearSpace (g p)
                                  (fmap fromTensor $ wellDefinedTensor (fromLinearMap $ gt))
   scalarSpaceWitness = case scalarSpaceWitness :: ScalarSpaceWitness (f p) of
         ScalarSpaceWitness -> ScalarSpaceWitness
-  linearManifoldWitness = LinearManifoldWitness BoundarylessWitness
+  linearManifoldWitness = LinearManifoldWitness
+#if !MIN_VERSION_manifolds_core(0,6,0)
+                           BoundarylessWitness
+#endif
   zeroTensor = case ( linearManifoldWitness :: LinearManifoldWitness (f p)
                     , dualSpaceWitness :: DualSpaceWitness (f p)
                     , dualSpaceWitness :: DualSpaceWitness (g p) ) of
-       ( LinearManifoldWitness BoundarylessWitness
+       ( LinearManifoldWitness
+#if !MIN_VERSION_manifolds_core(0,6,0)
+          BoundarylessWitness
+#endif
         ,DualSpaceWitness, DualSpaceWitness )
            -> Tensor (fromTensor $ zeroTensor, fromTensor $ zeroTensor)
   toFlatTensor = case ( scalarSpaceWitness :: ScalarSpaceWitness (f p)
@@ -1439,11 +1505,13 @@ instance AdditiveGroup (DualVector (Needle (VRep m)))
   (.+^) = (^+^)
 instance AdditiveGroup (DualVector (Needle (VRep m)))
     => Semimanifold (GenericNeedle' m) where
-  type Interior (GenericNeedle' m) = GenericNeedle' m
   type Needle (GenericNeedle' m) = GenericNeedle' m
+#if !MIN_VERSION_manifolds_core(0,6,0)
+  type Interior (GenericNeedle' m) = GenericNeedle' m
   toInterior = pure
   fromInterior = id
   translateP = Tagged (^+^)
+#endif
   (.+~^) = (^+^)
 instance AdditiveGroup (DualVector (Needle (VRep m)))
     => PseudoAffine (GenericNeedle' m) where
@@ -1462,8 +1530,14 @@ instance ∀ m . ( Semimanifold m, TensorSpace (DualVector (Needle (VRep m)))
           ScalarSpaceWitness -> ScalarSpaceWitness
   linearManifoldWitness = case linearManifoldWitness
                     :: LinearManifoldWitness (DualVector (Needle (VRep m))) of
-          LinearManifoldWitness BoundarylessWitness
-              -> LinearManifoldWitness BoundarylessWitness
+          LinearManifoldWitness
+#if !MIN_VERSION_manifolds_core(0,6,0)
+           BoundarylessWitness
+#endif
+              -> LinearManifoldWitness
+#if !MIN_VERSION_manifolds_core(0,6,0)
+                  BoundarylessWitness
+#endif
   zeroTensor = pseudoFmapTensorLHS GenericNeedle' $ zeroTensor
   toFlatTensor = LinearFunction $ arr (pseudoFmapTensorLHS GenericNeedle')
                              . getLinearFunction toFlatTensor

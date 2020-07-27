@@ -65,15 +65,25 @@ infixr 7 <.>^
 (<.>^) :: LinearSpace v => DualVector v -> v -> Scalar v
 f<.>^v = (applyDualVector-+$>f)-+$>v
 
-
 type ℝ = Double
+
+autoLinearManifoldWitness :: (Semimanifold v, AffineSpace v, v ~ Needle v, v ~ Diff v
+#if !MIN_VERSION_manifolds_core(0,6,0)
+                             , v ~ Interior v
+#endif
+                             )
+                                 => LinearManifoldWitness v
+autoLinearManifoldWitness = LinearManifoldWitness
+#if !MIN_VERSION_manifolds_core(0,6,0)
+                             BoundarylessWitness
+#endif
 
 #define LinearScalarSpace(S) \
 instance Num' (S) where {closedScalarWitness = ClosedScalarWitness}; \
 instance TensorSpace (S) where { \
   type TensorProduct (S) w = w; \
   scalarSpaceWitness = ScalarSpaceWitness; \
-  linearManifoldWitness = LinearManifoldWitness BoundarylessWitness; \
+  linearManifoldWitness = autoLinearManifoldWitness; \
   zeroTensor = Tensor zeroV; \
   scaleTensor = bilinearFunction $ \μ (Tensor t) -> Tensor $ μ*^t; \
   addTensors (Tensor v) (Tensor w) = Tensor $ v ^+^ w; \
@@ -111,19 +121,26 @@ LinearScalarSpace(ℝ)
 LinearScalarSpace(Float)
 LinearScalarSpace(Rational)
 
+
+#if MIN_VERSION_manifolds_core(0,6,0)
+#define FreeLinSpaceInteriorDecls
+#else
+#define FreeLinSpaceInteriorDecls \
+  toInterior = pure; fromInterior = id; translateP = Tagged (^+^);
+#endif
+
 #define FreeLinearSpace(V, LV, tp, tenspl, tenid, dspan, contraction, contraaction)  \
 instance Num s => Semimanifold (V s) where {  \
   type Needle (V s) = V s;                      \
-  toInterior = pure; fromInterior = id;           \
-  (.+~^) = (^+^);                                     \
-  translateP = Tagged (^+^) };                      \
+  FreeLinSpaceInteriorDecls                      \
+  (.+~^) = (^+^) };                               \
 instance Num s => PseudoAffine (V s) where {         \
   v.-~.w = pure (v^-^w); (.-~!) = (^-^) };              \
 instance ∀ s . (Num' s, Eq s) => TensorSpace (V s) where {                     \
   type TensorProduct (V s) w = V w;                               \
   scalarSpaceWitness = case closedScalarWitness :: ClosedScalarWitness s of{ \
                          ClosedScalarWitness -> ScalarSpaceWitness};        \
-  linearManifoldWitness = LinearManifoldWitness BoundarylessWitness;   \
+  linearManifoldWitness = autoLinearManifoldWitness;   \
   zeroTensor = Tensor $ pure zeroV;                                \
   addTensors (Tensor m) (Tensor n) = Tensor $ liftA2 (^+^) m n;     \
   subtractTensors (Tensor m) (Tensor n) = Tensor $ liftA2 (^-^) m n; \
@@ -264,8 +281,10 @@ instance (Fractional' n, TensorProduct (DualVector n) n ~ n)
 
 instance (Num' n, UArr.Unbox n) => Semimanifold (FinSuppSeq n) where
   type Needle (FinSuppSeq n) = FinSuppSeq n
-  (.+~^) = (.+^); translateP = Tagged (.+^)
-  toInterior = pure; fromInterior = id
+  (.+~^) = (.+^)
+#if !MIN_VERSION_manifolds_core(0,6,0)
+  translateP = Tagged (.+^); toInterior = pure; fromInterior = id
+#endif
 
 instance (Num' n, UArr.Unbox n) => PseudoAffine (FinSuppSeq n) where
   v.-~.w = Just $ v.-.w; (.-~!) = (.-.)
@@ -275,7 +294,7 @@ instance (Num' n, UArr.Unbox n) => TensorSpace (FinSuppSeq n) where
   wellDefinedVector (FinSuppSeq v) = FinSuppSeq <$> UArr.mapM wellDefinedVector v
   scalarSpaceWitness = case closedScalarWitness :: ClosedScalarWitness n of
         ClosedScalarWitness -> ScalarSpaceWitness
-  linearManifoldWitness = LinearManifoldWitness BoundarylessWitness
+  linearManifoldWitness = autoLinearManifoldWitness
   zeroTensor = Tensor []
   toFlatTensor = LinearFunction $ Tensor . UArr.toList . getFiniteSeq
   fromFlatTensor = LinearFunction $ FinSuppSeq . UArr.fromList . getTensorProduct
@@ -299,8 +318,10 @@ instance (Num' n, UArr.Unbox n) => TensorSpace (FinSuppSeq n) where
 
 instance (Num' n, UArr.Unbox n) => Semimanifold (Sequence n) where
   type Needle (Sequence n) = Sequence n
-  (.+~^) = (.+^); translateP = Tagged (.+^)
-  toInterior = pure; fromInterior = id
+  (.+~^) = (.+^)
+#if !MIN_VERSION_manifolds_core(0,6,0)
+  translateP = Tagged (.+^); toInterior = pure; fromInterior = id
+#endif
 
 instance (Num' n, UArr.Unbox n) => PseudoAffine (Sequence n) where
   v.-~.w = Just $ v.-.w; (.-~!) = (.-.)
@@ -313,7 +334,7 @@ instance (Num' n, UArr.Unbox n) => TensorSpace (Sequence n) where
   wellDefinedTensor (Tensor a) = Tensor <$> Hask.traverse wellDefinedVector a
   scalarSpaceWitness = case closedScalarWitness :: ClosedScalarWitness n of
         ClosedScalarWitness -> ScalarSpaceWitness
-  linearManifoldWitness = LinearManifoldWitness BoundarylessWitness
+  linearManifoldWitness = autoLinearManifoldWitness
   zeroTensor = Tensor []
   toFlatTensor = LinearFunction $ Tensor . GHC.toList
   fromFlatTensor = LinearFunction $ GHC.fromList . getTensorProduct
@@ -419,9 +440,11 @@ instance (TensorSpace v, Scalar v ~ s)
 instance (TensorSpace v, Scalar v ~ s) => Semimanifold (SymmetricTensor s v) where
   type Needle (SymmetricTensor s v) = SymmetricTensor s v
   (.+~^) = (^+^)
+#if !MIN_VERSION_manifolds_core(0,6,0)
   fromInterior = id
   toInterior = pure
   translateP = Tagged (^+^)
+#endif
 instance (TensorSpace v, Scalar v ~ s) => PseudoAffine (SymmetricTensor s v) where
   (.-~!) = (^-^)
 instance (Num' s, TensorSpace v, Scalar v ~ s) => TensorSpace (SymmetricTensor s v) where
@@ -429,7 +452,7 @@ instance (Num' s, TensorSpace v, Scalar v ~ s) => TensorSpace (SymmetricTensor s
   wellDefinedVector (SymTensor t) = SymTensor <$> wellDefinedVector t
   scalarSpaceWitness = case closedScalarWitness :: ClosedScalarWitness s of
         ClosedScalarWitness -> ScalarSpaceWitness
-  linearManifoldWitness = LinearManifoldWitness BoundarylessWitness
+  linearManifoldWitness = autoLinearManifoldWitness
   zeroTensor = Tensor zeroV
   toFlatTensor = case closedScalarWitness :: ClosedScalarWitness s of
         ClosedScalarWitness -> LinearFunction $ \(SymTensor t)
@@ -548,9 +571,12 @@ instance ( GHC.Generic1 f, TensorSpace y
          , Monoidal f (LinearFunction (Scalar y)) (LinearFunction (Scalar y)) )
      => Semimanifold (LinearApplicativeSpace f y) where
   type Needle (LinearApplicativeSpace f y) = LinearApplicativeSpace f y
+#if !MIN_VERSION_manifolds_core(0,6,0)
   type Interior (LinearApplicativeSpace f y) = LinearApplicativeSpace f y
   toInterior = Just; fromInterior = id
   translateP = Tagged (^+^)
+#endif
+  (.+~^) = (^+^)
 
 instance ( GHC.Generic1 f, TensorSpace y
          , TensorSpace (f y), Scalar (f y) ~ Scalar y

@@ -95,10 +95,12 @@ instance VectorSpace w => VectorSpace (LinearFunction s v w) where
   μ *^ LinearFunction f = LinearFunction $ (μ*^) . f
 instance VectorSpace w => Semimanifold (LinearFunction s v w) where
   type Needle (LinearFunction s v w) = LinearFunction s v w
+#if !MIN_VERSION_manifolds_core(0,6,0)
   toInterior = pure
   fromInterior = id
-  (.+~^) = (^+^)
   translateP = Tagged (^+^)
+#endif
+  (.+~^) = (^+^)
 instance VectorSpace w => PseudoAffine (LinearFunction s v w) where
   f.-~.g = return $ f^-^g
 
