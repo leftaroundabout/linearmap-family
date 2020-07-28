@@ -597,3 +597,7 @@ instance (QC.Arbitrary v, Scalar v ~ ℝ) => QC.Arbitrary (Tensor ℝ ℝ v) whe
   arbitrary = Tensor <$> QC.arbitrary
   shrink (Tensor t) = Tensor <$> QC.shrink t
 
+instance (QC.Arbitrary v, Scalar v ~ ℝ) => QC.Arbitrary (LinearMap ℝ ℝ v) where
+  arbitrary = LinearMap <$> QC.arbitrary
+  shrink (LinearMap t) = LinearMap <$> QC.shrink t
+
