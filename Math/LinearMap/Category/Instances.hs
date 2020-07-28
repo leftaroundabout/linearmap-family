@@ -276,6 +276,10 @@ instance (Fractional' n, TensorProduct (DualVector n) n ~ n)
   recip (LinearMap n) = LinearMap $ recip n
   fromRational = LinearMap . fromRational
 
+instance (Eq v, Scalar v ~ ℝ) => Eq (Tensor ℝ ℝ v) where
+  Tensor f == Tensor g = f==g
+instance (Eq v, Scalar v ~ ℝ) => Eq (LinearMap ℝ ℝ v) where
+  LinearMap f == LinearMap g = f==g
 
 
 
@@ -589,6 +593,9 @@ instance ( GHC.Generic1 f, TensorSpace y
 instance (InnerSpace v, Scalar v ~ ℝ, TensorSpace v)
               => InnerSpace (Tensor ℝ ℝ v) where
   Tensor t <.> Tensor u = t <.> u
+instance (InnerSpace v, TensorSpace v, Scalar v ~ ℝ)
+   => InnerSpace (LinearMap ℝ ℝ v) where
+  LinearMap f <.> LinearMap g = f<.>g
 
 instance (Show v) => Show (Tensor ℝ ℝ v) where
   showsPrec p (Tensor t) = showParen (p>9) $ ("Tensor "++) . showsPrec 10 t
