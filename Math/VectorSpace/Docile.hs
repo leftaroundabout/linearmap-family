@@ -1140,6 +1140,22 @@ infixl 7 .<
 bw .< v = sampleLinearFunction $ LinearFunction $ \v' -> recompose [(bw, v<.>v')]
 
 
+-- | This is the preferred method for showing linear maps, resulting in a
+--   matrix view involving the '.<' operator.
+--   We don't provide a generic `Show` instance; to make linear maps with
+--   your own finite-dimensional type @V@ (with scalar @S@) showable,
+--   this is the recommended way:
+--
+--   @
+--   instance RieszDecomposable V where
+--     rieszDecomposition = ...
+--   instance (FiniteDimensional w, w ~ DualVector w, Scalar w ~ S, Show w)
+--         => Show (LinearMap S w V) where
+--     showsPrec = rieszDecomposeShowsPrec
+--   @
+-- 
+--   Note that the custom type should always be the /codomain/ type, whereas
+--   the domain should be kept parametric.
 rieszDecomposeShowsPrec :: ∀ u v s . ( RieszDecomposable u
                                      , FiniteDimensional v, v ~ DualVector v, Show v
                                      , Scalar u ~ s, Scalar v ~ s )

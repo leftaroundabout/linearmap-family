@@ -83,6 +83,9 @@ module Math.LinearMap.Category (
             , (.⊗)
             -- ** Hilbert space operations
             , (·), DualSpace, riesz, coRiesz, showsPrecAsRiesz, (.<)
+            -- ** Standard decompositions
+            , TensorDecomposable(..), RieszDecomposable(..)
+            , tensorDecomposeShowsPrec, rieszDecomposeShowsPrec
             -- ** Constraint synonyms
             , HilbertSpace, SimpleSpace, RealSpace
             , Num'(..)
