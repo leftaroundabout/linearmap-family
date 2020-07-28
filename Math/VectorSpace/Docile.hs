@@ -23,6 +23,8 @@
 {-# LANGUAGE ConstraintKinds      #-}
 {-# LANGUAGE RankNTypes           #-}
 {-# LANGUAGE EmptyCase            #-}
+{-# LANGUAGE AllowAmbiguousTypes  #-}
+{-# LANGUAGE TypeApplications     #-}
 
 module Math.VectorSpace.Docile where
 
@@ -1145,10 +1147,10 @@ rieszDecomposeShowsPrec :: ∀ u v s . ( RieszDecomposable u
 rieszDecomposeShowsPrec p m = case rieszDecomposition m of
             [] -> ("zeroV"++)
             ((b₀,dv₀):dvs) -> showParen (p>6)
-                            $ \s -> showsPrecBasis ([]::[u]) 7 b₀
+                            $ \s -> showsPrecBasis @u 7 b₀
                                                      . (".<"++) . showsPrec 7 dv₀
                                   $ foldr (\(b,dv)
-                                        -> (" ^+^ "++) . showsPrecBasis ([]::[u]) 7 b
+                                        -> (" ^+^ "++) . showsPrecBasis @u 7 b
                                                        . (".<"++) . showsPrec 7 dv) s dvs
                                   
 instance Show (LinearMap s v (ZeroDim s)) where
@@ -1187,40 +1189,40 @@ b .⊗ w = basisValue b ⊗ w
 
 class (FiniteDimensional v, HasBasis v) => TensorDecomposable v where
   tensorDecomposition :: v⊗w -> [(Basis v, w)]
-  showsPrecBasis :: Hask.Functor p => p v -> Int -> Basis v -> ShowS
+  showsPrecBasis :: Int -> Basis v -> ShowS
 
 instance TensorDecomposable ℝ where
   tensorDecomposition (Tensor r) = [((), r)]
-  showsPrecBasis _ _ = shows
-instance ( TensorDecomposable x, TensorDecomposable y
-         , Scalar x ~ Scalar y, Scalar (DualVector x) ~ Scalar (DualVector y) )
+  showsPrecBasis _ = shows
+instance ∀ x y . ( TensorDecomposable x, TensorDecomposable y
+                 , Scalar x ~ Scalar y, Scalar (DualVector x) ~ Scalar (DualVector y) )
               => TensorDecomposable (x,y) where
   tensorDecomposition (Tensor (tx,ty))
                 = map (first Left) (tensorDecomposition tx)
                ++ map (first Right) (tensorDecomposition ty)
-  showsPrecBasis proxy p (Left bx)
-      = showParen (p>9) $ ("Left "++) . showsPrecBasis (fst<$>proxy) 10 bx
-  showsPrecBasis proxy p (Right by)
-      = showParen (p>9) $ ("Right "++) . showsPrecBasis (snd<$>proxy) 10 by
+  showsPrecBasis p (Left bx)
+      = showParen (p>9) $ ("Left "++) . showsPrecBasis @x 10 bx
+  showsPrecBasis p (Right by)
+      = showParen (p>9) $ ("Right "++) . showsPrecBasis @y 10 by
 
 instance TensorDecomposable (ZeroDim ℝ) where
   tensorDecomposition _ = []
-  showsPrecBasis _ _ = absurd
+  showsPrecBasis _ = absurd
 instance TensorDecomposable (V0 ℝ) where
   tensorDecomposition _ = []
-  showsPrecBasis _ _ (Mat.E q) = (V0^.q ++)
+  showsPrecBasis _ (Mat.E q) = (V0^.q ++)
 instance TensorDecomposable (V1 ℝ) where
   tensorDecomposition (Tensor (V1 w)) = [(ex, w)]
-  showsPrecBasis _ _ (Mat.E q) = (V1"ex"^.q ++)
+  showsPrecBasis _ (Mat.E q) = (V1"ex"^.q ++)
 instance TensorDecomposable (V2 ℝ) where
   tensorDecomposition (Tensor (V2 x y)) = [ (ex, x), (ey, y) ]
-  showsPrecBasis _ _ (Mat.E q) = (V2"ex""ey"^.q ++)
+  showsPrecBasis _ (Mat.E q) = (V2"ex""ey"^.q ++)
 instance TensorDecomposable (V3 ℝ) where
   tensorDecomposition (Tensor (V3 x y z)) = [ (ex, x), (ey, y), (ez, z) ]
-  showsPrecBasis _ _ (Mat.E q) = (V3"ex""ey""ez"^.q ++)
+  showsPrecBasis _ (Mat.E q) = (V3"ex""ey""ez"^.q ++)
 instance TensorDecomposable (V4 ℝ) where
   tensorDecomposition (Tensor (V4 x y z w)) = [ (ex, x), (ey, y), (ez, z), (ew, w) ]
-  showsPrecBasis _ _ (Mat.E q) = (V4"ex""ey""ez""ew"^.q ++)
+  showsPrecBasis _ (Mat.E q) = (V4"ex""ey""ez""ew"^.q ++)
 
 tensorDecomposeShowsPrec :: ∀ u v s
   . ( TensorDecomposable u, FiniteDimensional v, Show v, Scalar u ~ s, Scalar v ~ s )
@@ -1228,10 +1230,10 @@ tensorDecomposeShowsPrec :: ∀ u v s
 tensorDecomposeShowsPrec p t = case tensorDecomposition t of
             [] -> ("zeroV"++)
             ((b₀,dv₀):dvs) -> showParen (p>6)
-                            $ \s -> showsPrecBasis ([]::[u]) 7 b₀
+                            $ \s -> showsPrecBasis @u 7 b₀
                                                      . (".⊗"++) . showsPrec 7 dv₀
                                   $ foldr (\(b,dv)
-                                        -> (" ^+^ "++) . showsPrecBasis ([]::[u]) 7 b
+                                        -> (" ^+^ "++) . showsPrecBasis @u 7 b
                                                        . (".⊗"++) . showsPrec 7 dv) s dvs
 
 instance Show (Tensor s (V0 s) v) where
