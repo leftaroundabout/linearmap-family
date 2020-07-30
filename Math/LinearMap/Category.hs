@@ -69,6 +69,7 @@ module Math.LinearMap.Category (
             , finishEigenSystem
             , Eigenvector(..)
             -- * The classes of suitable vector spaces
+            , module Data.VectorSpace
             , LSpace
             , TensorSpace (..)
             , LinearSpace (..)
