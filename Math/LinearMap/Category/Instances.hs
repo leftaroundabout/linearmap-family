@@ -18,6 +18,8 @@
 {-# LANGUAGE UnicodeSyntax              #-}
 {-# LANGUAGE CPP                        #-}
 {-# LANGUAGE TupleSections              #-}
+{-# LANGUAGE EmptyCase                  #-}
+{-# LANGUAGE TypeApplications           #-}
 
 module Math.LinearMap.Category.Instances where
 
@@ -26,6 +28,7 @@ import Math.LinearMap.Category.Class
 import Data.VectorSpace
 import Data.Basis
 
+import Math.Manifold.Core.Types (EmptyMfd)
 import Math.Manifold.Core.PseudoAffine
 
 import Prelude ()
@@ -60,6 +63,19 @@ import qualified Test.QuickCheck as QC
 
 import qualified GHC.Exts as GHC
 import qualified GHC.Generics as GHC
+
+
+#if MIN_VERSION_manifolds_core(0,6,0)
+instance LinearSpace v => Semimanifold (EmptyMfd v) where
+  type Needle (EmptyMfd v) = v
+  p .+~^ _ = case p of {}
+  p .-~^ _ = case p of {}
+  semimanifoldWitness = case linearManifoldWitness @v of
+    LinearManifoldWitness -> SemimanifoldWitness
+instance LinearSpace v => PseudoAffine (EmptyMfd v) where
+  p .-~. _ = case p of {}
+#endif
+
 
 infixr 7 <.>^
 (<.>^) :: LinearSpace v => DualVector v -> v -> Scalar v
