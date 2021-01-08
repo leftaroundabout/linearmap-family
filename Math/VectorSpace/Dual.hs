@@ -23,6 +23,8 @@ module Math.VectorSpace.Dual
        , usingAnyDualness
         ) where
 
+import Math.LinearMap.Category.Class
+import Data.Kind (Type)
 
 
 data Dualness = Vector | Functional
@@ -41,12 +43,15 @@ data DualnessSingletons (dn :: Dualness) where
   FunctionalWitness :: DualnessSingletons Functional
 
 class ValidDualness (dn :: Dualness) where
+  type Space dn v :: Type
   dualityWitness :: DualityWitness dn
   decideDualness :: DualnessSingletons dn
 instance ValidDualness 'Vector where
+  type 'Vector`Space` v = v
   dualityWitness = DualityWitness
   decideDualness = VectorWitness
 instance ValidDualness 'Functional where
+  type 'Functional`Space` v = DualVector v
   dualityWitness = DualityWitness
   decideDualness = FunctionalWitness
 
