@@ -41,6 +41,7 @@ library
   exposed-modules:     Math.LinearMap.Category
                        Math.VectorSpace.ZeroDimensional
                        Math.VectorSpace.Dual
+                       Math.VectorSpace.MiscUtil.MultiConstraints
                        Math.LinearMap.Category.Derivatives
   other-modules:       Math.LinearMap.Category.Class
                        Math.LinearMap.Asserted
