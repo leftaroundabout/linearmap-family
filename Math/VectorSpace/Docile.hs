@@ -480,7 +480,7 @@ v^/^w = case (v<.>w) of
 
 type DList x = [x]->[x]
 
-class (LSpace v) => FiniteDimensional v where
+class (LSpace v, Eq v) => FiniteDimensional v where
   -- | Whereas 'Basis'-values refer to a single basis vector, a single
   --   'SubBasis' value represents a collection of such basis vectors,
   --   which can be used to associate a vector with a list of coefficients.
@@ -530,6 +530,24 @@ class (LSpace v) => FiniteDimensional v where
   --   library).
   uncanonicallyFromDual :: DualVector v -+> v
   uncanonicallyToDual :: v -+> DualVector v
+  
+  tensorEquality :: (TensorSpace w, Eq w, Scalar w ~ Scalar v) => v⊗w -> v⊗w -> Bool
+  
+ 
+instance ( FiniteDimensional u, TensorSpace v
+         , Scalar u~s, Scalar v~s
+         , Eq u, Eq v ) => Eq (Tensor s u v) where
+  (==) = tensorEquality
+
+instance ∀ s u v . ( LinearSpace u, FiniteDimensional (DualVector u)
+                   , TensorSpace v
+                   , Scalar u~s, Scalar v~s
+                   , Eq (DualVector u), Eq v )
+             => Eq (LinearMap s u v) where
+  LinearMap f == LinearMap g = case dualSpaceWitness @u of
+    DualSpaceWitness -> (Tensor f :: Tensor s (DualVector u) v) == Tensor g
+
+
 
 
 instance (Num' s) => FiniteDimensional (ZeroDim s) where
@@ -546,6 +564,7 @@ instance (Num' s) => FiniteDimensional (ZeroDim s) where
   recomposeContraLinMapTensor _ _ = LinearMap Origin
   uncanonicallyFromDual = id
   uncanonicallyToDual = id
+  tensorEquality (Tensor Origin) (Tensor Origin) = True
   
 instance (Num' s, Eq s, LinearSpace s) => FiniteDimensional (V0 s) where
   data SubBasis (V0 s) = V0Basis
@@ -561,6 +580,7 @@ instance (Num' s, Eq s, LinearSpace s) => FiniteDimensional (V0 s) where
   recomposeContraLinMapTensor _ _ = LinearMap V0
   uncanonicallyFromDual = id
   uncanonicallyToDual = id
+  tensorEquality (Tensor V0) (Tensor V0) = True
   
 instance FiniteDimensional ℝ where
   data SubBasis ℝ = RealsBasis
@@ -578,6 +598,7 @@ instance FiniteDimensional ℝ where
               . recomposeContraLinMap fw . fmap getLinearMap
   uncanonicallyFromDual = id
   uncanonicallyToDual = id
+  tensorEquality (Tensor v) (Tensor w) = v==w
 
 #define FreeFiniteDimensional(V, VB, dimens, take, give)        \
 instance (Num' s, Eq s, LSpace s)                            \
@@ -604,7 +625,8 @@ instance (Num' s, Eq s, LSpace s)                            \
          ; rclmt DualSpaceWitness fw mv = LinearMap $ \
        (\v -> fromLinearMap $ recomposeContraLinMap fw \
                 $ fmap (\(LinearMap q) -> foldl' (^+^) zeroV $ liftA2 (*^) v q) mv) \
-                       <$> Mat.identity } }
+                       <$> Mat.identity }; \
+  tensorEquality (Tensor s) (Tensor t) = s==t }
 FreeFiniteDimensional(V1, V1Basis, 1, c₀         , V1 c₀         )
 FreeFiniteDimensional(V2, V2Basis, 2, c₀:c₁      , V2 c₀ c₁      )
 FreeFiniteDimensional(V3, V3Basis, 3, c₀:c₁:c₂   , V3 c₀ c₁ c₂   )
@@ -676,6 +698,9 @@ instance ∀ u v . ( FiniteDimensional u, FiniteDimensional v
                              , dualSpaceWitness :: DualSpaceWitness v ) of
         (DualSpaceWitness,DualSpaceWitness)
             -> uncanonicallyToDual *** uncanonicallyToDual
+  tensorEquality (Tensor (s₀,s₁)) (Tensor (t₀,t₁)) 
+      = tensorEquality s₀ t₀ && tensorEquality s₁ t₁
+
   
 deriving instance (Show (SubBasis u), Show (SubBasis v))
                     => Show (SubBasis (u,v))
@@ -750,6 +775,15 @@ instance ∀ s u v .
             >>> fmap uncanonicallyFromDual 
             >>> transposeTensor >>> fmap uncanonicallyFromDual
             >>> transposeTensor
+  tensorEquality = tensTensorEquality
+ 
+tensTensorEquality :: ∀ s u v w . ( FiniteDimensional u, FiniteDimensional v, TensorSpace w
+                                  , Scalar u ~ s, Scalar v ~ s, Scalar w ~ s
+                                  , Eq w )
+       => Tensor s (Tensor s u v) w -> Tensor s (Tensor s u v) w -> Bool
+tensTensorEquality (Tensor s) (Tensor t)
+    = tensorEquality (Tensor s :: Tensor s u (v⊗w)) (Tensor t)
+
 
 tensorLinmapDecompositionhelpers
       :: ( FiniteDimensional v, LSpace w , Scalar v~s, Scalar w~s )
@@ -777,6 +811,10 @@ tensorLinmapDecompositionhelpers = (go, goWith)
   
 deriving instance (Show (SubBasis u), Show (SubBasis v))
              => Show (SubBasis (Tensor s u v))
+
+instance ∀ s v . (FiniteDimensional v, Scalar v ~ s)
+        => Eq (SymmetricTensor s v) where
+  SymTensor t == SymTensor u = t==u
 
 instance ∀ s v .
          ( FiniteDimensional v, Scalar v~s, Scalar (DualVector v)~s
@@ -957,7 +995,17 @@ instance ∀ s u v .
      (DualSpaceWitness, DualSpaceWitness)
            -> arr fromTensor <<< fmap uncanonicallyFromDual <<< transposeTensor
               <<< fmap uncanonicallyFromDual <<< transposeTensor
-  
+
+  tensorEquality = lmTensorEquality
+
+lmTensorEquality :: ∀ s u v w . ( LinearSpace u, FiniteDimensional v, TensorSpace w
+                                , FiniteDimensional (DualVector u)
+                                , Scalar u ~ s, Scalar v ~ s, Scalar w ~ s
+                                , Eq w )
+       => Tensor s (LinearMap s u v) w -> Tensor s (LinearMap s u v) w -> Bool
+lmTensorEquality (Tensor s) (Tensor t) = case dualSpaceWitness @u of
+      DualSpaceWitness -> tensorEquality (Tensor s :: Tensor s (DualVector u) (v⊗w)) (Tensor t)
+
 deriving instance (Show (SubBasis (DualVector u)), Show (SubBasis v))
              => Show (SubBasis (LinearMap s u v))
 

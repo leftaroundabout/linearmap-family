@@ -276,11 +276,6 @@ instance (Fractional' n, TensorProduct (DualVector n) n ~ n)
   recip (LinearMap n) = LinearMap $ recip n
   fromRational = LinearMap . fromRational
 
-instance (Eq v, Scalar v ~ ℝ) => Eq (Tensor ℝ ℝ v) where
-  Tensor f == Tensor g = f==g
-instance (Eq v, Scalar v ~ ℝ) => Eq (LinearMap ℝ ℝ v) where
-  LinearMap f == LinearMap g = f==g
-
 
 
 instance (Num' n, UArr.Unbox n) => Semimanifold (FinSuppSeq n) where
