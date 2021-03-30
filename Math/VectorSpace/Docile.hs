@@ -547,6 +547,13 @@ instance ∀ s u v . ( LinearSpace u, FiniteDimensional (DualVector u)
   LinearMap f == LinearMap g = case dualSpaceWitness @u of
     DualSpaceWitness -> (Tensor f :: Tensor s (DualVector u) v) == Tensor g
 
+instance ∀ s u v . ( LinearSpace u, FiniteDimensional (DualVector u)
+                   , TensorSpace v
+                   , Scalar u~s, Scalar v~s
+                   , Eq (DualVector u), Eq v )
+             => Eq (LinearFunction s u v) where
+  f == g = (sampleLinearFunction-+$>f) == (sampleLinearFunction-+$>g)
+
 
 
 
