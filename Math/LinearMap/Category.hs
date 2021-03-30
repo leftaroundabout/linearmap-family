@@ -95,6 +95,7 @@ module Math.LinearMap.Category (
             -- ** Double-dual, scalar-scalar etc. identity
             , ClosedScalarWitness(..), TrivialTensorWitness(..)
             , ScalarSpaceWitness(..), DualSpaceWitness(..), LinearManifoldWitness(..)
+            , DualFinitenessWitness(..)
             -- ** Misc
             , relaxNorm, transformNorm, transformVariance
             , findNormalLength, normalLength
