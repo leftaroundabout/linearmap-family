@@ -13,6 +13,7 @@
 {-# LANGUAGE TypeOperators        #-}
 {-# LANGUAGE StandaloneDeriving   #-}
 {-# LANGUAGE TypeFamilies         #-}
+{-# LANGUAGE GADTs                #-}
 {-# LANGUAGE FlexibleInstances    #-}
 {-# LANGUAGE FlexibleContexts     #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -25,6 +26,7 @@
 {-# LANGUAGE EmptyCase            #-}
 {-# LANGUAGE AllowAmbiguousTypes  #-}
 {-# LANGUAGE TypeApplications     #-}
+{-# LANGUAGE DefaultSignatures    #-}
 
 module Math.VectorSpace.Docile where
 
@@ -480,6 +482,12 @@ v^/^w = case (v<.>w) of
 
 type DList x = [x]->[x]
 
+
+data DualFinitenessWitness v where
+  DualFinitenessWitness
+    :: FiniteDimensional (DualVector v)
+         => DualSpaceWitness v -> DualFinitenessWitness v
+
 class (LSpace v, Eq v) => FiniteDimensional v where
   -- | Whereas 'Basis'-values refer to a single basis vector, a single
   --   'SubBasis' value represents a collection of such basis vectors,
@@ -532,6 +540,11 @@ class (LSpace v, Eq v) => FiniteDimensional v where
   uncanonicallyToDual :: v -+> DualVector v
   
   tensorEquality :: (TensorSpace w, Eq w, Scalar w ~ Scalar v) => v⊗w -> v⊗w -> Bool
+
+  dualFinitenessWitness :: DualFinitenessWitness v
+  default dualFinitenessWitness :: FiniteDimensional (DualVector v)
+              => DualFinitenessWitness v
+  dualFinitenessWitness = DualFinitenessWitness (dualSpaceWitness @v)
   
  
 instance ( FiniteDimensional u, TensorSpace v
@@ -539,18 +552,19 @@ instance ( FiniteDimensional u, TensorSpace v
          , Eq u, Eq v ) => Eq (Tensor s u v) where
   (==) = tensorEquality
 
-instance ∀ s u v . ( LinearSpace u, FiniteDimensional (DualVector u)
+instance ∀ s u v . ( FiniteDimensional u
                    , TensorSpace v
                    , Scalar u~s, Scalar v~s
-                   , Eq (DualVector u), Eq v )
+                   , Eq v )
              => Eq (LinearMap s u v) where
-  LinearMap f == LinearMap g = case dualSpaceWitness @u of
-    DualSpaceWitness -> (Tensor f :: Tensor s (DualVector u) v) == Tensor g
+  LinearMap f == LinearMap g = case dualFinitenessWitness @u of
+    DualFinitenessWitness DualSpaceWitness
+       -> (Tensor f :: Tensor s (DualVector u) v) == Tensor g
 
-instance ∀ s u v . ( LinearSpace u, FiniteDimensional (DualVector u)
+instance ∀ s u v . ( FiniteDimensional u
                    , TensorSpace v
                    , Scalar u~s, Scalar v~s
-                   , Eq (DualVector u), Eq v )
+                   , Eq v )
              => Eq (LinearFunction s u v) where
   f == g = (sampleLinearFunction-+$>f) == (sampleLinearFunction-+$>g)
 
@@ -707,6 +721,11 @@ instance ∀ u v . ( FiniteDimensional u, FiniteDimensional v
             -> uncanonicallyToDual *** uncanonicallyToDual
   tensorEquality (Tensor (s₀,s₁)) (Tensor (t₀,t₁)) 
       = tensorEquality s₀ t₀ && tensorEquality s₁ t₁
+  dualFinitenessWitness = case ( dualFinitenessWitness @u
+                               , dualFinitenessWitness @v ) of
+      (DualFinitenessWitness DualSpaceWitness
+       , DualFinitenessWitness DualSpaceWitness)
+          -> DualFinitenessWitness DualSpaceWitness
 
   
 deriving instance (Show (SubBasis u), Show (SubBasis v))
@@ -783,6 +802,11 @@ instance ∀ s u v .
             >>> transposeTensor >>> fmap uncanonicallyFromDual
             >>> transposeTensor
   tensorEquality = tensTensorEquality
+  dualFinitenessWitness = case ( dualFinitenessWitness @u
+                               , dualFinitenessWitness @v ) of
+      (DualFinitenessWitness DualSpaceWitness
+       , DualFinitenessWitness DualSpaceWitness)
+          -> DualFinitenessWitness DualSpaceWitness
  
 tensTensorEquality :: ∀ s u v w . ( FiniteDimensional u, FiniteDimensional v, TensorSpace w
                                   , Scalar u ~ s, Scalar v ~ s, Scalar w ~ s
@@ -838,8 +862,9 @@ instance ∀ s v .
                            -- dim Sym(𝑘,𝑉) = nCr (dim 𝑉 + 𝑘 - 1, 𝑘)
                            -- dim Sym(2,𝑉) = nCr (𝑛 + 1, 2) = 𝑛⋅(𝑛+1)/2
    where n = subbasisDimension b
-  decomposeLinMap = dclm dualSpaceWitness
-   where dclm (DualSpaceWitness :: DualSpaceWitness v) (LinearMap f)
+  decomposeLinMap = dclm dualFinitenessWitness
+   where dclm (DualFinitenessWitness DualSpaceWitness :: DualFinitenessWitness v)
+                (LinearMap f)
                     = (SymTensBasis bf, rmRedundant 0 . symmetrise $ dlw [])
           where rmRedundant _ [] = id
                 rmRedundant k (row:rest)
@@ -866,8 +891,9 @@ instance ∀ s v .
                                     oscld = (sqrt 0.5*)<$>o
                                 in sd₀ [] ++ [d] ++ oscld
                                      ++ mkSym (n-1) (zipWith (.) sds $ (:)<$>oscld) rest
-  recomposeLinMap = rclm dualSpaceWitness
-   where rclm (DualSpaceWitness :: DualSpaceWitness v) (SymTensBasis b) ws
+  recomposeLinMap = rclm dualFinitenessWitness
+   where rclm (DualFinitenessWitness DualSpaceWitness :: DualFinitenessWitness v)
+                  (SymTensBasis b) ws
            = case recomposeLinMap (LinMapBasis b b)
                     $ mkSym (subbasisDimension b) (repeat id) ws of
               (f, remws) -> (LinearMap $ rassocTensor . asTensor $ f, remws)
@@ -894,13 +920,14 @@ instance ∀ s v .
                                    in concat (sd₀ []) ++ d ++ concat oscld
                                        ++ mkSym nw (n-1) (zipWith (.) sds $ (:)<$>oscld) rest
   recomposeContraLinMap f tenss
-           = LinearMap . arr (rassocTensor . asTensor) . rcCLM dualSpaceWitness f
+           = LinearMap . arr (rassocTensor . asTensor) . rcCLM dualFinitenessWitness f
                                     $ fmap getSymmetricTensor tenss
    where rcCLM :: (Hask.Functor f, LinearSpace w, s~Scalar w)
-           => DualSpaceWitness v
+           => DualFinitenessWitness v
                  -> (f s->w) -> f (Tensor s (DualVector v) (DualVector v))
                      -> LinearMap s (LinearMap s (DualVector v) v) w
-         rcCLM DualSpaceWitness f = recomposeContraLinMap f
+         rcCLM (DualFinitenessWitness DualSpaceWitness) f
+            = recomposeContraLinMap f
   recomposeContraLinMapTensor = rcCLMT'
    where rcCLMT' :: ∀ f u w . (Hask.Functor f, LinearSpace w, s~Scalar w
                                             , FiniteDimensional u, s~Scalar u)
@@ -908,9 +935,9 @@ instance ∀ s v .
                                   -> (SymmetricTensor s v ⊗ u) +> w
          rcCLMT' f tenss
            = LinearMap . arr (fmap rassocTensor . rassocTensor . asTensor)
-                 . rcCLMT (dualSpaceWitness, dualSpaceWitness) f
+                 . rcCLMT (dualFinitenessWitness, dualFinitenessWitness) f
                       $ fmap getLinearMap tenss
-          where rcCLMT :: (DualSpaceWitness v, DualSpaceWitness u)
+          where rcCLMT :: (DualFinitenessWitness v, DualFinitenessWitness u)
                  -> (f s->w) -> f (Tensor s (DualVector v)
                                             (Tensor s (DualVector v) (DualVector u)))
                   -- -> LinearMap s (Tensor s (SymmetricTensor s v) u) w
@@ -923,95 +950,109 @@ instance ∀ s v .
                   --                       (DualVector v ⊗ DualVector u)) w
                   --  ∼ Tensor s (DualVector v)
                   --             (Tensor s (DualVector v ⊗ DualVector u) w)
-                rcCLMT (DualSpaceWitness, DualSpaceWitness) f = recomposeContraLinMap f
-  uncanonicallyFromDual = case dualSpaceWitness :: DualSpaceWitness v of
-     DualSpaceWitness -> LinearFunction
+                rcCLMT ( DualFinitenessWitness DualSpaceWitness
+                       , DualFinitenessWitness DualSpaceWitness ) f
+                             = recomposeContraLinMap f
+  uncanonicallyFromDual = case dualFinitenessWitness :: DualFinitenessWitness v of
+     DualFinitenessWitness DualSpaceWitness -> LinearFunction
           $ \(SymTensor t) -> SymTensor $ arr fromLinearMap . uncanonicallyFromDual $ t
-  uncanonicallyToDual = case dualSpaceWitness :: DualSpaceWitness v of
-     DualSpaceWitness -> LinearFunction
+  uncanonicallyToDual = case dualFinitenessWitness :: DualFinitenessWitness v of
+     DualFinitenessWitness DualSpaceWitness -> LinearFunction
           $ \(SymTensor t) -> SymTensor $ uncanonicallyToDual . arr asLinearMap $ t
+  dualFinitenessWitness = case dualFinitenessWitness @v of
+      DualFinitenessWitness DualSpaceWitness
+          -> DualFinitenessWitness DualSpaceWitness
   
 deriving instance (Show (SubBasis v)) => Show (SubBasis (SymmetricTensor s v))
 
 
 instance ∀ s u v .
-         ( LSpace u, FiniteDimensional (DualVector u), FiniteDimensional v
+         ( LSpace u, FiniteDimensional u, FiniteDimensional v
          , Scalar u~s, Scalar v~s, Scalar (DualVector v)~s, Fractional' (Scalar v) )
             => FiniteDimensional (LinearMap s u v) where
   data SubBasis (LinearMap s u v) = LinMapBasis !(SubBasis (DualVector u)) !(SubBasis v)
-  entireBasis = case ( dualSpaceWitness :: DualSpaceWitness u
+  entireBasis = case ( dualFinitenessWitness :: DualFinitenessWitness u
                      , dualSpaceWitness :: DualSpaceWitness v ) of
-     (DualSpaceWitness, DualSpaceWitness)
+     (DualFinitenessWitness DualSpaceWitness, DualSpaceWitness)
            -> case entireBasis of TensorBasis bu bv -> LinMapBasis bu bv
   enumerateSubBasis
-          = case ( dualSpaceWitness :: DualSpaceWitness u
+          = case ( dualFinitenessWitness :: DualFinitenessWitness u
                  , dualSpaceWitness :: DualSpaceWitness v )  of
-     (DualSpaceWitness, DualSpaceWitness) -> \(LinMapBasis bu bv)
+     (DualFinitenessWitness DualSpaceWitness, DualSpaceWitness) -> \(LinMapBasis bu bv)
                    -> arr (fmap asLinearMap) . enumerateSubBasis $ TensorBasis bu bv
-  subbasisDimension (LinMapBasis bu bv) = subbasisDimension bu * subbasisDimension bv
-  decomposeLinMap = case ( dualSpaceWitness :: DualSpaceWitness u
+  subbasisDimension (LinMapBasis bu bv) 
+          = case ( dualFinitenessWitness :: DualFinitenessWitness u ) of
+     (DualFinitenessWitness _) -> subbasisDimension bu * subbasisDimension bv
+  decomposeLinMap = case ( dualFinitenessWitness :: DualFinitenessWitness u
                          , dualSpaceWitness :: DualSpaceWitness v ) of
-     (DualSpaceWitness, DualSpaceWitness)
+     (DualFinitenessWitness DualSpaceWitness, DualSpaceWitness)
               -> first (\(TensorBasis bu bv)->LinMapBasis bu bv)
                     . decomposeLinMap . coerce
-  decomposeLinMapWithin = case ( dualSpaceWitness :: DualSpaceWitness u
+  decomposeLinMapWithin = case ( dualFinitenessWitness :: DualFinitenessWitness u
                                , dualSpaceWitness :: DualSpaceWitness v ) of
-     (DualSpaceWitness, DualSpaceWitness)
+     (DualFinitenessWitness DualSpaceWitness, DualSpaceWitness)
         -> \(LinMapBasis bu bv) m
          -> case decomposeLinMapWithin (TensorBasis bu bv) (coerce m) of
               Right ws -> Right ws
               Left (TensorBasis bu' bv', ws) -> Left (LinMapBasis bu' bv', ws)
-  recomposeSB = case ( dualSpaceWitness :: DualSpaceWitness u
+  recomposeSB = case ( dualFinitenessWitness :: DualFinitenessWitness u
                      , dualSpaceWitness :: DualSpaceWitness v ) of
-     (DualSpaceWitness, DualSpaceWitness) -> \(LinMapBasis bu bv)
+     (DualFinitenessWitness DualSpaceWitness, DualSpaceWitness) -> \(LinMapBasis bu bv)
         -> recomposeSB (TensorBasis bu bv) >>> first (arr fromTensor)
-  recomposeSBTensor = case ( dualSpaceWitness :: DualSpaceWitness u
+  recomposeSBTensor = case ( dualFinitenessWitness :: DualFinitenessWitness u
                            , dualSpaceWitness :: DualSpaceWitness v ) of
-     (DualSpaceWitness, DualSpaceWitness) -> \(LinMapBasis bu bv) bw
+     (DualFinitenessWitness DualSpaceWitness, DualSpaceWitness) -> \(LinMapBasis bu bv) bw
         -> recomposeSBTensor (TensorBasis bu bv) bw >>> first coerce
-  recomposeLinMap = rlm dualSpaceWitness dualSpaceWitness
+  recomposeLinMap = rlm dualFinitenessWitness dualSpaceWitness
    where rlm :: ∀ w . (LSpace w, Scalar w ~ Scalar v) 
-                   => DualSpaceWitness u -> DualSpaceWitness w -> SubBasis (u+>v) -> [w]
+                   => DualFinitenessWitness u -> DualSpaceWitness w -> SubBasis (u+>v) -> [w]
                                 -> ((u+>v)+>w, [w])
-         rlm DualSpaceWitness DualSpaceWitness (LinMapBasis bu bv) ws
+         rlm (DualFinitenessWitness DualSpaceWitness) DualSpaceWitness (LinMapBasis bu bv) ws
              = ( coUncurryLinearMap . fromLinearMap $ fst . recomposeLinMap bu
                            $ unfoldr (pure . recomposeLinMap bv) ws
                , drop (subbasisDimension bu * subbasisDimension bv) ws )
-  recomposeContraLinMap = case ( dualSpaceWitness :: DualSpaceWitness u
+  recomposeContraLinMap = case ( dualFinitenessWitness :: DualFinitenessWitness u
                                , dualSpaceWitness :: DualSpaceWitness v ) of
-     (DualSpaceWitness, DualSpaceWitness) -> \fw dds
+     (DualFinitenessWitness DualSpaceWitness, DualSpaceWitness) -> \fw dds
        -> argFromTensor $ recomposeContraLinMapTensor fw $ fmap (arr asLinearMap) dds
-  recomposeContraLinMapTensor = rclmt dualSpaceWitness dualSpaceWitness dualSpaceWitness
+  recomposeContraLinMapTensor = rclmt dualFinitenessWitness dualSpaceWitness dualSpaceWitness
    where rclmt :: ∀ f u' w . ( LinearSpace w, FiniteDimensional u'
                              , Scalar w ~ s, Scalar u' ~ s
                              , Hask.Functor f )
-                  => DualSpaceWitness u -> DualSpaceWitness v -> DualSpaceWitness u'
+                  => DualFinitenessWitness u -> DualSpaceWitness v -> DualSpaceWitness u'
                    -> (f (Scalar w) -> w) -> f ((u+>v)+>DualVector u') -> ((u+>v)⊗u')+>w
-         rclmt DualSpaceWitness DualSpaceWitness DualSpaceWitness fw dds
+         rclmt (DualFinitenessWitness DualSpaceWitness)
+                    DualSpaceWitness DualSpaceWitness fw dds
           = uncurryLinearMap . coUncurryLinearMap
            . fmap curryLinearMap . coCurryLinearMap . argFromTensor
              $ recomposeContraLinMapTensor fw
                $ fmap (arr $ asLinearMap . coCurryLinearMap) dds
-  uncanonicallyToDual = case ( dualSpaceWitness :: DualSpaceWitness u
+  uncanonicallyToDual = case ( dualFinitenessWitness :: DualFinitenessWitness u
                              , dualSpaceWitness :: DualSpaceWitness v ) of
-     (DualSpaceWitness, DualSpaceWitness)
+     (DualFinitenessWitness DualSpaceWitness, DualSpaceWitness)
            -> arr asTensor >>> fmap uncanonicallyToDual >>> transposeTensor
               >>> fmap uncanonicallyToDual >>> transposeTensor
-  uncanonicallyFromDual = case ( dualSpaceWitness :: DualSpaceWitness u
+  uncanonicallyFromDual = case ( dualFinitenessWitness :: DualFinitenessWitness u
                                , dualSpaceWitness :: DualSpaceWitness v ) of
-     (DualSpaceWitness, DualSpaceWitness)
+     (DualFinitenessWitness DualSpaceWitness, DualSpaceWitness)
            -> arr fromTensor <<< fmap uncanonicallyFromDual <<< transposeTensor
               <<< fmap uncanonicallyFromDual <<< transposeTensor
 
   tensorEquality = lmTensorEquality
+  dualFinitenessWitness = case ( dualFinitenessWitness @u
+                               , dualFinitenessWitness @v ) of
+      (DualFinitenessWitness DualSpaceWitness
+       , DualFinitenessWitness DualSpaceWitness)
+          -> DualFinitenessWitness DualSpaceWitness
 
-lmTensorEquality :: ∀ s u v w . ( LinearSpace u, FiniteDimensional v, TensorSpace w
-                                , FiniteDimensional (DualVector u)
+lmTensorEquality :: ∀ s u v w . ( FiniteDimensional v, TensorSpace w
+                                , FiniteDimensional u
                                 , Scalar u ~ s, Scalar v ~ s, Scalar w ~ s
                                 , Eq w )
        => Tensor s (LinearMap s u v) w -> Tensor s (LinearMap s u v) w -> Bool
-lmTensorEquality (Tensor s) (Tensor t) = case dualSpaceWitness @u of
-      DualSpaceWitness -> tensorEquality (Tensor s :: Tensor s (DualVector u) (v⊗w)) (Tensor t)
+lmTensorEquality (Tensor s) (Tensor t) = case dualFinitenessWitness @u of
+      DualFinitenessWitness DualSpaceWitness
+         -> tensorEquality (Tensor s :: Tensor s (DualVector u) (v⊗w)) (Tensor t)
 
 deriving instance (Show (SubBasis (DualVector u)), Show (SubBasis v))
              => Show (SubBasis (LinearMap s u v))
