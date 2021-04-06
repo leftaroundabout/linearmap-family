@@ -14,6 +14,7 @@
 {-# LANGUAGE FunctionalDependencies     #-}
 {-# LANGUAGE TypeOperators              #-}
 {-# LANGUAGE TypeFamilies               #-}
+{-# LANGUAGE AllowAmbiguousTypes        #-}
 {-# LANGUAGE Rank2Types                 #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE PatternSynonyms            #-}
@@ -229,6 +230,9 @@ class (TensorSpace v, Num (Scalar v)) => LinearSpace v where
   applyTensorLinMap :: ( LinearSpace u, TensorSpace w
                        , Scalar u ~ Scalar v, Scalar w ~ Scalar v )
                => Bilinear ((v⊗u)+>w) (v⊗u) w 
+  
+  useTupleLinearSpaceComponents :: (v ~ (x,y))
+         => ((LinearSpace x, LinearSpace y, Scalar x ~ Scalar y) => φ) -> φ
   
 
 fmapLinearMap :: ∀ s v w x . ( LinearSpace v, TensorSpace w, TensorSpace x
@@ -589,6 +593,7 @@ instance ∀ u v . ( LinearSpace u, LinearSpace v, Scalar u ~ Scalar v )
              \f (Tensor (tu,tv)) -> let LinearMap (fu,fv) = curryLinearMap $ f
                    in ( (applyTensorLinMap-+$>uncurryLinearMap.asLinearMap $ fu)-+$>tu )
                    ^+^ ( (applyTensorLinMap-+$>uncurryLinearMap.asLinearMap $ fv)-+$>tv )
+  useTupleLinearSpaceComponents r = r
 
 lfstBlock :: ( LSpace u, LSpace v, LSpace w
              , Scalar u ~ Scalar v, Scalar v ~ Scalar w )
