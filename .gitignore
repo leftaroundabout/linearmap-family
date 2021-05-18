@@ -16,3 +16,4 @@ bin/
 .stack-work
 .ghc.envi*
 dist-newstyle
+cabal.project.local
