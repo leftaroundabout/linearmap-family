@@ -64,3 +64,16 @@ library
                        QuickCheck >=2.11 && <2.15
   -- hs-source-dirs:      
   default-language:    Haskell2010
+
+test-suite tasty
+  main-is:         test.hs
+  type:            exitcode-stdio-1.0
+  hs-source-dirs:  test/tasty
+  build-depends:   base, linearmap-category
+                   , QuickCheck
+                   , manifolds-core
+                   , constrained-categories
+                   , tasty, tasty-quickcheck
+  ghc-options: -threaded "-with-rtsopts -N8 -M2G"
+  default-language:    Haskell2010
+
