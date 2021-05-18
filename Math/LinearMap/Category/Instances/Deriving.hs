@@ -13,6 +13,7 @@
 {-# LANGUAGE TypeOperators              #-}
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE AllowAmbiguousTypes        #-}
+{-# LANGUAGE TypeApplications           #-}
 {-# LANGUAGE Rank2Types                 #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE UnicodeSyntax              #-}
@@ -186,4 +187,158 @@ instance ∀ v . ( HasBasis v, Num' (Scalar v)
          -> Tensor $ liftA2 (curry f) tv tw
   coerceFmapTensorProduct _ Coercion
     = error "Cannot yet coerce tensors defined from a `HasBasis` instance. This would require `RoleAnnotations` on `:->:`. Cf. https://gitlab.haskell.org/ghc/ghc/-/issues/8177"
-  
+
+
+
+newtype DualVectorFromBasis v = DualVectorFromBasis { getDualVectorFromBasis :: v }
+  deriving newtype (Eq, AdditiveGroup, VectorSpace, HasBasis)
+
+instance AdditiveGroup v => Semimanifold (DualVectorFromBasis v) where
+  type Needle (DualVectorFromBasis v) = DualVectorFromBasis v
+  type Interior (DualVectorFromBasis v) = DualVectorFromBasis v
+  toInterior = pure
+  fromInterior = id
+  translateP = Tagged (^+^)
+  (.+~^) = (^+^)
+  semimanifoldWitness = SemimanifoldWitness BoundarylessWitness
+
+instance AdditiveGroup v => AffineSpace (DualVectorFromBasis v) where
+  type Diff (DualVectorFromBasis v) = DualVectorFromBasis v
+  (.+^) = (^+^)
+  (.-.) = (^-^)
+
+instance AdditiveGroup v => PseudoAffine (DualVectorFromBasis v) where
+  (.-~!) = (^-^)
+
+instance ∀ v . ( HasBasis v, Num' (Scalar v)
+               , Scalar (Scalar v) ~ Scalar v
+               , HasTrie (Basis v)
+               , Eq v )
+     => TensorSpace (DualVectorFromBasis v) where
+  type TensorProduct (DualVectorFromBasis v) w = Basis v :->: w
+  wellDefinedVector v
+   | v==v       = Just v
+   | otherwise  = Nothing
+  wellDefinedTensor (Tensor v)
+     = fmap (const $ Tensor v) . traverse (wellDefinedVector . snd) $ enumerate v
+  zeroTensor = Tensor . trie $ const zeroV
+  toFlatTensor = LinearFunction $ Tensor . trie . decompose'
+  fromFlatTensor = LinearFunction $ \(Tensor t)
+          -> recompose $ enumerate t
+  scalarSpaceWitness = ScalarSpaceWitness
+  linearManifoldWitness = LinearManifoldWitness BoundarylessWitness
+  addTensors (Tensor v) (Tensor w) = Tensor $ (^+^) <$> v <*> w
+  subtractTensors (Tensor v) (Tensor w) = Tensor $ (^-^) <$> v <*> w
+  tensorProduct = bilinearFunction
+    $ \v w -> Tensor . trie $ \bv -> decompose' v bv *^ w
+  transposeTensor = LinearFunction $ \(Tensor t)
+       -> sumV [ (tensorProduct-+$>w)-+$>basisValue b
+               | (b,w) <- enumerate t ]
+  fmapTensor = bilinearFunction
+    $ \(LinearFunction f) (Tensor t)
+         -> Tensor $ fmap f t
+  fzipTensorWith = bilinearFunction
+    $ \(LinearFunction f) (Tensor tv, Tensor tw)
+         -> Tensor $ liftA2 (curry f) tv tw
+  coerceFmapTensorProduct _ Coercion
+    = error "Cannot yet coerce tensors defined from a `HasBasis` instance. This would require `RoleAnnotations` on `:->:`. Cf. https://gitlab.haskell.org/ghc/ghc/-/issues/8177"
+
+
+
+instance ∀ v . ( HasBasis v, Num' (Scalar v)
+               , Scalar (Scalar v) ~ Scalar v
+               , HasTrie (Basis v)
+               , Eq v, Eq (Basis v) )
+     => LinearSpace (SpaceFromBasis v) where
+  type DualVector (SpaceFromBasis v) = DualVectorFromBasis v
+  dualSpaceWitness = case closedScalarWitness @(Scalar v) of
+    ClosedScalarWitness -> DualSpaceWitness
+  linearId = LinearMap . trie $ SpaceFromBasis . basisValue
+  tensorId = tid
+   where tid :: ∀ w . (LinearSpace w, Scalar w ~ Scalar v)
+           => (SpaceFromBasis v⊗w) +> (SpaceFromBasis v⊗w)
+         tid = case dualSpaceWitness @w of
+          DualSpaceWitness -> LinearMap . trie $ Tensor . \i
+           -> getTensorProduct $
+             (fmapTensor @(DualVector w)
+                 -+$>(LinearFunction $ \w -> Tensor . trie
+                              $ (\j -> if i==j then w else zeroV)
+                               :: SpaceFromBasis v⊗w))
+              -+$> case linearId @w of
+                    LinearMap lw -> Tensor lw :: DualVector w⊗w
+  applyDualVector = bilinearFunction
+    $ \(DualVectorFromBasis f) (SpaceFromBasis v)
+          -> sum [decompose' f i * vi | (i,vi) <- decompose v]
+  applyLinear = bilinearFunction
+    $ \(LinearMap f) (SpaceFromBasis v)
+          -> sumV [vi *^ untrie f i | (i,vi) <- decompose v]
+  applyTensorFunctional = atf
+   where atf :: ∀ u . (LinearSpace u, Scalar u ~ Scalar v)
+          => Bilinear (DualVector (SpaceFromBasis v ⊗ u))
+                         (SpaceFromBasis v ⊗ u) (Scalar v)
+         atf = case dualSpaceWitness @u of
+          DualSpaceWitness -> bilinearFunction
+           $ \(LinearMap f) (Tensor t)
+             -> sum [ (applyDualVector-+$>fi)-+$>untrie t i
+                    | (i, fi) <- enumerate f ]
+  applyTensorLinMap = atlm
+   where atlm :: ∀ u w . ( LinearSpace u, TensorSpace w
+                         , Scalar u ~ Scalar v, Scalar w ~ Scalar v )
+                  => Bilinear ((SpaceFromBasis v ⊗ u) +> w) (SpaceFromBasis v ⊗ u) w
+         atlm = case dualSpaceWitness @u of
+           DualSpaceWitness -> bilinearFunction
+             $ \(LinearMap f) (Tensor t)
+              -> sumV [ (applyLinear-+$>(LinearMap fi :: u+>w))
+                         -+$> untrie t i
+                      | (i, Tensor fi) <- enumerate f ]
+  useTupleLinearSpaceComponents = error "Not a tuple type"
+
+instance ∀ v . ( HasBasis v, Num' (Scalar v)
+               , Scalar (Scalar v) ~ Scalar v
+               , HasTrie (Basis v)
+               , Eq v, Eq (Basis v) )
+     => LinearSpace (DualVectorFromBasis v) where
+  type DualVector (DualVectorFromBasis v) = SpaceFromBasis v
+  dualSpaceWitness = case closedScalarWitness @(Scalar v) of
+    ClosedScalarWitness -> DualSpaceWitness
+  linearId = LinearMap . trie $ DualVectorFromBasis . basisValue
+  tensorId = tid
+   where tid :: ∀ w . (LinearSpace w, Scalar w ~ Scalar v)
+           => (DualVectorFromBasis v⊗w) +> (DualVectorFromBasis v⊗w)
+         tid = case dualSpaceWitness @w of
+          DualSpaceWitness -> LinearMap . trie $ Tensor . \i
+           -> getTensorProduct $
+             (fmapTensor @(DualVector w)
+                 -+$>(LinearFunction $ \w -> Tensor . trie
+                              $ (\j -> if i==j then w else zeroV)
+                               :: DualVectorFromBasis v⊗w))
+              -+$> case linearId @w of
+                    LinearMap lw -> Tensor lw :: DualVector w⊗w
+  applyDualVector = bilinearFunction
+    $ \(SpaceFromBasis f) (DualVectorFromBasis v)
+          -> sum [decompose' f i * vi | (i,vi) <- decompose v]
+  applyLinear = bilinearFunction
+    $ \(LinearMap f) (DualVectorFromBasis v)
+          -> sumV [vi *^ untrie f i | (i,vi) <- decompose v]
+  applyTensorFunctional = atf
+   where atf :: ∀ u . (LinearSpace u, Scalar u ~ Scalar v)
+          => Bilinear (DualVector (DualVectorFromBasis v ⊗ u))
+                         (DualVectorFromBasis v ⊗ u) (Scalar v)
+         atf = case dualSpaceWitness @u of
+          DualSpaceWitness -> bilinearFunction
+           $ \(LinearMap f) (Tensor t)
+             -> sum [ (applyDualVector-+$>fi)-+$>untrie t i
+                    | (i, fi) <- enumerate f ]
+  applyTensorLinMap = atlm
+   where atlm :: ∀ u w . ( LinearSpace u, TensorSpace w
+                         , Scalar u ~ Scalar v, Scalar w ~ Scalar v )
+                  => Bilinear ((DualVectorFromBasis v ⊗ u) +> w)
+                               (DualVectorFromBasis v ⊗ u) w
+         atlm = case dualSpaceWitness @u of
+           DualSpaceWitness -> bilinearFunction
+             $ \(LinearMap f) (Tensor t)
+              -> sumV [ (applyLinear-+$>(LinearMap fi :: u+>w))
+                         -+$> untrie t i
+                      | (i, Tensor fi) <- enumerate f ]
+  useTupleLinearSpaceComponents = error "Not a tuple type"
+
