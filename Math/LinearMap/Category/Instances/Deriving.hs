@@ -9,22 +9,19 @@
 -- 
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE FlexibleContexts           #-}
-{-# LANGUAGE ConstraintKinds            #-}
 {-# LANGUAGE UndecidableInstances       #-}
-{-# LANGUAGE FunctionalDependencies     #-}
 {-# LANGUAGE TypeOperators              #-}
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE AllowAmbiguousTypes        #-}
 {-# LANGUAGE Rank2Types                 #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
-{-# LANGUAGE PatternSynonyms            #-}
-{-# LANGUAGE ViewPatterns               #-}
 {-# LANGUAGE UnicodeSyntax              #-}
-{-# LANGUAGE TupleSections              #-}
 {-# LANGUAGE StandaloneDeriving         #-}
 {-# LANGUAGE DeriveGeneric              #-}
 {-# LANGUAGE GADTs                      #-}
-{-# LANGUAGE DefaultSignatures          #-}
+{-# LANGUAGE DerivingStrategies         #-}
+{-# LANGUAGE GeneralisedNewtypeDeriving #-}
+{-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE CPP                        #-}
 
 module Math.LinearMap.Category.Instances.Deriving where
@@ -33,6 +30,7 @@ import Math.LinearMap.Category.Class
 
 import Data.VectorSpace
 import Data.AffineSpace
+import Data.Basis
 
 import Prelude ()
 import qualified Prelude as Hask
@@ -49,6 +47,31 @@ import Math.LinearMap.Asserted
 import Math.VectorSpace.ZeroDimensional
 import Data.VectorSpace.Free
 
-import qualified GHC.Generics as Gnrx
-import GHC.Generics (Generic, (:*:)((:*:)))
+import Language.Haskell.TH
+
+
+makeTensorSpaceFromBasis :: Q Type -> DecsQ
+makeTensorSpaceFromBasis v = do
+  semiMfdInst <- InstanceD Nothing [] <$> [t|Semimanifold $v|] <*> do
+    tySyns <- sequence [
+#if MIN_VERSION_template_haskell(2,15,0)
+       error "The TH type of TySynInstD has changed"
+#else
+       TySynInstD ''Needle <$> do
+         TySynEqn . (:[]) <$> v <*> v
+     , TySynInstD ''Interior <$> do
+         TySynEqn . (:[]) <$> v <*> v
+#endif
+     ]
+    methods <- [d|
+        $(varP $ mkName "toInterior") = pure
+        $(varP $ mkName "fromInterior") = id
+        $(varP $ mkName "translateP") = Tagged (^+^)
+        $(varP $ mkName ".+~^") = (^+^)
+        $(varP $ mkName "semimanifoldWitness") = SemimanifoldWitness BoundarylessWitness
+     |]
+    return $ tySyns ++ methods
+  return [ semiMfdInst
+         ]
+
 
