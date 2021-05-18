@@ -14,3 +14,5 @@ bin/
 .#*
 .ipynb_checkpoints
 .stack-work
+.ghc.envi*
+dist-newstyle
