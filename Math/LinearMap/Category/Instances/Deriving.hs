@@ -51,8 +51,8 @@ import Language.Haskell.TH
 
 
 makeTensorSpaceFromBasis :: Q Type -> DecsQ
-makeTensorSpaceFromBasis v = do
-  semiMfdInst <- InstanceD Nothing [] <$> [t|Semimanifold $v|] <*> do
+makeTensorSpaceFromBasis v = sequence
+ [ InstanceD Nothing [] <$> [t|Semimanifold $v|] <*> do
     tySyns <- sequence [
 #if MIN_VERSION_template_haskell(2,15,0)
        error "The TH type of TySynInstD has changed"
@@ -71,8 +71,11 @@ makeTensorSpaceFromBasis v = do
         $(varP $ mkName "semimanifoldWitness") = SemimanifoldWitness BoundarylessWitness
      |]
     return $ tySyns ++ methods
-  return [ semiMfdInst
-         ]
+ , InstanceD Nothing [] <$> [t|PseudoAffine $v|] <*> do
+     [d|
+        $(varP $ mkName ".-~!") = (^-^)
+      |]
+ ]
 
 newtype SpaceFromBasis v = SpaceFromBasis { getSpaceFromBasis :: v }
   deriving newtype (AdditiveGroup, VectorSpace, HasBasis)
@@ -86,4 +89,6 @@ instance AdditiveGroup v => Semimanifold (SpaceFromBasis v) where
   (.+~^) = (^+^)
   semimanifoldWitness = SemimanifoldWitness BoundarylessWitness
 
+instance AdditiveGroup v => PseudoAffine (SpaceFromBasis v) where
+  (.-~!) = (^-^)
 
