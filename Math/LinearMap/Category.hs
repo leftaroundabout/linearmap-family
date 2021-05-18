@@ -69,6 +69,9 @@ module Math.LinearMap.Category (
             , finishEigenSystem
             , Eigenvector(..)
             -- * The classes of suitable vector spaces
+            -- ** Deriving from basis
+            , makeTensorSpaceFromBasis
+            -- ** The classes
             , module Data.VectorSpace
             , LSpace
             , TensorSpace (..)
@@ -108,6 +111,7 @@ module Math.LinearMap.Category (
 
 import Math.LinearMap.Category.Class
 import Math.LinearMap.Category.Instances
+import Math.LinearMap.Category.Instances.Deriving
 import Math.LinearMap.Asserted
 import Math.VectorSpace.Docile
 import Math.LinearMap.Category.TensorQuot

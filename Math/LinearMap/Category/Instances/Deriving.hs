@@ -74,4 +74,16 @@ makeTensorSpaceFromBasis v = do
   return [ semiMfdInst
          ]
 
+newtype SpaceFromBasis v = SpaceFromBasis { getSpaceFromBasis :: v }
+  deriving newtype (AdditiveGroup, VectorSpace, HasBasis)
+
+instance AdditiveGroup v => Semimanifold (SpaceFromBasis v) where
+  type Needle (SpaceFromBasis v) = SpaceFromBasis v
+  type Interior (SpaceFromBasis v) = SpaceFromBasis v
+  toInterior = pure
+  fromInterior = id
+  translateP = Tagged (^+^)
+  (.+~^) = (^+^)
+  semimanifoldWitness = SemimanifoldWitness BoundarylessWitness
+
 
