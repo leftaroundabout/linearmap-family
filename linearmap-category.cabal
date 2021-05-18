@@ -51,7 +51,7 @@ library
                        Math.VectorSpace.Docile
   other-extensions:    FlexibleInstances, UndecidableInstances, FunctionalDependencies, TypeOperators, TypeFamilies
   build-depends:       base >=4.8 && <5,
-                       vector-space >=0.11 && <0.18,
+                       vector-space >=0.11 && <0.18, MemoTrie,
                        constrained-categories >=0.3 && <0.5,
                        containers, vector,
                        tagged,
@@ -69,7 +69,7 @@ test-suite tasty
   main-is:         test.hs
   type:            exitcode-stdio-1.0
   hs-source-dirs:  test/tasty
-  build-depends:   base, linearmap-category
+  build-depends:   base, linearmap-category, vector-space
                    , QuickCheck
                    , manifolds-core
                    , constrained-categories
