@@ -70,7 +70,7 @@ module Math.LinearMap.Category (
             , Eigenvector(..)
             -- * The classes of suitable vector spaces
             -- ** Deriving from basis
-            , makeTensorSpaceFromBasis
+            , module Math.LinearMap.Category.Instances.Deriving
             -- ** The classes
             , module Data.VectorSpace
             , LSpace

@@ -25,7 +25,8 @@
 {-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE CPP                        #-}
 
-module Math.LinearMap.Category.Instances.Deriving where
+module Math.LinearMap.Category.Instances.Deriving
+   ( makeTensorSpaceFromBasis, BasisGeneratedSpace(..) ) where
 
 import Math.LinearMap.Category.Class
 
@@ -131,6 +132,67 @@ makeTensorSpaceFromBasis v = sequence
                -> Tensor $ liftA2 (curry f) tv tw
         $(varP $ mkName "coerceFmapTensorProduct") = \_ Coercion
           -> error "Cannot yet coerce tensors defined from a `HasBasis` instance. This would require `RoleAnnotations` on `:->:`. Cf. https://gitlab.haskell.org/ghc/ghc/-/issues/8177"
+      |]
+    return $ tySyns ++ methods
+ , InstanceD Nothing [] <$> [t|BasisGeneratedSpace $v|] <*> do
+     [d|
+        $(varP $ mkName "proveTensorProductIsTrie") = \φ -> φ
+      |]
+ , InstanceD Nothing [] <$> [t|LinearSpace $v|] <*> do
+    tySyns <- sequence [
+#if MIN_VERSION_template_haskell(2,15,0)
+       error "The TH type of TySynInstD has changed"
+#else
+       TySynInstD ''DualVector <$> do
+         TySynEqn . (:[]) <$> v
+           <*> [t| DualVectorFromBasis $v |]
+#endif
+     ]
+    methods <- [d|
+
+
+        $(varP $ mkName "dualSpaceWitness") = case closedScalarWitness @(Scalar $v) of
+             ClosedScalarWitness -> DualSpaceWitness
+        $(varP $ mkName "linearId") = LinearMap . trie $ basisValue
+        $(varP $ mkName "tensorId") = tid
+            where tid :: ∀ w . (LinearSpace w, Scalar w ~ Scalar $v)
+                    => ($v⊗w) +> ($v⊗w)
+                  tid = case dualSpaceWitness @w of
+                   DualSpaceWitness -> LinearMap . trie $ Tensor . \i
+                    -> getTensorProduct $
+                      (fmapTensor @(DualVector w)
+                          -+$>(LinearFunction $ \w -> Tensor . trie
+                                       $ (\j -> if i==j then w else zeroV)
+                                        :: $v⊗w))
+                       -+$> case linearId @w of
+                             LinearMap lw -> Tensor lw :: DualVector w⊗w
+        $(varP $ mkName "applyDualVector") = bilinearFunction
+             $ \(DualVectorFromBasis f) v
+                   -> sum [decompose' f i * vi | (i,vi) <- decompose v]
+        $(varP $ mkName "applyLinear") = bilinearFunction
+             $ \(LinearMap f) v
+                   -> sumV [vi *^ untrie f i | (i,vi) <- decompose v]
+        $(varP $ mkName "applyTensorFunctional") = atf
+            where atf :: ∀ u . (LinearSpace u, Scalar u ~ Scalar $v)
+                   => Bilinear (DualVector ($v ⊗ u))
+                                  ($v ⊗ u) (Scalar $v)
+                  atf = case dualSpaceWitness @u of
+                   DualSpaceWitness -> bilinearFunction
+                    $ \(LinearMap f) (Tensor t)
+                      -> sum [ (applyDualVector-+$>fi)-+$>untrie t i
+                             | (i, fi) <- enumerate f ]
+        $(varP $ mkName "applyTensorLinMap") = atlm
+            where atlm :: ∀ u w . ( LinearSpace u, TensorSpace w
+                                  , Scalar u ~ Scalar $v, Scalar w ~ Scalar $v )
+                           => Bilinear (($v ⊗ u) +> w) ($v ⊗ u) w
+                  atlm = case dualSpaceWitness @u of
+                    DualSpaceWitness -> bilinearFunction
+                      $ \(LinearMap f) (Tensor t)
+                       -> sumV [ (applyLinear-+$>(LinearMap fi :: u+>w))
+                                  -+$> untrie t i
+                               | (i, Tensor fi) <- enumerate f ]
+        $(varP $ mkName "useTupleLinearSpaceComponents") = error "Not a tuple type"
+
       |]
     return $ tySyns ++ methods
  ]
