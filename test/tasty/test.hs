@@ -74,7 +74,7 @@ instance HasBasis ℝ⁵ where
 instance Arbitrary ℝ⁵ where
   arbitrary = ℝ⁵ <$> QC.vectorOf 5 arbitrary
 
-makeTensorSpaceFromBasis [t| ℝ⁵ |]
+makeLinearSpaceFromBasis [t| ℝ⁵ |]
 
 main :: IO ()
 main = do

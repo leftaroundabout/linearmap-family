@@ -26,7 +26,7 @@
 {-# LANGUAGE CPP                        #-}
 
 module Math.LinearMap.Category.Instances.Deriving
-   ( makeTensorSpaceFromBasis, BasisGeneratedSpace(..) ) where
+   ( makeLinearSpaceFromBasis, BasisGeneratedSpace(..) ) where
 
 import Math.LinearMap.Category.Class
 
@@ -54,8 +54,8 @@ import Data.VectorSpace.Free
 import Language.Haskell.TH
 
 
-makeTensorSpaceFromBasis :: Q Type -> DecsQ
-makeTensorSpaceFromBasis v = sequence
+makeLinearSpaceFromBasis :: Q Type -> DecsQ
+makeLinearSpaceFromBasis v = sequence
  [ InstanceD Nothing [] <$> [t|Semimanifold $v|] <*> do
     tySyns <- sequence [
 #if MIN_VERSION_template_haskell(2,15,0)
@@ -197,59 +197,6 @@ makeTensorSpaceFromBasis v = sequence
     return $ tySyns ++ methods
  ]
 
-newtype SpaceFromBasis v = SpaceFromBasis { getSpaceFromBasis :: v }
-  deriving newtype (Eq, AdditiveGroup, VectorSpace, HasBasis)
-
-instance AdditiveGroup v => Semimanifold (SpaceFromBasis v) where
-  type Needle (SpaceFromBasis v) = SpaceFromBasis v
-  type Interior (SpaceFromBasis v) = SpaceFromBasis v
-  toInterior = pure
-  fromInterior = id
-  translateP = Tagged (^+^)
-  (.+~^) = (^+^)
-  semimanifoldWitness = SemimanifoldWitness BoundarylessWitness
-
-instance AdditiveGroup v => AffineSpace (SpaceFromBasis v) where
-  type Diff (SpaceFromBasis v) = SpaceFromBasis v
-  (.+^) = (^+^)
-  (.-.) = (^-^)
-
-instance AdditiveGroup v => PseudoAffine (SpaceFromBasis v) where
-  (.-~!) = (^-^)
-
-instance ∀ v . ( HasBasis v, Num' (Scalar v)
-               , Scalar (Scalar v) ~ Scalar v
-               , HasTrie (Basis v)
-               , Eq v )
-     => TensorSpace (SpaceFromBasis v) where
-  type TensorProduct (SpaceFromBasis v) w = Basis v :->: w
-  wellDefinedVector v
-   | v==v       = Just v
-   | otherwise  = Nothing
-  wellDefinedTensor (Tensor v)
-     = fmap (const $ Tensor v) . traverse (wellDefinedVector . snd) $ enumerate v
-  zeroTensor = Tensor . trie $ const zeroV
-  toFlatTensor = LinearFunction $ Tensor . trie . decompose'
-  fromFlatTensor = LinearFunction $ \(Tensor t)
-          -> recompose $ enumerate t
-  scalarSpaceWitness = ScalarSpaceWitness
-  linearManifoldWitness = LinearManifoldWitness BoundarylessWitness
-  addTensors (Tensor v) (Tensor w) = Tensor $ (^+^) <$> v <*> w
-  subtractTensors (Tensor v) (Tensor w) = Tensor $ (^-^) <$> v <*> w
-  tensorProduct = bilinearFunction
-    $ \v w -> Tensor . trie $ \bv -> decompose' v bv *^ w
-  transposeTensor = LinearFunction $ \(Tensor t)
-       -> sumV [ (tensorProduct-+$>w)-+$>basisValue b
-               | (b,w) <- enumerate t ]
-  fmapTensor = bilinearFunction
-    $ \(LinearFunction f) (Tensor t)
-         -> Tensor $ fmap f t
-  fzipTensorWith = bilinearFunction
-    $ \(LinearFunction f) (Tensor tv, Tensor tw)
-         -> Tensor $ liftA2 (curry f) tv tw
-  coerceFmapTensorProduct _ Coercion
-    = error "Cannot yet coerce tensors defined from a `HasBasis` instance. This would require `RoleAnnotations` on `:->:`. Cf. https://gitlab.haskell.org/ghc/ghc/-/issues/8177"
-
 
 
 newtype DualVectorFromBasis v = DualVectorFromBasis { getDualVectorFromBasis :: v }
@@ -306,6 +253,8 @@ instance ∀ v . ( HasBasis v, Num' (Scalar v)
     = error "Cannot yet coerce tensors defined from a `HasBasis` instance. This would require `RoleAnnotations` on `:->:`. Cf. https://gitlab.haskell.org/ghc/ghc/-/issues/8177"
 
 
+-- | Don't manually instantiate this class, it is just used internally
+--   by 'makeLinearSpaceFromBasis'.
 class ( HasBasis v, Num' (Scalar v)
       , LinearSpace v, DualVector v ~ DualVectorFromBasis v)
     => BasisGeneratedSpace v where
