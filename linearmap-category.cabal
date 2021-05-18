@@ -39,6 +39,7 @@ cabal-version:       >=1.10
 
 library
   exposed-modules:     Math.LinearMap.Category
+                       Math.LinearMap.Category.Instances.Deriving
                        Math.VectorSpace.ZeroDimensional
                        Math.VectorSpace.Dual
                        Math.VectorSpace.MiscUtil.MultiConstraints
