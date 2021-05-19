@@ -8,16 +8,18 @@
 -- Portability : portable
 -- 
 
-{-# LANGUAGE ScopedTypeVariables  #-}
-{-# LANGUAGE TypeOperators        #-}
-{-# LANGUAGE FlexibleContexts     #-}
-{-# LANGUAGE TypeFamilies         #-}
-{-# LANGUAGE UnicodeSyntax        #-}
-{-# LANGUAGE AllowAmbiguousTypes  #-}
-{-# LANGUAGE TypeApplications     #-}
-{-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE StandaloneDeriving   #-}
-{-# LANGUAGE TemplateHaskell      #-}
+{-# LANGUAGE ScopedTypeVariables        #-}
+{-# LANGUAGE TypeOperators              #-}
+{-# LANGUAGE FlexibleContexts           #-}
+{-# LANGUAGE TypeFamilies               #-}
+{-# LANGUAGE UnicodeSyntax              #-}
+{-# LANGUAGE AllowAmbiguousTypes        #-}
+{-# LANGUAGE TypeApplications           #-}
+{-# LANGUAGE UndecidableInstances       #-}
+{-# LANGUAGE StandaloneDeriving         #-}
+{-# LANGUAGE TemplateHaskell            #-}
+{-# LANGUAGE GeneralisedNewtypeDeriving #-}
+{-# LANGUAGE DerivingStrategies         #-}
 
 import qualified Prelude as Hask
 import Control.Category.Constrained.Prelude
@@ -79,14 +81,29 @@ instance Arbitrary ℝ⁵ where
 
 makeFiniteDimensionalFromBasis [t| ℝ⁵ |]
 
+newtype H¹ℝ⁵ = H¹ℝ⁵ { getH¹ℝ⁵ :: ℝ⁵ }
+ deriving newtype (Eq, Show, AdditiveGroup, VectorSpace, HasBasis, Arbitrary)
+
+makeFiniteDimensionalFromBasis [t| H¹ℝ⁵ |]
+
+derivative :: H¹ℝ⁵ -> ℝ⁵
+derivative (H¹ℝ⁵ (ℝ⁵ (x₀:xs))) = ℝ⁵ (x₀:xs) ^-^ ℝ⁵ (xs++[x₀])
+
+instance InnerSpace H¹ℝ⁵ where
+  H¹ℝ⁵ v <.> H¹ℝ⁵ w = v<.>w + derivative (H¹ℝ⁵ v)<.>derivative (H¹ℝ⁵ w)
+
+
+
 main :: IO ()
 main = do
   defaultMain $ testGroup "Tests"
    [ testGroup "Basis-derived space"
     [ testProperty "Semimanifold addition"
      $ \v w -> v.+~^w === (v^+^w :: ℝ⁵)
-    , testProperty "Co-riesz representation"
+    , testProperty "Riesz representation, orthonormal basis"
      $ \v -> (riesz-+$>coRiesz-+$>v) === (v :: ℝ⁵)
+--  , testProperty "Riesz representation, non-orthonormal basis"
+--   $ \v -> (riesz-+$>coRiesz-+$>v) === (v :: H¹ℝ⁵)
     ]
    ]
 
