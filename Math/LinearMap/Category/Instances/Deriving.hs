@@ -38,6 +38,7 @@ import Data.AffineSpace
 import Data.Basis
 import qualified Data.Map as Map
 import Data.MemoTrie
+import Data.Hashable
 
 import Prelude ()
 import qualified Prelude as Hask
@@ -204,8 +205,14 @@ makeLinearSpaceFromBasis v = sequence
 makeFiniteDimensionalFromBasis :: Q Type -> DecsQ
 makeFiniteDimensionalFromBasis v = do
    generalInsts <- makeLinearSpaceFromBasis v
+   vtnameHash <- abs . hash . show <$> v
    fdInst <- InstanceD Nothing [] <$> [t|FiniteDimensional $v|] <*> do
-    subBasisCstr <- newName "CompleteBasis"
+    
+    -- This is a hack. Ideally, @newName@ should generally globally unique names,
+    -- but it doesn't, so we append a hash of the vector space type.
+    -- Cf. https://gitlab.haskell.org/ghc/ghc/-/issues/13054
+    subBasisCstr <- newName $ "CompleteBasis"++show vtnameHash
+
     tySyns <- sequence [
 #if MIN_VERSION_template_haskell(2,15,0)
        error "The TH type of TySynInstD has changed"
