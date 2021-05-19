@@ -621,3 +621,14 @@ instance (QC.Arbitrary v, Scalar v ~ ℝ) => QC.Arbitrary (LinearMap ℝ ℝ v) 
   arbitrary = LinearMap <$> QC.arbitrary
   shrink (LinearMap t) = LinearMap <$> QC.shrink t
 
+#define FreeArbitrarySpace(S) \
+instance (QC.Arbitrary v, Scalar v ~ ℝ) => QC.Arbitrary (Tensor ℝ (S ℝ) v) where { \
+  arbitrary = Tensor <$> Hask.traverse (const QC.arbitrary) zeroV };  \
+instance (QC.Arbitrary v, Scalar v ~ ℝ) => QC.Arbitrary (LinearMap ℝ (S ℝ) v) where { \
+  arbitrary = LinearMap <$> Hask.traverse (const QC.arbitrary) zeroV }
+
+FreeArbitrarySpace(V0)
+FreeArbitrarySpace(V1)
+FreeArbitrarySpace(V2)
+FreeArbitrarySpace(V3)
+FreeArbitrarySpace(V4)

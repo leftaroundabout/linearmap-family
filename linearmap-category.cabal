@@ -72,6 +72,7 @@ test-suite tasty
   build-depends:   base, linearmap-category, vector-space
                    , QuickCheck
                    , manifolds-core
+                   , linear
                    , constrained-categories
                    , tasty, tasty-quickcheck
   ghc-options: -threaded "-with-rtsopts -N8 -M2G"

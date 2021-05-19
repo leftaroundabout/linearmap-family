@@ -10,6 +10,7 @@
 
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TypeOperators              #-}
+{-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE UnicodeSyntax              #-}
@@ -26,6 +27,7 @@ import Control.Category.Constrained.Prelude
 import Control.Arrow.Constrained
 
 import Data.AffineSpace
+import Linear.V4
 import Data.Basis
 import Math.LinearMap.Category
 import Math.Manifold.Core.Types
@@ -92,12 +94,21 @@ derivative (H¹ℝ⁵ (ℝ⁵ (x₀:xs))) = ℝ⁵ (x₀:xs) ^-^ ℝ⁵ (xs++[x�
 instance InnerSpace H¹ℝ⁵ where
   H¹ℝ⁵ v <.> H¹ℝ⁵ w = v<.>w + derivative (H¹ℝ⁵ v)<.>derivative (H¹ℝ⁵ w)
 
+instance Arbitrary (V4 ℝ) where
+  arbitrary = V4<$>arbitrary<*>arbitrary<*>arbitrary<*>arbitrary
+
 
 
 main :: IO ()
 main = do
   defaultMain $ testGroup "Tests"
-   [ testGroup "Basis-derived space"
+   [ testGroup "Euclidean space"
+    [ testProperty "co-Riesz inversion"
+     $ \v -> (arr coRiesz\$coRiesz-+$>v) === (v :: V4 ℝ)
+    , testProperty "Random operator inversion"      -- This isn't really expected to work
+     $ \f v -> (f \$ (f :: V4 ℝ+>V4 ℝ) $ v) ≈≈≈ v   -- /always/, but singular matrices are
+    ]                                               -- very seldom in the @Arbitrary@ instance.
+   , testGroup "Basis-derived space"
     [ testProperty "Semimanifold addition"
      $ \v w -> v.+~^w === (v^+^w :: ℝ⁵)
     , testProperty "Riesz representation, orthonormal basis"
@@ -107,3 +118,9 @@ main = do
     ]
    ]
 
+
+(≈≈≈) :: (InnerSpace v, Show v, Eq v, RealFrac (Scalar v))
+            => v -> v -> QC.Property
+v≈≈≈w
+ | magnitudeSq (v^-^w) < (magnitudeSq v + magnitudeSq w)*1e-8   = QC.property True
+ | otherwise                                                    = v===w
