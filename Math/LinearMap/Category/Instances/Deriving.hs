@@ -198,6 +198,25 @@ makeLinearSpaceFromBasis v = sequence
 
       |]
     return $ tySyns ++ methods
+ , InstanceD Nothing [] <$> [t|FiniteDimensional $v|] <*> do
+    subBasisCstr <- newName "CompleteBasis"
+    tySyns <- sequence [
+#if MIN_VERSION_template_haskell(2,15,0)
+       error "The TH type of TySynInstD has changed"
+#else
+       DataInstD [] ''SubBasis
+          <$> ((:[]) <$> v)
+          <*> pure Nothing
+          <*> pure [NormalC subBasisCstr []]
+          <*> pure []
+#endif
+     ]
+    methods <- [d|
+
+
+
+      |]
+    return $ tySyns ++ methods
  ]
 
 
