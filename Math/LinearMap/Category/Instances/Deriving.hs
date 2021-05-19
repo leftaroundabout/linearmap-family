@@ -208,7 +208,7 @@ makeFiniteDimensionalFromBasis v = do
    vtnameHash <- abs . hash . show <$> v
    fdInst <- InstanceD Nothing [] <$> [t|FiniteDimensional $v|] <*> do
     
-    -- This is a hack. Ideally, @newName@ should generally globally unique names,
+    -- This is a hack. Ideally, @newName@ should generate globally unique names,
     -- but it doesn't, so we append a hash of the vector space type.
     -- Cf. https://gitlab.haskell.org/ghc/ghc/-/issues/13054
     subBasisCstr <- newName $ "CompleteBasis"++show vtnameHash
