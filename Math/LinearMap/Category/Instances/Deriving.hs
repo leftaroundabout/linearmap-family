@@ -296,8 +296,9 @@ makeFiniteDimensionalFromBasis v = do
      [d|
         $(varP $ mkName "dualBasisCandidates")
            = cartesianDualBasisCandidates
-                (enumerateSubBasis CompleteDualVBasis)
-                (map (abs . snd) . decompose)
+               (enumerateSubBasis CompleteDualVBasis)
+               (\v -> map (abs . realToFrac . decompose' v . fst)
+                       $ enumerate (trie $ const ()) )
       |]
   ]
  return $ generalInsts ++ fdInsts
@@ -504,4 +505,15 @@ instance ∀ v . ( BasisGeneratedSpace v, FiniteDimensional v
                       LinearMap wuff -> Tensor wuff :: DualVector u⊗w )))
   uncanonicallyFromDual = LinearFunction DualVectorFromBasis
   uncanonicallyToDual = LinearFunction getDualVectorFromBasis
+
+
+instance ∀ v . ( BasisGeneratedSpace v, FiniteDimensional v
+               , Real (Scalar v), Scalar (Scalar v) ~ Scalar v
+               , HasTrie (Basis v), Ord (Basis v)
+               , Eq v, Eq (Basis v) )
+     => SemiInner (DualVectorFromBasis v) where
+  dualBasisCandidates = cartesianDualBasisCandidates
+          (enumerateSubBasis entireBasis)
+          (\v -> map (abs . realToFrac . decompose' v . fst)
+                  $ enumerate (trie $ const ()) )
 

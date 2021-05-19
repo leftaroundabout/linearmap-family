@@ -113,8 +113,8 @@ main = do
      $ \v w -> v.+~^w === (v^+^w :: ℝ⁵)
     , testProperty "Riesz representation, orthonormal basis"
      $ \v -> (riesz-+$>coRiesz-+$>v) === (v :: ℝ⁵)
---  , testProperty "Riesz representation, non-orthonormal basis"
---   $ \v -> (riesz-+$>coRiesz-+$>v) === (v :: H¹ℝ⁵)
+    , testProperty "Riesz representation, non-orthonormal basis"
+     $ \v -> (arr coRiesz\$(coRiesz-+$>v)) ≈≈≈ (v :: H¹ℝ⁵)
     ]
    ]
 
