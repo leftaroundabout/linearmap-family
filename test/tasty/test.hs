@@ -47,6 +47,9 @@ instance VectorSpace ℝ⁵ where
   type Scalar ℝ⁵ = ℝ
   μ*^ℝ⁵ v = ℝ⁵ $ map (μ*) v
 
+instance InnerSpace ℝ⁵ where
+  ℝ⁵ v <.> ℝ⁵ w = sum $ zipWith (*) v w
+
 type Z5 = Z3+Z2
 type Z3 = Z2+()
 type Z2 = ()+()
@@ -91,6 +94,8 @@ main = do
    [ testGroup "Basis-derived space"
     [ testProperty "Semimanifold addition"
      $ \v w -> v.+~^w === (v^+^w :: ℝ⁵)
+    , testProperty "Co-riesz representation"
+     $ \v -> (uncanonicallyFromDual-+$>coRiesz-+$>v) === (v :: ℝ⁵)
     ]
    ]
 
