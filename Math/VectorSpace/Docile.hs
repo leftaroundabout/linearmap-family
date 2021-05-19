@@ -1136,7 +1136,7 @@ unsafeRightInverse = uri dualSpaceWitness dualSpaceWitness
         where m' = adjoint $ m :: DualVector v +> DualVector u
 
 -- | Invert an isomorphism. For other linear maps, the result is undefined.
-unsafeInverse :: ( SimpleSpace u, SimpleSpace v, Scalar u ~ Scalar v )
+unsafeInverse :: ( FiniteDimensional u, SimpleSpace v, Scalar u ~ Scalar v )
           => (u+>v) -> v+>u
 unsafeInverse m = recomposeContraLinMap (fst . recomposeSB mbas)
                                         $ [maybe zeroV id v' | v'<-v's]
@@ -1146,12 +1146,12 @@ unsafeInverse m = recomposeContraLinMap (fst . recomposeSB mbas)
 
 -- | The <https://en.wikipedia.org/wiki/Riesz_representation_theorem Riesz representation theorem>
 --   provides an isomorphism between a Hilbert space and its (continuous) dual space.
-riesz :: ∀ v . (FiniteDimensional v, InnerSpace v) => DualVector v -+> v
-riesz = case ( scalarSpaceWitness :: ScalarSpaceWitness v
-             , dualSpaceWitness :: DualSpaceWitness v ) of
- (ScalarSpaceWitness,DualSpaceWitness) -> LinearFunction $ \dv ->
-       let (bas, compos) = decomposeLinMap $ sampleLinearFunction $ applyDualVector $ dv
-       in fst . recomposeSB bas $ compos []
+riesz :: ∀ v . ( FiniteDimensional v, InnerSpace v
+               , SimpleSpace v )
+                 => DualVector v -+> v
+riesz = case dualFinitenessWitness @v of
+  DualFinitenessWitness DualSpaceWitness
+      -> arr . unsafeInverse $ arr coRiesz
 
 sRiesz :: ∀ v . FiniteDimensional v => DualSpace v -+> v
 sRiesz = case ( scalarSpaceWitness :: ScalarSpaceWitness v
