@@ -212,8 +212,69 @@ makeLinearSpaceFromBasis v = sequence
 #endif
      ]
     methods <- [d|
-
-
+        $(varP $ mkName "entireBasis") = $(conE subBasisCstr)
+        $(varP $ mkName "enumerateSubBasis") =
+            \ $(conP subBasisCstr []) -> basisValue <$> [minBound .. maxBound]
+        $(varP $ mkName "tensorEquality")
+          = \(Tensor t) (Tensor t')  -> and [ti == untrie t' i | (i,ti) <- enumerate t]
+        $(varP $ mkName "decomposeLinMap") = dlm
+           where dlm :: ∀ w . ($v+>w)
+                       -> (SubBasis $v, [w]->[w])
+                 dlm (LinearMap f) = 
+                         ( $(conE subBasisCstr)
+                         , (map snd (enumerate f) ++) )
+        $(varP $ mkName "decomposeLinMapWithin") = dlm
+           where dlm :: ∀ w . SubBasis $v
+                        -> ($v+>w)
+                        -> Either (SubBasis $v, [w]->[w])
+                                  ([w]->[w])
+                 dlm $(conP subBasisCstr []) (LinearMap f) = 
+                         (Right (map snd (enumerate f) ++) )
+        $(varP $ mkName "recomposeSB") = rsb
+           where rsb :: SubBasis $v
+                        -> [Scalar $v]
+                        -> ($v, [Scalar $v])
+                 rsb $(conP subBasisCstr []) cs = first recompose
+                           $ zipWith' (,) [minBound..maxBound] cs
+        $(varP $ mkName "recomposeSBTensor") = rsbt
+           where rsbt :: ∀ w . (FiniteDimensional w, Scalar w ~ Scalar $v)
+                     => SubBasis $v -> SubBasis w
+                        -> [Scalar $v]
+                        -> ($v⊗w, [Scalar $v])
+                 rsbt $(conP subBasisCstr []) sbw ws = 
+                         (first (\iws -> Tensor $ trie (Map.fromList iws Map.!))
+                           $ zipConsumeWith' (\i cs' -> first (\c->(i,c))
+                                                       $ recomposeSB sbw cs')
+                                 [minBound..maxBound] ws)
+        $(varP $ mkName "recomposeLinMap") = rlm
+           where rlm :: ∀ w . SubBasis $v
+                        -> [w]
+                        -> ($v+>w, [w])
+                 rlm $(conP subBasisCstr []) ws = 
+                    (first (\iws -> LinearMap $ trie (Map.fromList iws Map.!))
+                      $ zipWith' (,) [minBound..maxBound] ws)
+        $(varP $ mkName "recomposeContraLinMap") = rclm
+           where rclm :: ∀ w f . (LinearSpace w, Scalar w ~ Scalar $v, Hask.Functor f)
+                      => (f (Scalar w) -> w) -> f (DualVectorFromBasis $v)
+                        -> ($v+>w)
+                 rclm f vs = 
+                       (LinearMap $ trie (\i -> f $ fmap (`decompose'`i) vs))
+        $(varP $ mkName "recomposeContraLinMapTensor") = rclm
+           where rclm :: ∀ u w f
+                   . ( FiniteDimensional u, LinearSpace w
+                     , Scalar u ~ Scalar $v, Scalar w ~ Scalar $v, Hask.Functor f
+                     )
+                      => (f (Scalar w) -> w) -> f ($v+>DualVector u)
+                        -> (($v⊗u)+>w)
+                 rclm f vus = case dualSpaceWitness @u of
+                   DualSpaceWitness -> 
+                              (
+                       (LinearMap $ trie
+                           (\i -> case recomposeContraLinMap @u @w @f f
+                                      $ fmap (\(LinearMap vu) -> untrie vu (i :: Basis $v)) vus of
+                              LinearMap wuff -> Tensor wuff :: DualVector u⊗w )))
+        $(varP $ mkName "uncanonicallyFromDual") = LinearFunction getDualVectorFromBasis
+        $(varP $ mkName "uncanonicallyToDual") = LinearFunction DualVectorFromBasis
 
       |]
     return $ tySyns ++ methods
