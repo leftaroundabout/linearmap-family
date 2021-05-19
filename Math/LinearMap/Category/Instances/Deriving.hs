@@ -24,15 +24,18 @@
 {-# LANGUAGE GeneralisedNewtypeDeriving #-}
 {-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE CPP                        #-}
+{-# LANGUAGE TupleSections              #-}
 
 module Math.LinearMap.Category.Instances.Deriving
    ( makeLinearSpaceFromBasis, BasisGeneratedSpace(..) ) where
 
 import Math.LinearMap.Category.Class
+import Math.VectorSpace.Docile
 
 import Data.VectorSpace
 import Data.AffineSpace
 import Data.Basis
+import qualified Data.Map as Map
 import Data.MemoTrie
 
 import Prelude ()
@@ -317,4 +320,85 @@ instance ∀ v . ( BasisGeneratedSpace v
                       | (i, Tensor fi) <- enumerate f ]
           )
   useTupleLinearSpaceComponents = error "Not a tuple type"
+
+
+zipWith' :: (a -> b -> c) -> [a] -> [b] -> ([c], [b])
+zipWith' _ _ [] = ([], [])
+zipWith' _ [] ys = ([], ys)
+zipWith' f (x:xs) (y:ys) = first (f x y :) $ zipWith' f xs ys
+
+zipConsumeWith' :: (a -> [b] -> (c,[b])) -> [a] -> [b] -> ([c], [b])
+zipConsumeWith' _ _ [] = ([], [])
+zipConsumeWith' _ [] ys = ([], ys)
+zipConsumeWith' f (x:xs) ys
+    = case f x ys of
+       (z, ys') -> first (z :) $ zipConsumeWith' f xs ys'
+
+instance ∀ v . ( BasisGeneratedSpace v, FiniteDimensional v
+               , Scalar (Scalar v) ~ Scalar v
+               , HasTrie (Basis v), Enum (Basis v), Bounded (Basis v), Ord (Basis v)
+               , Eq v, Eq (Basis v) )
+     => FiniteDimensional (DualVectorFromBasis v) where
+  data SubBasis (DualVectorFromBasis v) = CompleteDualVBasis
+  entireBasis = CompleteDualVBasis
+  enumerateSubBasis CompleteDualVBasis = basisValue <$> [minBound .. maxBound]
+  tensorEquality (Tensor t) (Tensor t')
+      = and [ti == untrie t' i | (i,ti) <- enumerate t]
+  decomposeLinMap = dlm
+   where dlm :: ∀ w . (DualVectorFromBasis v+>w)
+               -> (SubBasis (DualVectorFromBasis v), [w]->[w])
+         dlm (LinearMap f) = proveTensorProductIsTrie @v @w
+                 ( CompleteDualVBasis
+                 , (map snd (enumerate f) ++) )
+  decomposeLinMapWithin = dlm
+   where dlm :: ∀ w . SubBasis (DualVectorFromBasis v)
+                -> (DualVectorFromBasis v+>w)
+                -> Either (SubBasis (DualVectorFromBasis v), [w]->[w])
+                          ([w]->[w])
+         dlm CompleteDualVBasis (LinearMap f) = proveTensorProductIsTrie @v @w
+                 (Right (map snd (enumerate f) ++) )
+  recomposeSB = rsb
+   where rsb :: SubBasis (DualVectorFromBasis v)
+                -> [Scalar v]
+                -> (DualVectorFromBasis v, [Scalar v])
+         rsb CompleteDualVBasis cs = first recompose
+                   $ zipWith' (,) [minBound..maxBound] cs
+  recomposeSBTensor = rsbt
+   where rsbt :: ∀ w . (FiniteDimensional w, Scalar w ~ Scalar v)
+             => SubBasis (DualVectorFromBasis v) -> SubBasis w
+                -> [Scalar v]
+                -> (DualVectorFromBasis v⊗w, [Scalar v])
+         rsbt CompleteDualVBasis sbw ws = proveTensorProductIsTrie @v @w
+                 (first (\iws -> Tensor $ trie (Map.fromList iws Map.!))
+                   $ zipConsumeWith' (\i cs' -> first (i,) $ recomposeSB sbw cs')
+                         [minBound..maxBound] ws)
+  recomposeLinMap = rlm
+   where rlm :: ∀ w . SubBasis (DualVectorFromBasis v)
+                -> [w]
+                -> (DualVectorFromBasis v+>w, [w])
+         rlm CompleteDualVBasis ws = proveTensorProductIsTrie @v @w
+                 (first (\iws -> LinearMap $ trie (Map.fromList iws Map.!))
+                   $ zipWith' (,) [minBound..maxBound] ws)
+  recomposeContraLinMap = rclm
+   where rclm :: ∀ w f . (LinearSpace w, Scalar w ~ Scalar v, Hask.Functor f)
+              => (f (Scalar w) -> w) -> f v
+                -> (DualVectorFromBasis v+>w)
+         rclm f vs = proveTensorProductIsTrie @v @w
+               (LinearMap $ trie (\i -> f $ fmap (`decompose'`i) vs))
+  recomposeContraLinMapTensor = rclm
+   where rclm :: ∀ u w f
+           . ( FiniteDimensional u, LinearSpace w
+             , Scalar u ~ Scalar v, Scalar w ~ Scalar v, Hask.Functor f
+             )
+              => (f (Scalar w) -> w) -> f (DualVectorFromBasis v+>DualVector u)
+                -> ((DualVectorFromBasis v⊗u)+>w)
+         rclm f vus = case dualSpaceWitness @u of
+           DualSpaceWitness -> proveTensorProductIsTrie @v @(DualVector u)
+                      (proveTensorProductIsTrie @v @(DualVector u⊗w)
+               (LinearMap $ trie
+                   (\i -> case recomposeContraLinMap @u @w @f f
+                              $ fmap (\(LinearMap vu) -> untrie vu (i :: Basis v)) vus of
+                      LinearMap wuff -> Tensor wuff :: DualVector u⊗w )))
+  uncanonicallyFromDual = LinearFunction DualVectorFromBasis
+  uncanonicallyToDual = LinearFunction getDualVectorFromBasis
 
