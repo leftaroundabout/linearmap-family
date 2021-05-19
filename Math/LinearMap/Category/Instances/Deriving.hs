@@ -204,9 +204,10 @@ makeLinearSpaceFromBasis v = sequence
 
 makeFiniteDimensionalFromBasis :: Q Type -> DecsQ
 makeFiniteDimensionalFromBasis v = do
-   generalInsts <- makeLinearSpaceFromBasis v
-   vtnameHash <- abs . hash . show <$> v
-   fdInst <- InstanceD Nothing [] <$> [t|FiniteDimensional $v|] <*> do
+ generalInsts <- makeLinearSpaceFromBasis v
+ vtnameHash <- abs . hash . show <$> v
+ fdInsts <- sequence
+  [ InstanceD Nothing [] <$> [t|FiniteDimensional $v|] <*> do
     
     -- This is a hack. Ideally, @newName@ should generate globally unique names,
     -- but it doesn't, so we append a hash of the vector space type.
@@ -291,7 +292,15 @@ makeFiniteDimensionalFromBasis v = do
 
       |]
     return $ tySyns ++ methods
-   return $ generalInsts ++ [fdInst]
+  , InstanceD Nothing [] <$> [t|SemiInner $v|] <*> do
+     [d|
+        $(varP $ mkName "dualBasisCandidates")
+           = cartesianDualBasisCandidates
+                (enumerateSubBasis CompleteDualVBasis)
+                (map (abs . snd) . decompose)
+      |]
+  ]
+ return $ generalInsts ++ fdInsts
 
 
 
