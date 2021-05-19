@@ -220,7 +220,7 @@ makeFiniteDimensionalFromBasis v = do
     methods <- [d|
         $(varP $ mkName "entireBasis") = $(conE subBasisCstr)
         $(varP $ mkName "enumerateSubBasis") =
-            \ $(conP subBasisCstr []) -> basisValue <$> [minBound .. maxBound]
+            \ $(conP subBasisCstr []) -> basisValue . fst <$> enumerate (trie $ const ())
         $(varP $ mkName "tensorEquality")
           = \(Tensor t) (Tensor t')  -> and [ti == untrie t' i | (i,ti) <- enumerate t]
         $(varP $ mkName "decomposeLinMap") = dlm
@@ -241,7 +241,7 @@ makeFiniteDimensionalFromBasis v = do
                         -> [Scalar $v]
                         -> ($v, [Scalar $v])
                  rsb $(conP subBasisCstr []) cs = first recompose
-                           $ zipWith' (,) [minBound..maxBound] cs
+                           $ zipWith' (,) (fst <$> enumerate (trie $ const ())) cs
         $(varP $ mkName "recomposeSBTensor") = rsbt
            where rsbt :: ∀ w . (FiniteDimensional w, Scalar w ~ Scalar $v)
                      => SubBasis $v -> SubBasis w
@@ -251,14 +251,14 @@ makeFiniteDimensionalFromBasis v = do
                          (first (\iws -> Tensor $ trie (Map.fromList iws Map.!))
                            $ zipConsumeWith' (\i cs' -> first (\c->(i,c))
                                                        $ recomposeSB sbw cs')
-                                 [minBound..maxBound] ws)
+                                 (fst <$> enumerate (trie $ const ())) ws)
         $(varP $ mkName "recomposeLinMap") = rlm
            where rlm :: ∀ w . SubBasis $v
                         -> [w]
                         -> ($v+>w, [w])
                  rlm $(conP subBasisCstr []) ws = 
                     (first (\iws -> LinearMap $ trie (Map.fromList iws Map.!))
-                      $ zipWith' (,) [minBound..maxBound] ws)
+                      $ zipWith' (,) (fst <$> enumerate (trie $ const ())) ws)
         $(varP $ mkName "recomposeContraLinMap") = rclm
            where rclm :: ∀ w f . (LinearSpace w, Scalar w ~ Scalar $v, Hask.Functor f)
                       => (f (Scalar w) -> w) -> f (DualVectorFromBasis $v)
@@ -422,12 +422,13 @@ zipConsumeWith' f (x:xs) ys
 
 instance ∀ v . ( BasisGeneratedSpace v, FiniteDimensional v
                , Scalar (Scalar v) ~ Scalar v
-               , HasTrie (Basis v), Enum (Basis v), Bounded (Basis v), Ord (Basis v)
+               , HasTrie (Basis v), Ord (Basis v)
                , Eq v, Eq (Basis v) )
      => FiniteDimensional (DualVectorFromBasis v) where
   data SubBasis (DualVectorFromBasis v) = CompleteDualVBasis
   entireBasis = CompleteDualVBasis
-  enumerateSubBasis CompleteDualVBasis = basisValue <$> [minBound .. maxBound]
+  enumerateSubBasis CompleteDualVBasis
+      = basisValue . fst <$> enumerate (trie $ const ())
   tensorEquality (Tensor t) (Tensor t')
       = and [ti == untrie t' i | (i,ti) <- enumerate t]
   decomposeLinMap = dlm
@@ -448,7 +449,7 @@ instance ∀ v . ( BasisGeneratedSpace v, FiniteDimensional v
                 -> [Scalar v]
                 -> (DualVectorFromBasis v, [Scalar v])
          rsb CompleteDualVBasis cs = first recompose
-                   $ zipWith' (,) [minBound..maxBound] cs
+                   $ zipWith' (,) (fst <$> enumerate (trie $ const ())) cs
   recomposeSBTensor = rsbt
    where rsbt :: ∀ w . (FiniteDimensional w, Scalar w ~ Scalar v)
              => SubBasis (DualVectorFromBasis v) -> SubBasis w
@@ -457,14 +458,14 @@ instance ∀ v . ( BasisGeneratedSpace v, FiniteDimensional v
          rsbt CompleteDualVBasis sbw ws = proveTensorProductIsTrie @v @w
                  (first (\iws -> Tensor $ trie (Map.fromList iws Map.!))
                    $ zipConsumeWith' (\i cs' -> first (i,) $ recomposeSB sbw cs')
-                         [minBound..maxBound] ws)
+                         (fst <$> enumerate (trie $ const ())) ws)
   recomposeLinMap = rlm
    where rlm :: ∀ w . SubBasis (DualVectorFromBasis v)
                 -> [w]
                 -> (DualVectorFromBasis v+>w, [w])
          rlm CompleteDualVBasis ws = proveTensorProductIsTrie @v @w
                  (first (\iws -> LinearMap $ trie (Map.fromList iws Map.!))
-                   $ zipWith' (,) [minBound..maxBound] ws)
+                   $ zipWith' (,) (fst <$> enumerate (trie $ const ())) ws)
   recomposeContraLinMap = rclm
    where rclm :: ∀ w f . (LinearSpace w, Scalar w ~ Scalar v, Hask.Functor f)
               => (f (Scalar w) -> w) -> f v
