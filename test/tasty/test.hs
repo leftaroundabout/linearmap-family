@@ -51,6 +51,15 @@ type Z5 = Z3+Z2
 type Z3 = Z2+()
 type Z2 = ()+()
 
+instance (Enum a, Bounded a, Enum b, Bounded b) => Enum (Either a b) where
+  enumFromTo (Left l) (Left r) = Left <$> enumFromTo l r
+  enumFromTo (Left l) (Right r) = (Left <$> enumFromTo l maxBound)
+                                ++ (Right <$> enumFromTo minBound r)
+  enumFromTo (Right l) (Right r) = Right <$> enumFromTo l r
+instance (Enum a, Bounded a, Enum b, Bounded b) => Bounded (Either a b) where
+  minBound = Left minBound
+  maxBound = Right maxBound
+
 instance HasBasis ℝ⁵ where
   type Basis ℝ⁵ = Z5
   basisValue (Left (Left (Left  ()))) = ℝ⁵ [1,0,0,0,0]
