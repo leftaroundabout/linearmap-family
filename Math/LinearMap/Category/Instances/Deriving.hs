@@ -27,7 +27,8 @@
 {-# LANGUAGE TupleSections              #-}
 
 module Math.LinearMap.Category.Instances.Deriving
-   ( makeLinearSpaceFromBasis, BasisGeneratedSpace(..) ) where
+   ( makeLinearSpaceFromBasis, makeFiniteDimensionalFromBasis
+   , BasisGeneratedSpace(..) ) where
 
 import Math.LinearMap.Category.Class
 import Math.VectorSpace.Docile
@@ -198,7 +199,12 @@ makeLinearSpaceFromBasis v = sequence
 
       |]
     return $ tySyns ++ methods
- , InstanceD Nothing [] <$> [t|FiniteDimensional $v|] <*> do
+ ]
+
+makeFiniteDimensionalFromBasis :: Q Type -> DecsQ
+makeFiniteDimensionalFromBasis v = do
+   generalInsts <- makeLinearSpaceFromBasis v
+   fdInst <- InstanceD Nothing [] <$> [t|FiniteDimensional $v|] <*> do
     subBasisCstr <- newName "CompleteBasis"
     tySyns <- sequence [
 #if MIN_VERSION_template_haskell(2,15,0)
@@ -278,7 +284,7 @@ makeLinearSpaceFromBasis v = sequence
 
       |]
     return $ tySyns ++ methods
- ]
+   return $ generalInsts ++ [fdInst]
 
 
 

@@ -83,7 +83,7 @@ instance HasBasis ℝ⁵ where
 instance Arbitrary ℝ⁵ where
   arbitrary = ℝ⁵ <$> QC.vectorOf 5 arbitrary
 
-makeLinearSpaceFromBasis [t| ℝ⁵ |]
+makeFiniteDimensionalFromBasis [t| ℝ⁵ |]
 
 main :: IO ()
 main = do
