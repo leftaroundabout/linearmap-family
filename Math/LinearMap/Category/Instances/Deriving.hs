@@ -62,7 +62,34 @@ import Data.VectorSpace.Free
 
 import Language.Haskell.TH
 
-
+-- | Given a type @V@ that is already a 'VectorSpace' and 'HasBasis', generate
+--   the other class instances that are needed to use the type with this
+--   library.
+--
+--   Prerequisites: (these can often be derived automatically,
+--   using either the @newtype@ \/ @via@ strategy or generics \/ anyclass)
+--
+-- @
+-- instance 'AdditiveGroup' V
+--
+-- instance 'VectorSpace' V where
+--   type Scalar V = -- a simple number type, usually 'Double'
+--
+-- instance 'HasBasis' V where
+--   type Basis V = -- a type with an instance of 'HasTrie'
+-- @
+--
+--   Note that the 'Basis' does /not/ need to be orthonormal – in fact it
+--   is not necessary to have a scalar product (i.e. an 'InnerSpace' instance)
+--   at all.
+--
+--   This macro, invoked like
+-- @
+-- makeLinearSpaceFromBasis [t| V |]
+-- @
+--
+--   will then generate @V@-instances for the classes 'Semimanifold',
+--   'PseudoAffine', 'AffineSpace', 'TensorSpace' and 'LinearSpace'.
 makeLinearSpaceFromBasis :: Q Type -> DecsQ
 makeLinearSpaceFromBasis v = sequence
  [ InstanceD Nothing [] <$> [t|Semimanifold $v|] <*> do
@@ -206,6 +233,8 @@ makeLinearSpaceFromBasis v = sequence
     return $ tySyns ++ methods
  ]
 
+-- | Like 'makeLinearSpaceFromBasis', but additionally generate instances for
+--   'FiniteDimensional' and 'SemiInner'.
 makeFiniteDimensionalFromBasis :: Q Type -> DecsQ
 makeFiniteDimensionalFromBasis v = do
  generalInsts <- makeLinearSpaceFromBasis v
@@ -363,7 +392,7 @@ instance ∀ v . ( HasBasis v, Num' (Scalar v)
     = error "Cannot yet coerce tensors defined from a `HasBasis` instance. This would require `RoleAnnotations` on `:->:`. Cf. https://gitlab.haskell.org/ghc/ghc/-/issues/8177"
 
 
--- | Don't manually instantiate this class, it is just used internally
+-- | Do not manually instantiate this class. It is used internally
 --   by 'makeLinearSpaceFromBasis'.
 class ( HasBasis v, Num' (Scalar v)
       , LinearSpace v, DualVector v ~ DualVectorFromBasis v)

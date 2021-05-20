@@ -69,6 +69,7 @@ module Math.LinearMap.Category (
             , finishEigenSystem
             , Eigenvector(..)
             -- * The classes of suitable vector spaces
+            -- $classesExplanation
             -- ** Deriving from basis
             , module Math.LinearMap.Category.Instances.Deriving
             -- ** The classes
@@ -835,3 +836,13 @@ linearRegression = lrw (dualSpaceWitness, dualSpaceWitness)
               σm = mconcat [ Norm . arr $ m . (fmap ny $ m')
                            | ((_,(_,Norm ny)), (m',m)) <- zip dataxy modelGens ]
                   
+-- $classesExplanation
+-- To facilitate this library's abstract, base-less approach, the
+-- spaces/types need to be instances of multiple typeclasses which
+-- are rather tedious to write instances for. Due to the use of type
+-- families, GHC's various deriving mechanisms cannot help much with this
+-- either.
+--
+-- In the common case that your spaces /do/ have a canonical basis, the
+-- instances can be generated automatically with one of the Template Haskell
+-- macros 'makeLinearSpaceFromBasis' or 'makeFiniteDimensionalFromBasis'.
