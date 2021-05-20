@@ -28,6 +28,10 @@
 
 module Math.LinearMap.Category.Instances.Deriving
    ( makeLinearSpaceFromBasis, makeFiniteDimensionalFromBasis
+   -- * The instantiated classes
+   , AffineSpace(..), Semimanifold(..), PseudoAffine
+   , TensorSpace(..), LinearSpace(..), FiniteDimensional(..), SemiInner(..)
+   -- * Internals
    , BasisGeneratedSpace(..) ) where
 
 import Math.LinearMap.Category.Class
