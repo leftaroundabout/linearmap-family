@@ -21,7 +21,7 @@
 {-# LANGUAGE DeriveGeneric              #-}
 {-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE DerivingStrategies         #-}
-{-# LANGUAGE GeneralisedNewtypeDeriving #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE CPP                        #-}
 {-# LANGUAGE TupleSections              #-}
@@ -99,16 +99,23 @@ makeLinearSpaceFromBasis v = sequence
 #else
        TySynInstD ''Needle <$> do
          TySynEqn . (:[]) <$> v <*> v
+#if !MIN_VERSION_manifolds_core(0,6,0)
      , TySynInstD ''Interior <$> do
          TySynEqn . (:[]) <$> v <*> v
 #endif
+#endif
      ]
     methods <- [d|
+#if !MIN_VERSION_manifolds_core(0,6,0)
         $(varP $ mkName "toInterior") = pure
         $(varP $ mkName "fromInterior") = id
         $(varP $ mkName "translateP") = Tagged (^+^)
+#endif
         $(varP $ mkName ".+~^") = (^+^)
-        $(varP $ mkName "semimanifoldWitness") = SemimanifoldWitness BoundarylessWitness
+        $(varP $ mkName "semimanifoldWitness") = SemimanifoldWitness
+#if !MIN_VERSION_manifolds_core(0,6,0)
+              BoundarylessWitness
+#endif
      |]
     return $ tySyns ++ methods
  , InstanceD Nothing [] <$> [t|PseudoAffine $v|] <*> do
@@ -150,7 +157,10 @@ makeLinearSpaceFromBasis v = sequence
         $(varP $ mkName "fromFlatTensor") = LinearFunction $ \(Tensor t)
                 -> recompose $ enumerate t
         $(varP $ mkName "scalarSpaceWitness") = ScalarSpaceWitness
-        $(varP $ mkName "linearManifoldWitness") = LinearManifoldWitness BoundarylessWitness
+        $(varP $ mkName "linearManifoldWitness") = LinearManifoldWitness
+#if !MIN_VERSION_manifolds_core(0,6,0)
+                   BoundarylessWitness
+#endif
         $(varP $ mkName "addTensors") = \(Tensor v) (Tensor w)
             -> Tensor $ (^+^) <$> v <*> w
         $(varP $ mkName "subtractTensors") = \(Tensor v) (Tensor w)
@@ -343,12 +353,17 @@ newtype DualVectorFromBasis v = DualVectorFromBasis { getDualVectorFromBasis :: 
 
 instance AdditiveGroup v => Semimanifold (DualVectorFromBasis v) where
   type Needle (DualVectorFromBasis v) = DualVectorFromBasis v
+#if !MIN_VERSION_manifolds_core(0,6,0)
   type Interior (DualVectorFromBasis v) = DualVectorFromBasis v
   toInterior = pure
   fromInterior = id
   translateP = Tagged (^+^)
+#endif
   (.+~^) = (^+^)
-  semimanifoldWitness = SemimanifoldWitness BoundarylessWitness
+  semimanifoldWitness = SemimanifoldWitness
+#if !MIN_VERSION_manifolds_core(0,6,0)
+         BoundarylessWitness
+#endif
 
 instance AdditiveGroup v => AffineSpace (DualVectorFromBasis v) where
   type Diff (DualVectorFromBasis v) = DualVectorFromBasis v
@@ -374,7 +389,10 @@ instance ∀ v . ( HasBasis v, Num' (Scalar v)
   fromFlatTensor = LinearFunction $ \(Tensor t)
           -> recompose $ enumerate t
   scalarSpaceWitness = ScalarSpaceWitness
-  linearManifoldWitness = LinearManifoldWitness BoundarylessWitness
+  linearManifoldWitness = LinearManifoldWitness
+#if !MIN_VERSION_manifolds_core(0,6,0)
+        BoundarylessWitness
+#endif
   addTensors (Tensor v) (Tensor w) = Tensor $ (^+^) <$> v <*> w
   subtractTensors (Tensor v) (Tensor w) = Tensor $ (^-^) <$> v <*> w
   tensorProduct = bilinearFunction
