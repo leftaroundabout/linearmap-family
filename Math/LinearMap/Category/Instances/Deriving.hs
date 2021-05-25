@@ -108,6 +108,11 @@ makeLinearSpaceFromBasis' _ cxtv = do
    (cxt', v') <- cxtv
    return (pure cxt', pure v')
  
+ exts <- extsEnabled
+ if not $ TypeFamilies`elem`exts && ScopedTypeVariables`elem`exts
+   then reportError "This macro requires -XTypeFamilies and -XScopedTypeVariables."
+   else pure ()
+ 
  sequence
   [ InstanceD Nothing <$> cxt <*> [t|Semimanifold $v|] <*> do
      tySyns <- sequence [
