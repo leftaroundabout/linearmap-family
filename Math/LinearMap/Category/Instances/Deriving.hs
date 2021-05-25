@@ -28,11 +28,12 @@
 
 module Math.LinearMap.Category.Instances.Deriving
    ( makeLinearSpaceFromBasis, makeFiniteDimensionalFromBasis
+   , makeLinearSpaceFromBasis', makeFiniteDimensionalFromBasis'
    -- * The instantiated classes
    , AffineSpace(..), Semimanifold(..), PseudoAffine(..)
    , TensorSpace(..), LinearSpace(..), FiniteDimensional(..), SemiInner(..)
    -- * Internals
-   , BasisGeneratedSpace(..) ) where
+   , BasisGeneratedSpace(..), LinearSpaceFromBasisDerivationConfig, def ) where
 
 import Math.LinearMap.Category.Class
 import Math.VectorSpace.Docile
@@ -54,6 +55,7 @@ import Data.Coerce
 import Data.Type.Coercion
 import Data.Tagged
 import Data.Traversable (traverse)
+import Data.Default.Class
 
 import Math.Manifold.Core.PseudoAffine
 import Math.LinearMap.Asserted
@@ -91,8 +93,19 @@ import Language.Haskell.TH
 --   will then generate @V@-instances for the classes 'Semimanifold',
 --   'PseudoAffine', 'AffineSpace', 'TensorSpace' and 'LinearSpace'.
 makeLinearSpaceFromBasis :: Q Type -> DecsQ
-makeLinearSpaceFromBasis v = sequence
- [ InstanceD Nothing [] <$> [t|Semimanifold $v|] <*> do
+makeLinearSpaceFromBasis v
+   = makeLinearSpaceFromBasis' def (([],)<$>v)
+
+data LinearSpaceFromBasisDerivationConfig = LinearSpaceFromBasisDerivationConfig
+instance Default LinearSpaceFromBasisDerivationConfig where
+  def = LinearSpaceFromBasisDerivationConfig
+
+-- | More general version of 'makeLinearSpaceFromBasis', that can be used with
+--   parameterised types.
+makeLinearSpaceFromBasis' :: LinearSpaceFromBasisDerivationConfig
+                -> Q (Cxt, Type) -> DecsQ
+makeLinearSpaceFromBasis' _ cxtv = sequence
+ [ InstanceD Nothing <$> cxt <*> [t|Semimanifold $v|] <*> do
     tySyns <- sequence [
 #if MIN_VERSION_template_haskell(2,15,0)
        error "The TH type of TySynInstD has changed"
@@ -111,7 +124,7 @@ makeLinearSpaceFromBasis v = sequence
         $(varP $ mkName "semimanifoldWitness") = SemimanifoldWitness BoundarylessWitness
      |]
     return $ tySyns ++ methods
- , InstanceD Nothing [] <$> [t|PseudoAffine $v|] <*> do
+ , InstanceD Nothing <$> cxt <*> [t|PseudoAffine $v|] <*> do
      [d|
         $(varP $ mkName ".-~!") = (^-^)
       |]
@@ -129,7 +142,7 @@ makeLinearSpaceFromBasis v = sequence
         $(varP $ mkName ".-.") = (^-^)
       |]
     return $ tySyns ++ methods
- , InstanceD Nothing [] <$> [t|TensorSpace $v|] <*> do
+ , InstanceD Nothing <$> cxt <*> [t|TensorSpace $v|] <*> do
     tySyns <- sequence [
 #if MIN_VERSION_template_haskell(2,15,0)
        error "The TH type of TySynInstD has changed"
@@ -170,11 +183,11 @@ makeLinearSpaceFromBasis v = sequence
           -> error "Cannot yet coerce tensors defined from a `HasBasis` instance. This would require `RoleAnnotations` on `:->:`. Cf. https://gitlab.haskell.org/ghc/ghc/-/issues/8177"
       |]
     return $ tySyns ++ methods
- , InstanceD Nothing [] <$> [t|BasisGeneratedSpace $v|] <*> do
+ , InstanceD Nothing <$> cxt <*> [t|BasisGeneratedSpace $v|] <*> do
      [d|
         $(varP $ mkName "proveTensorProductIsTrie") = \φ -> φ
       |]
- , InstanceD Nothing [] <$> [t|LinearSpace $v|] <*> do
+ , InstanceD Nothing <$> cxt <*> [t|LinearSpace $v|] <*> do
     tySyns <- sequence [
 #if MIN_VERSION_template_haskell(2,15,0)
        error "The TH type of TySynInstD has changed"
@@ -232,15 +245,27 @@ makeLinearSpaceFromBasis v = sequence
       |]
     return $ tySyns ++ methods
  ]
+ where cxt = fst<$>cxtv
+       v = snd<$>cxtv
+
+data FiniteDimensionalFromBasisDerivationConfig
+         = FiniteDimensionalFromBasisDerivationConfig
+instance Default FiniteDimensionalFromBasisDerivationConfig where
+  def = FiniteDimensionalFromBasisDerivationConfig
 
 -- | Like 'makeLinearSpaceFromBasis', but additionally generate instances for
 --   'FiniteDimensional' and 'SemiInner'.
 makeFiniteDimensionalFromBasis :: Q Type -> DecsQ
-makeFiniteDimensionalFromBasis v = do
- generalInsts <- makeLinearSpaceFromBasis v
+makeFiniteDimensionalFromBasis v
+   = makeFiniteDimensionalFromBasis' def (([],)<$>v)
+
+makeFiniteDimensionalFromBasis' :: FiniteDimensionalFromBasisDerivationConfig
+              -> Q (Cxt, Type) -> DecsQ
+makeFiniteDimensionalFromBasis' _ cxtv = do
+ generalInsts <- makeLinearSpaceFromBasis' def cxtv
  vtnameHash <- abs . hash . show <$> v
  fdInsts <- sequence
-  [ InstanceD Nothing [] <$> [t|FiniteDimensional $v|] <*> do
+  [ InstanceD Nothing <$> cxt <*> [t|FiniteDimensional $v|] <*> do
     
     -- This is a hack. Ideally, @newName@ should generate globally unique names,
     -- but it doesn't, so we append a hash of the vector space type.
@@ -325,7 +350,7 @@ makeFiniteDimensionalFromBasis v = do
 
       |]
     return $ tySyns ++ methods
-  , InstanceD Nothing [] <$> [t|SemiInner $v|] <*> do
+  , InstanceD Nothing <$> cxt <*> [t|SemiInner $v|] <*> do
      [d|
         $(varP $ mkName "dualBasisCandidates")
            = cartesianDualBasisCandidates
@@ -335,6 +360,8 @@ makeFiniteDimensionalFromBasis v = do
       |]
   ]
  return $ generalInsts ++ fdInsts
+ where cxt = fst<$>cxtv
+       v = snd<$>cxtv
 
 
 
