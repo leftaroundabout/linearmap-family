@@ -28,7 +28,6 @@
 
 module Math.LinearMap.Category.Instances.Deriving
    ( makeLinearSpaceFromBasis, makeFiniteDimensionalFromBasis
-   , makeLinearSpaceFromBasis', makeFiniteDimensionalFromBasis'
    -- * The instantiated classes
    , AffineSpace(..), Semimanifold(..), PseudoAffine(..)
    , TensorSpace(..), LinearSpace(..), FiniteDimensional(..), SemiInner(..)
@@ -94,7 +93,7 @@ import Language.Haskell.TH
 --   'PseudoAffine', 'AffineSpace', 'TensorSpace' and 'LinearSpace'.
 makeLinearSpaceFromBasis :: Q Type -> DecsQ
 makeLinearSpaceFromBasis v
-   = makeLinearSpaceFromBasis' def (([],)<$>v)
+   = makeLinearSpaceFromBasis' def $ deQuantifyType v
 
 data LinearSpaceFromBasisDerivationConfig = LinearSpaceFromBasisDerivationConfig
 instance Default LinearSpaceFromBasisDerivationConfig where
@@ -260,7 +259,7 @@ instance Default FiniteDimensionalFromBasisDerivationConfig where
 --   'FiniteDimensional' and 'SemiInner'.
 makeFiniteDimensionalFromBasis :: Q Type -> DecsQ
 makeFiniteDimensionalFromBasis v
-   = makeFiniteDimensionalFromBasis' def (([],)<$>v)
+   = makeFiniteDimensionalFromBasis' def $ deQuantifyType v
 
 makeFiniteDimensionalFromBasis' :: FiniteDimensionalFromBasisDerivationConfig
               -> Q (Cxt, Type) -> DecsQ
@@ -368,6 +367,13 @@ makeFiniteDimensionalFromBasis' _ cxtv = do
   ]
  return $ generalInsts ++ fdInsts
 
+
+deQuantifyType :: Q Type -> Q (Cxt, Type)
+deQuantifyType t = do
+   t' <- t
+   return $ case t' of
+     ForallT _ cxt instT -> (cxt, instT)
+     _ -> ([], t')
 
 
 newtype DualVectorFromBasis v = DualVectorFromBasis { getDualVectorFromBasis :: v }
