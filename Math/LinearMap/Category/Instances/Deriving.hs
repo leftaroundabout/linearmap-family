@@ -133,7 +133,7 @@ makeLinearSpaceFromBasis' _ cxtv = do
       [d|
          $(varP '(.-~!)) = (^-^)
        |]
-  , InstanceD Nothing [] <$> [t|AffineSpace $v|] <*> do
+  , InstanceD Nothing <$> cxt <*> [t|AffineSpace $v|] <*> do
      tySyns <- sequence [
 #if MIN_VERSION_template_haskell(2,15,0)
         error "The TH type of TySynInstD has changed"
