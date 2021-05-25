@@ -11,6 +11,7 @@
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TypeOperators              #-}
 {-# LANGUAGE FlexibleInstances          #-}
+{-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE UnicodeSyntax              #-}
 {-# LANGUAGE UndecidableInstances       #-}
@@ -35,27 +36,27 @@ import qualified Test.QuickCheck as QC
 
 
 
-newtype ℝ⁵ = ℝ⁵ { getℝ⁵ :: [ℝ] }
+newtype ℝ⁵ a = ℝ⁵ { getℝ⁵ :: [ℝ] }
  deriving (Eq, Show)
 
-instance AdditiveGroup ℝ⁵ where
+instance AdditiveGroup (ℝ⁵ a) where
   zeroV = ℝ⁵ $ replicate 5 0
   ℝ⁵ v ^+^ ℝ⁵ w = ℝ⁵ $ zipWith (+) v w
   negateV (ℝ⁵ v)  = ℝ⁵ $ map negate v
 
-instance VectorSpace ℝ⁵ where
-  type Scalar ℝ⁵ = ℝ
+instance VectorSpace (ℝ⁵ a) where
+  type Scalar (ℝ⁵ a) = ℝ
   μ*^ℝ⁵ v = ℝ⁵ $ map (μ*) v
 
-instance InnerSpace ℝ⁵ where
+instance InnerSpace (ℝ⁵ a) where
   ℝ⁵ v <.> ℝ⁵ w = sum $ zipWith (*) v w
 
 type Z5 = Z3+Z2
 type Z3 = Z2+()
 type Z2 = ()+()
 
-instance HasBasis ℝ⁵ where
-  type Basis ℝ⁵ = Z5
+instance Num a => HasBasis (ℝ⁵ a) where
+  type Basis (ℝ⁵ a) = Z5
   basisValue (Left (Left (Left  ()))) = ℝ⁵ [1,0,0,0,0]
   basisValue (Left (Left (Right ()))) = ℝ⁵ [0,1,0,0,0]
   basisValue (Left (Right     ()   )) = ℝ⁵ [0,0,1,0,0]
@@ -74,17 +75,17 @@ instance HasBasis ℝ⁵ where
    Right (Left     ()   ) ->  d
    Right (Right    ()   ) ->  e
 
-instance Arbitrary ℝ⁵ where
+instance Arbitrary (ℝ⁵ a) where
   arbitrary = ℝ⁵ <$> QC.vectorOf 5 arbitrary
 
-makeFiniteDimensionalFromBasis [t| ℝ⁵ |]
+makeFiniteDimensionalFromBasis [t| ∀ a . Num a => ℝ⁵ a |]
 
-newtype H¹ℝ⁵ = H¹ℝ⁵ { getH¹ℝ⁵ :: ℝ⁵ }
+newtype H¹ℝ⁵ = H¹ℝ⁵ { getH¹ℝ⁵ :: ℝ⁵ Int }
  deriving newtype (Eq, Show, AdditiveGroup, VectorSpace, HasBasis, Arbitrary)
 
 makeFiniteDimensionalFromBasis [t| H¹ℝ⁵ |]
 
-derivative :: H¹ℝ⁵ -> ℝ⁵
+derivative :: H¹ℝ⁵ -> ℝ⁵ Int
 derivative (H¹ℝ⁵ (ℝ⁵ (x₀:xs))) = ℝ⁵ (x₀:xs) ^-^ ℝ⁵ (xs++[x₀])
 
 instance InnerSpace H¹ℝ⁵ where
@@ -106,9 +107,9 @@ main = do
     ]                                               -- very seldom in the @Arbitrary@ instance.
    , testGroup "Basis-derived space"
     [ testProperty "Semimanifold addition"
-     $ \v w -> v.+~^w === (v^+^w :: ℝ⁵)
+     $ \v w -> v.+~^w === (v^+^w :: ℝ⁵ Int)
     , testProperty "Riesz representation, orthonormal basis"
-     $ \v -> (riesz-+$>coRiesz-+$>v) === (v :: ℝ⁵)
+     $ \v -> (riesz-+$>coRiesz-+$>v) === (v :: ℝ⁵ Int)
     , testProperty "Riesz representation, non-orthonormal basis"
      $ \v -> (riesz-+$>coRiesz-+$>v) ≈≈≈ (v :: H¹ℝ⁵)
     ]
