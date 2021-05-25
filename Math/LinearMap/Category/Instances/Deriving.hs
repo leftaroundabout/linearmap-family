@@ -122,16 +122,16 @@ makeLinearSpaceFromBasis' _ cxtv = do
 #endif
       ]
      methods <- [d|
-         $(varP $ mkName "toInterior") = pure
-         $(varP $ mkName "fromInterior") = id
-         $(varP $ mkName "translateP") = Tagged (^+^)
-         $(varP $ mkName ".+~^") = (^+^)
-         $(varP $ mkName "semimanifoldWitness") = SemimanifoldWitness BoundarylessWitness
+         $(varP 'toInterior) = pure
+         $(varP 'fromInterior) = id
+         $(varP 'translateP) = Tagged (^+^)
+         $(varP '(.+~^)) = (^+^)
+         $(varP 'semimanifoldWitness) = SemimanifoldWitness BoundarylessWitness
       |]
      return $ tySyns ++ methods
   , InstanceD Nothing <$> cxt <*> [t|PseudoAffine $v|] <*> do
       [d|
-         $(varP $ mkName ".-~!") = (^-^)
+         $(varP '(.-~!)) = (^-^)
        |]
   , InstanceD Nothing [] <$> [t|AffineSpace $v|] <*> do
      tySyns <- sequence [
@@ -143,8 +143,8 @@ makeLinearSpaceFromBasis' _ cxtv = do
 #endif
       ]
      methods <- [d|
-         $(varP $ mkName ".+^") = (^+^)
-         $(varP $ mkName ".-.") = (^-^)
+         $(varP '(.+^)) = (^+^)
+         $(varP '(.-.)) = (^-^)
        |]
      return $ tySyns ++ methods
   , InstanceD Nothing <$> cxt <*> [t|TensorSpace $v|] <*> do
@@ -159,38 +159,38 @@ makeLinearSpaceFromBasis' _ cxtv = do
 #endif
       ]
      methods <- [d|
-         $(varP $ mkName "wellDefinedVector") = \v
+         $(varP 'wellDefinedVector) = \v
             -> if v==v then Just v else Nothing
-         $(varP $ mkName "wellDefinedTensor") = \(Tensor v)
+         $(varP 'wellDefinedTensor) = \(Tensor v)
             -> fmap (const $ Tensor v) . traverse (wellDefinedVector . snd) $ enumerate v
-         $(varP $ mkName "zeroTensor") = Tensor . trie $ const zeroV
-         $(varP $ mkName "toFlatTensor") = LinearFunction $ Tensor . trie . decompose'
-         $(varP $ mkName "fromFlatTensor") = LinearFunction $ \(Tensor t)
+         $(varP 'zeroTensor) = Tensor . trie $ const zeroV
+         $(varP 'toFlatTensor) = LinearFunction $ Tensor . trie . decompose'
+         $(varP 'fromFlatTensor) = LinearFunction $ \(Tensor t)
                  -> recompose $ enumerate t
-         $(varP $ mkName "scalarSpaceWitness") = ScalarSpaceWitness
-         $(varP $ mkName "linearManifoldWitness") = LinearManifoldWitness BoundarylessWitness
-         $(varP $ mkName "addTensors") = \(Tensor v) (Tensor w)
+         $(varP 'scalarSpaceWitness) = ScalarSpaceWitness
+         $(varP 'linearManifoldWitness) = LinearManifoldWitness BoundarylessWitness
+         $(varP 'addTensors) = \(Tensor v) (Tensor w)
              -> Tensor $ (^+^) <$> v <*> w
-         $(varP $ mkName "subtractTensors") = \(Tensor v) (Tensor w)
+         $(varP 'subtractTensors) = \(Tensor v) (Tensor w)
              -> Tensor $ (^-^) <$> v <*> w
-         $(varP $ mkName "tensorProduct") = bilinearFunction
+         $(varP 'tensorProduct) = bilinearFunction
            $ \v w -> Tensor . trie $ \bv -> decompose' v bv *^ w
-         $(varP $ mkName "transposeTensor") = LinearFunction $ \(Tensor t)
+         $(varP 'transposeTensor) = LinearFunction $ \(Tensor t)
               -> sumV [ (tensorProduct-+$>w)-+$>basisValue b
                       | (b,w) <- enumerate t ]
-         $(varP $ mkName "fmapTensor") = bilinearFunction
+         $(varP 'fmapTensor) = bilinearFunction
            $ \(LinearFunction f) (Tensor t)
                 -> Tensor $ fmap f t
-         $(varP $ mkName "fzipTensorWith") = bilinearFunction
+         $(varP 'fzipTensorWith) = bilinearFunction
            $ \(LinearFunction f) (Tensor tv, Tensor tw)
                 -> Tensor $ liftA2 (curry f) tv tw
-         $(varP $ mkName "coerceFmapTensorProduct") = \_ Coercion
+         $(varP 'coerceFmapTensorProduct) = \_ Coercion
            -> error "Cannot yet coerce tensors defined from a `HasBasis` instance. This would require `RoleAnnotations` on `:->:`. Cf. https://gitlab.haskell.org/ghc/ghc/-/issues/8177"
        |]
      return $ tySyns ++ methods
   , InstanceD Nothing <$> cxt <*> [t|BasisGeneratedSpace $v|] <*> do
       [d|
-         $(varP $ mkName "proveTensorProductIsTrie") = \φ -> φ
+         $(varP 'proveTensorProductIsTrie) = \φ -> φ
        |]
   , InstanceD Nothing <$> cxt <*> [t|LinearSpace $v|] <*> do
      tySyns <- sequence [
@@ -205,10 +205,10 @@ makeLinearSpaceFromBasis' _ cxtv = do
      methods <- [d|
  
  
-         $(varP $ mkName "dualSpaceWitness") = case closedScalarWitness @(Scalar $v) of
+         $(varP 'dualSpaceWitness) = case closedScalarWitness @(Scalar $v) of
               ClosedScalarWitness -> DualSpaceWitness
-         $(varP $ mkName "linearId") = LinearMap . trie $ basisValue
-         $(varP $ mkName "tensorId") = tid
+         $(varP 'linearId) = LinearMap . trie $ basisValue
+         $(varP 'tensorId) = tid
              where tid :: ∀ w . (LinearSpace w, Scalar w ~ Scalar $v)
                      => ($v⊗w) +> ($v⊗w)
                    tid = case dualSpaceWitness @w of
@@ -220,13 +220,13 @@ makeLinearSpaceFromBasis' _ cxtv = do
                                          :: $v⊗w))
                         -+$> case linearId @w of
                               LinearMap lw -> Tensor lw :: DualVector w⊗w
-         $(varP $ mkName "applyDualVector") = bilinearFunction
+         $(varP 'applyDualVector) = bilinearFunction
               $ \(DualVectorFromBasis f) v
                     -> sum [decompose' f i * vi | (i,vi) <- decompose v]
-         $(varP $ mkName "applyLinear") = bilinearFunction
+         $(varP 'applyLinear) = bilinearFunction
               $ \(LinearMap f) v
                     -> sumV [vi *^ untrie f i | (i,vi) <- decompose v]
-         $(varP $ mkName "applyTensorFunctional") = atf
+         $(varP 'applyTensorFunctional) = atf
              where atf :: ∀ u . (LinearSpace u, Scalar u ~ Scalar $v)
                     => Bilinear (DualVector ($v ⊗ u))
                                    ($v ⊗ u) (Scalar $v)
@@ -235,7 +235,7 @@ makeLinearSpaceFromBasis' _ cxtv = do
                      $ \(LinearMap f) (Tensor t)
                        -> sum [ (applyDualVector-+$>fi)-+$>untrie t i
                               | (i, fi) <- enumerate f ]
-         $(varP $ mkName "applyTensorLinMap") = atlm
+         $(varP 'applyTensorLinMap) = atlm
              where atlm :: ∀ u w . ( LinearSpace u, TensorSpace w
                                    , Scalar u ~ Scalar $v, Scalar w ~ Scalar $v )
                             => Bilinear (($v ⊗ u) +> w) ($v ⊗ u) w
@@ -245,7 +245,7 @@ makeLinearSpaceFromBasis' _ cxtv = do
                         -> sumV [ (applyLinear-+$>(LinearMap fi :: u+>w))
                                    -+$> untrie t i
                                 | (i, Tensor fi) <- enumerate f ]
-         $(varP $ mkName "useTupleLinearSpaceComponents") = error "Not a tuple type"
+         $(varP 'useTupleLinearSpaceComponents) = error "Not a tuple type"
  
        |]
      return $ tySyns ++ methods
@@ -291,31 +291,31 @@ makeFiniteDimensionalFromBasis' _ cxtv = do
 #endif
      ]
     methods <- [d|
-        $(varP $ mkName "entireBasis") = $(conE subBasisCstr)
-        $(varP $ mkName "enumerateSubBasis") =
+        $(varP 'entireBasis) = $(conE subBasisCstr)
+        $(varP 'enumerateSubBasis) =
             \ $(conP subBasisCstr []) -> basisValue . fst <$> enumerate (trie $ const ())
-        $(varP $ mkName "tensorEquality")
+        $(varP 'tensorEquality)
           = \(Tensor t) (Tensor t')  -> and [ti == untrie t' i | (i,ti) <- enumerate t]
-        $(varP $ mkName "decomposeLinMap") = dlm
+        $(varP 'decomposeLinMap) = dlm
            where dlm :: ∀ w . ($v+>w)
                        -> (SubBasis $v, [w]->[w])
                  dlm (LinearMap f) = 
                          ( $(conE subBasisCstr)
                          , (map snd (enumerate f) ++) )
-        $(varP $ mkName "decomposeLinMapWithin") = dlm
+        $(varP 'decomposeLinMapWithin) = dlm
            where dlm :: ∀ w . SubBasis $v
                         -> ($v+>w)
                         -> Either (SubBasis $v, [w]->[w])
                                   ([w]->[w])
                  dlm $(conP subBasisCstr []) (LinearMap f) = 
                          (Right (map snd (enumerate f) ++) )
-        $(varP $ mkName "recomposeSB") = rsb
+        $(varP 'recomposeSB) = rsb
            where rsb :: SubBasis $v
                         -> [Scalar $v]
                         -> ($v, [Scalar $v])
                  rsb $(conP subBasisCstr []) cs = first recompose
                            $ zipWith' (,) (fst <$> enumerate (trie $ const ())) cs
-        $(varP $ mkName "recomposeSBTensor") = rsbt
+        $(varP 'recomposeSBTensor) = rsbt
            where rsbt :: ∀ w . (FiniteDimensional w, Scalar w ~ Scalar $v)
                      => SubBasis $v -> SubBasis w
                         -> [Scalar $v]
@@ -325,20 +325,20 @@ makeFiniteDimensionalFromBasis' _ cxtv = do
                            $ zipConsumeWith' (\i cs' -> first (\c->(i,c))
                                                        $ recomposeSB sbw cs')
                                  (fst <$> enumerate (trie $ const ())) ws)
-        $(varP $ mkName "recomposeLinMap") = rlm
+        $(varP 'recomposeLinMap) = rlm
            where rlm :: ∀ w . SubBasis $v
                         -> [w]
                         -> ($v+>w, [w])
                  rlm $(conP subBasisCstr []) ws = 
                     (first (\iws -> LinearMap $ trie (Map.fromList iws Map.!))
                       $ zipWith' (,) (fst <$> enumerate (trie $ const ())) ws)
-        $(varP $ mkName "recomposeContraLinMap") = rclm
+        $(varP 'recomposeContraLinMap) = rclm
            where rclm :: ∀ w f . (LinearSpace w, Scalar w ~ Scalar $v, Hask.Functor f)
                       => (f (Scalar w) -> w) -> f (DualVectorFromBasis $v)
                         -> ($v+>w)
                  rclm f vs = 
                        (LinearMap $ trie (\i -> f $ fmap (`decompose'`i) vs))
-        $(varP $ mkName "recomposeContraLinMapTensor") = rclm
+        $(varP 'recomposeContraLinMapTensor) = rclm
            where rclm :: ∀ u w f
                    . ( FiniteDimensional u, LinearSpace w
                      , Scalar u ~ Scalar $v, Scalar w ~ Scalar $v, Hask.Functor f
@@ -352,14 +352,14 @@ makeFiniteDimensionalFromBasis' _ cxtv = do
                            (\i -> case recomposeContraLinMap @u @w @f f
                                       $ fmap (\(LinearMap vu) -> untrie vu (i :: Basis $v)) vus of
                               LinearMap wuff -> Tensor wuff :: DualVector u⊗w )))
-        $(varP $ mkName "uncanonicallyFromDual") = LinearFunction getDualVectorFromBasis
-        $(varP $ mkName "uncanonicallyToDual") = LinearFunction DualVectorFromBasis
+        $(varP 'uncanonicallyFromDual) = LinearFunction getDualVectorFromBasis
+        $(varP 'uncanonicallyToDual) = LinearFunction DualVectorFromBasis
 
       |]
     return $ tySyns ++ methods
   , InstanceD Nothing <$> cxt <*> [t|SemiInner $v|] <*> do
      [d|
-        $(varP $ mkName "dualBasisCandidates")
+        $(varP 'dualBasisCandidates)
            = cartesianDualBasisCandidates
                (enumerateSubBasis CompleteDualVBasis)
                (\v -> map (abs . realToFrac . decompose' v . fst)
