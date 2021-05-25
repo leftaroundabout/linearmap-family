@@ -104,149 +104,152 @@ instance Default LinearSpaceFromBasisDerivationConfig where
 --   parameterised types.
 makeLinearSpaceFromBasis' :: LinearSpaceFromBasisDerivationConfig
                 -> Q (Cxt, Type) -> DecsQ
-makeLinearSpaceFromBasis' _ cxtv = sequence
- [ InstanceD Nothing <$> cxt <*> [t|Semimanifold $v|] <*> do
-    tySyns <- sequence [
+makeLinearSpaceFromBasis' _ cxtv = do
+ (cxt,v) <- do
+   (cxt', v') <- cxtv
+   return (pure cxt', pure v')
+ 
+ sequence
+  [ InstanceD Nothing <$> cxt <*> [t|Semimanifold $v|] <*> do
+     tySyns <- sequence [
 #if MIN_VERSION_template_haskell(2,15,0)
-       error "The TH type of TySynInstD has changed"
+        error "The TH type of TySynInstD has changed"
 #else
-       TySynInstD ''Needle <$> do
-         TySynEqn . (:[]) <$> v <*> v
-     , TySynInstD ''Interior <$> do
-         TySynEqn . (:[]) <$> v <*> v
+        TySynInstD ''Needle <$> do
+          TySynEqn . (:[]) <$> v <*> v
+      , TySynInstD ''Interior <$> do
+          TySynEqn . (:[]) <$> v <*> v
 #endif
-     ]
-    methods <- [d|
-        $(varP $ mkName "toInterior") = pure
-        $(varP $ mkName "fromInterior") = id
-        $(varP $ mkName "translateP") = Tagged (^+^)
-        $(varP $ mkName ".+~^") = (^+^)
-        $(varP $ mkName "semimanifoldWitness") = SemimanifoldWitness BoundarylessWitness
-     |]
-    return $ tySyns ++ methods
- , InstanceD Nothing <$> cxt <*> [t|PseudoAffine $v|] <*> do
-     [d|
-        $(varP $ mkName ".-~!") = (^-^)
+      ]
+     methods <- [d|
+         $(varP $ mkName "toInterior") = pure
+         $(varP $ mkName "fromInterior") = id
+         $(varP $ mkName "translateP") = Tagged (^+^)
+         $(varP $ mkName ".+~^") = (^+^)
+         $(varP $ mkName "semimanifoldWitness") = SemimanifoldWitness BoundarylessWitness
       |]
- , InstanceD Nothing [] <$> [t|AffineSpace $v|] <*> do
-    tySyns <- sequence [
+     return $ tySyns ++ methods
+  , InstanceD Nothing <$> cxt <*> [t|PseudoAffine $v|] <*> do
+      [d|
+         $(varP $ mkName ".-~!") = (^-^)
+       |]
+  , InstanceD Nothing [] <$> [t|AffineSpace $v|] <*> do
+     tySyns <- sequence [
 #if MIN_VERSION_template_haskell(2,15,0)
-       error "The TH type of TySynInstD has changed"
+        error "The TH type of TySynInstD has changed"
 #else
-       TySynInstD ''Diff <$> do
-         TySynEqn . (:[]) <$> v <*> v
+        TySynInstD ''Diff <$> do
+          TySynEqn . (:[]) <$> v <*> v
 #endif
-     ]
-    methods <- [d|
-        $(varP $ mkName ".+^") = (^+^)
-        $(varP $ mkName ".-.") = (^-^)
-      |]
-    return $ tySyns ++ methods
- , InstanceD Nothing <$> cxt <*> [t|TensorSpace $v|] <*> do
-    tySyns <- sequence [
+      ]
+     methods <- [d|
+         $(varP $ mkName ".+^") = (^+^)
+         $(varP $ mkName ".-.") = (^-^)
+       |]
+     return $ tySyns ++ methods
+  , InstanceD Nothing <$> cxt <*> [t|TensorSpace $v|] <*> do
+     tySyns <- sequence [
 #if MIN_VERSION_template_haskell(2,15,0)
-       error "The TH type of TySynInstD has changed"
+        error "The TH type of TySynInstD has changed"
 #else
-       TySynInstD ''TensorProduct <$> do
-         wType <- VarT <$> newName "w" :: Q Type
-         TySynEqn . (:[wType]) <$> v
-           <*> [t| Basis $v :->: $(pure wType) |]
+        TySynInstD ''TensorProduct <$> do
+          wType <- VarT <$> newName "w" :: Q Type
+          TySynEqn . (:[wType]) <$> v
+            <*> [t| Basis $v :->: $(pure wType) |]
 #endif
-     ]
-    methods <- [d|
-        $(varP $ mkName "wellDefinedVector") = \v
-           -> if v==v then Just v else Nothing
-        $(varP $ mkName "wellDefinedTensor") = \(Tensor v)
-           -> fmap (const $ Tensor v) . traverse (wellDefinedVector . snd) $ enumerate v
-        $(varP $ mkName "zeroTensor") = Tensor . trie $ const zeroV
-        $(varP $ mkName "toFlatTensor") = LinearFunction $ Tensor . trie . decompose'
-        $(varP $ mkName "fromFlatTensor") = LinearFunction $ \(Tensor t)
-                -> recompose $ enumerate t
-        $(varP $ mkName "scalarSpaceWitness") = ScalarSpaceWitness
-        $(varP $ mkName "linearManifoldWitness") = LinearManifoldWitness BoundarylessWitness
-        $(varP $ mkName "addTensors") = \(Tensor v) (Tensor w)
-            -> Tensor $ (^+^) <$> v <*> w
-        $(varP $ mkName "subtractTensors") = \(Tensor v) (Tensor w)
-            -> Tensor $ (^-^) <$> v <*> w
-        $(varP $ mkName "tensorProduct") = bilinearFunction
-          $ \v w -> Tensor . trie $ \bv -> decompose' v bv *^ w
-        $(varP $ mkName "transposeTensor") = LinearFunction $ \(Tensor t)
-             -> sumV [ (tensorProduct-+$>w)-+$>basisValue b
-                     | (b,w) <- enumerate t ]
-        $(varP $ mkName "fmapTensor") = bilinearFunction
-          $ \(LinearFunction f) (Tensor t)
-               -> Tensor $ fmap f t
-        $(varP $ mkName "fzipTensorWith") = bilinearFunction
-          $ \(LinearFunction f) (Tensor tv, Tensor tw)
-               -> Tensor $ liftA2 (curry f) tv tw
-        $(varP $ mkName "coerceFmapTensorProduct") = \_ Coercion
-          -> error "Cannot yet coerce tensors defined from a `HasBasis` instance. This would require `RoleAnnotations` on `:->:`. Cf. https://gitlab.haskell.org/ghc/ghc/-/issues/8177"
-      |]
-    return $ tySyns ++ methods
- , InstanceD Nothing <$> cxt <*> [t|BasisGeneratedSpace $v|] <*> do
-     [d|
-        $(varP $ mkName "proveTensorProductIsTrie") = \φ -> φ
-      |]
- , InstanceD Nothing <$> cxt <*> [t|LinearSpace $v|] <*> do
-    tySyns <- sequence [
+      ]
+     methods <- [d|
+         $(varP $ mkName "wellDefinedVector") = \v
+            -> if v==v then Just v else Nothing
+         $(varP $ mkName "wellDefinedTensor") = \(Tensor v)
+            -> fmap (const $ Tensor v) . traverse (wellDefinedVector . snd) $ enumerate v
+         $(varP $ mkName "zeroTensor") = Tensor . trie $ const zeroV
+         $(varP $ mkName "toFlatTensor") = LinearFunction $ Tensor . trie . decompose'
+         $(varP $ mkName "fromFlatTensor") = LinearFunction $ \(Tensor t)
+                 -> recompose $ enumerate t
+         $(varP $ mkName "scalarSpaceWitness") = ScalarSpaceWitness
+         $(varP $ mkName "linearManifoldWitness") = LinearManifoldWitness BoundarylessWitness
+         $(varP $ mkName "addTensors") = \(Tensor v) (Tensor w)
+             -> Tensor $ (^+^) <$> v <*> w
+         $(varP $ mkName "subtractTensors") = \(Tensor v) (Tensor w)
+             -> Tensor $ (^-^) <$> v <*> w
+         $(varP $ mkName "tensorProduct") = bilinearFunction
+           $ \v w -> Tensor . trie $ \bv -> decompose' v bv *^ w
+         $(varP $ mkName "transposeTensor") = LinearFunction $ \(Tensor t)
+              -> sumV [ (tensorProduct-+$>w)-+$>basisValue b
+                      | (b,w) <- enumerate t ]
+         $(varP $ mkName "fmapTensor") = bilinearFunction
+           $ \(LinearFunction f) (Tensor t)
+                -> Tensor $ fmap f t
+         $(varP $ mkName "fzipTensorWith") = bilinearFunction
+           $ \(LinearFunction f) (Tensor tv, Tensor tw)
+                -> Tensor $ liftA2 (curry f) tv tw
+         $(varP $ mkName "coerceFmapTensorProduct") = \_ Coercion
+           -> error "Cannot yet coerce tensors defined from a `HasBasis` instance. This would require `RoleAnnotations` on `:->:`. Cf. https://gitlab.haskell.org/ghc/ghc/-/issues/8177"
+       |]
+     return $ tySyns ++ methods
+  , InstanceD Nothing <$> cxt <*> [t|BasisGeneratedSpace $v|] <*> do
+      [d|
+         $(varP $ mkName "proveTensorProductIsTrie") = \φ -> φ
+       |]
+  , InstanceD Nothing <$> cxt <*> [t|LinearSpace $v|] <*> do
+     tySyns <- sequence [
 #if MIN_VERSION_template_haskell(2,15,0)
-       error "The TH type of TySynInstD has changed"
+        error "The TH type of TySynInstD has changed"
 #else
-       TySynInstD ''DualVector <$> do
-         TySynEqn . (:[]) <$> v
-           <*> [t| DualVectorFromBasis $v |]
+        TySynInstD ''DualVector <$> do
+          TySynEqn . (:[]) <$> v
+            <*> [t| DualVectorFromBasis $v |]
 #endif
-     ]
-    methods <- [d|
-
-
-        $(varP $ mkName "dualSpaceWitness") = case closedScalarWitness @(Scalar $v) of
-             ClosedScalarWitness -> DualSpaceWitness
-        $(varP $ mkName "linearId") = LinearMap . trie $ basisValue
-        $(varP $ mkName "tensorId") = tid
-            where tid :: ∀ w . (LinearSpace w, Scalar w ~ Scalar $v)
-                    => ($v⊗w) +> ($v⊗w)
-                  tid = case dualSpaceWitness @w of
-                   DualSpaceWitness -> LinearMap . trie $ Tensor . \i
-                    -> getTensorProduct $
-                      (fmapTensor @(DualVector w)
-                          -+$>(LinearFunction $ \w -> Tensor . trie
-                                       $ (\j -> if i==j then w else zeroV)
-                                        :: $v⊗w))
-                       -+$> case linearId @w of
-                             LinearMap lw -> Tensor lw :: DualVector w⊗w
-        $(varP $ mkName "applyDualVector") = bilinearFunction
-             $ \(DualVectorFromBasis f) v
-                   -> sum [decompose' f i * vi | (i,vi) <- decompose v]
-        $(varP $ mkName "applyLinear") = bilinearFunction
-             $ \(LinearMap f) v
-                   -> sumV [vi *^ untrie f i | (i,vi) <- decompose v]
-        $(varP $ mkName "applyTensorFunctional") = atf
-            where atf :: ∀ u . (LinearSpace u, Scalar u ~ Scalar $v)
-                   => Bilinear (DualVector ($v ⊗ u))
-                                  ($v ⊗ u) (Scalar $v)
-                  atf = case dualSpaceWitness @u of
-                   DualSpaceWitness -> bilinearFunction
-                    $ \(LinearMap f) (Tensor t)
-                      -> sum [ (applyDualVector-+$>fi)-+$>untrie t i
-                             | (i, fi) <- enumerate f ]
-        $(varP $ mkName "applyTensorLinMap") = atlm
-            where atlm :: ∀ u w . ( LinearSpace u, TensorSpace w
-                                  , Scalar u ~ Scalar $v, Scalar w ~ Scalar $v )
-                           => Bilinear (($v ⊗ u) +> w) ($v ⊗ u) w
-                  atlm = case dualSpaceWitness @u of
+      ]
+     methods <- [d|
+ 
+ 
+         $(varP $ mkName "dualSpaceWitness") = case closedScalarWitness @(Scalar $v) of
+              ClosedScalarWitness -> DualSpaceWitness
+         $(varP $ mkName "linearId") = LinearMap . trie $ basisValue
+         $(varP $ mkName "tensorId") = tid
+             where tid :: ∀ w . (LinearSpace w, Scalar w ~ Scalar $v)
+                     => ($v⊗w) +> ($v⊗w)
+                   tid = case dualSpaceWitness @w of
+                    DualSpaceWitness -> LinearMap . trie $ Tensor . \i
+                     -> getTensorProduct $
+                       (fmapTensor @(DualVector w)
+                           -+$>(LinearFunction $ \w -> Tensor . trie
+                                        $ (\j -> if i==j then w else zeroV)
+                                         :: $v⊗w))
+                        -+$> case linearId @w of
+                              LinearMap lw -> Tensor lw :: DualVector w⊗w
+         $(varP $ mkName "applyDualVector") = bilinearFunction
+              $ \(DualVectorFromBasis f) v
+                    -> sum [decompose' f i * vi | (i,vi) <- decompose v]
+         $(varP $ mkName "applyLinear") = bilinearFunction
+              $ \(LinearMap f) v
+                    -> sumV [vi *^ untrie f i | (i,vi) <- decompose v]
+         $(varP $ mkName "applyTensorFunctional") = atf
+             where atf :: ∀ u . (LinearSpace u, Scalar u ~ Scalar $v)
+                    => Bilinear (DualVector ($v ⊗ u))
+                                   ($v ⊗ u) (Scalar $v)
+                   atf = case dualSpaceWitness @u of
                     DualSpaceWitness -> bilinearFunction
-                      $ \(LinearMap f) (Tensor t)
-                       -> sumV [ (applyLinear-+$>(LinearMap fi :: u+>w))
-                                  -+$> untrie t i
-                               | (i, Tensor fi) <- enumerate f ]
-        $(varP $ mkName "useTupleLinearSpaceComponents") = error "Not a tuple type"
-
-      |]
-    return $ tySyns ++ methods
- ]
- where cxt = fst<$>cxtv
-       v = snd<$>cxtv
+                     $ \(LinearMap f) (Tensor t)
+                       -> sum [ (applyDualVector-+$>fi)-+$>untrie t i
+                              | (i, fi) <- enumerate f ]
+         $(varP $ mkName "applyTensorLinMap") = atlm
+             where atlm :: ∀ u w . ( LinearSpace u, TensorSpace w
+                                   , Scalar u ~ Scalar $v, Scalar w ~ Scalar $v )
+                            => Bilinear (($v ⊗ u) +> w) ($v ⊗ u) w
+                   atlm = case dualSpaceWitness @u of
+                     DualSpaceWitness -> bilinearFunction
+                       $ \(LinearMap f) (Tensor t)
+                        -> sumV [ (applyLinear-+$>(LinearMap fi :: u+>w))
+                                   -+$> untrie t i
+                                | (i, Tensor fi) <- enumerate f ]
+         $(varP $ mkName "useTupleLinearSpaceComponents") = error "Not a tuple type"
+ 
+       |]
+     return $ tySyns ++ methods
+  ]
 
 data FiniteDimensionalFromBasisDerivationConfig
          = FiniteDimensionalFromBasisDerivationConfig
@@ -263,7 +266,11 @@ makeFiniteDimensionalFromBasis' :: FiniteDimensionalFromBasisDerivationConfig
               -> Q (Cxt, Type) -> DecsQ
 makeFiniteDimensionalFromBasis' _ cxtv = do
  generalInsts <- makeLinearSpaceFromBasis' def cxtv
+ (cxt,v) <- do
+   (cxt', v') <- cxtv
+   return (pure cxt', pure v')
  vtnameHash <- abs . hash . show <$> v
+ 
  fdInsts <- sequence
   [ InstanceD Nothing <$> cxt <*> [t|FiniteDimensional $v|] <*> do
     
@@ -360,8 +367,6 @@ makeFiniteDimensionalFromBasis' _ cxtv = do
       |]
   ]
  return $ generalInsts ++ fdInsts
- where cxt = fst<$>cxtv
-       v = snd<$>cxtv
 
 
 
