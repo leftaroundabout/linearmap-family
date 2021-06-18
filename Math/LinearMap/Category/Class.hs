@@ -282,6 +282,7 @@ instance Num' s => LinearSpace (ZeroDim s) where
   applyTensorFunctional = biConst0
   applyTensorLinMap = biConst0
   composeLinear = biConst0
+  useTupleLinearSpaceComponents = usingNonTupleTypeAsTupleError
 
 
 -- | The tensor product between one space's dual space and another space is the
@@ -773,6 +774,7 @@ instance ∀ s u v . (LinearSpace u, LinearSpace v, Scalar u ~ s, Scalar v ~ s)
                   >>> \f -> LinearFunction $ \g
                                -> (applyTensorLinMap-+$>f)
                                    . arr (asTensor . hasteLinearMap) -+$> g
+  useTupleLinearSpaceComponents = usingNonTupleTypeAsTupleError
 
 instance ∀ s u v . (TensorSpace u, TensorSpace v, Scalar u ~ s, Scalar v ~ s)
                        => TensorSpace (Tensor s u v) where
@@ -865,6 +867,7 @@ instance ∀ s u v . (LinearSpace u, LinearSpace v, Scalar u ~ s, Scalar v ~ s)
     ScalarSpaceWitness -> contractTensorMap . fmap transposeTensor . contractMapTensor
                  . fmap (arr (curryLinearMap . hasteLinearMap) . transposeTensor)
                        . arr rassocTensor
+  useTupleLinearSpaceComponents = usingNonTupleTypeAsTupleError
 
 
 
@@ -1066,6 +1069,7 @@ instance (LinearSpace u, LinearSpace v, Scalar u ~ s, Scalar v ~ s)
                       -+$> coCurryLinearMap
                        $ sampleLinearFunctionFn
                       -+$> exposeLinearFn . curryLinearMap $ f )
+  useTupleLinearSpaceComponents = usingNonTupleTypeAsTupleError
 
 
 instance (TensorSpace u, TensorSpace v, s~Scalar u, s~Scalar v)
@@ -1095,6 +1099,9 @@ lfun = arr . LinearFunction
 
 genericTensorspaceError :: a
 genericTensorspaceError = error "GHC.Generics types can not be used as tensor spaces."
+
+usingNonTupleTypeAsTupleError :: a
+usingNonTupleTypeAsTupleError = error "This is not a tuple type, the method should not be callable."
 
 instance ∀ v s . TensorSpace v => TensorSpace (Gnrx.Rec0 v s) where
   type TensorProduct (Gnrx.Rec0 v s) w = TensorProduct v w
@@ -1298,6 +1305,7 @@ instance (LinearSpace v, Num (Scalar v)) => LinearSpace (Gnrx.Rec0 v s) where
               (applyTensorFunctional-+$>LinearMap f)-+$>pseudoFmapTensorLHS Gnrx.unK1 $ t
   applyTensorLinMap = bilinearFunction $ \(LinearMap f) t
                 -> (applyTensorLinMap-+$>LinearMap f)-+$>pseudoFmapTensorLHS Gnrx.unK1 $ t
+  useTupleLinearSpaceComponents = usingNonTupleTypeAsTupleError
 
 instance (LinearSpace (f p), Num (Scalar (f p))) => LinearSpace (Gnrx.M1 i c f p) where
   type DualVector (Gnrx.M1 i c f p) = DualVector (f p)
@@ -1313,6 +1321,7 @@ instance (LinearSpace (f p), Num (Scalar (f p))) => LinearSpace (Gnrx.M1 i c f p
               (applyTensorFunctional-+$>LinearMap f)-+$>pseudoFmapTensorLHS Gnrx.unM1 $ t
   applyTensorLinMap = bilinearFunction $ \(LinearMap f) t
                 -> (applyTensorLinMap-+$>LinearMap f)-+$>pseudoFmapTensorLHS Gnrx.unM1 $ t
+  useTupleLinearSpaceComponents = usingNonTupleTypeAsTupleError
 
 data GenericTupleDual f g p
     = GenericTupleDual !(DualVector (f p)) !(DualVector (g p)) deriving (Generic)
@@ -1492,6 +1501,7 @@ instance ∀ f g p . ( LinearSpace (f p), LinearSpace (g p), Scalar (f p) ~ Scal
              \(LinearMap (fu,fv)) (Tensor (tu,tv))
           -> ((applyTensorLinMap -+$> uncurryLinearMap . fmap fromTensor $ fu)-+$>tu)
            ^+^ ((applyTensorLinMap -+$> uncurryLinearMap . fmap fromTensor $ fv)-+$>tv)
+  useTupleLinearSpaceComponents = usingNonTupleTypeAsTupleError
 
 
 newtype GenericNeedle' m
@@ -1608,6 +1618,7 @@ instance ∀ s m . ( Num' s
   applyTensorLinMap = bilinearFunction $ \(LinearMap f) t
                 -> (applyTensorLinMap-+$>LinearMap f)
                     -+$>pseudoFmapTensorLHS getGenericNeedle $ t
+  useTupleLinearSpaceComponents = usingNonTupleTypeAsTupleError
 
 instance ∀ s m . ( Num' s
                  , Semimanifold m
@@ -1641,3 +1652,4 @@ instance ∀ s m . ( Num' s
        DualSpaceWitness -> bilinearFunction $ \(LinearMap f) t
                 -> (applyTensorLinMap-+$>LinearMap f)
                     -+$>pseudoFmapTensorLHS getGenericNeedle' $ t
+  useTupleLinearSpaceComponents = usingNonTupleTypeAsTupleError

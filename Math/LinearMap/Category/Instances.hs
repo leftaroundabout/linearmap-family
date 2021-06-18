@@ -133,7 +133,8 @@ instance LinearSpace (S) where { \
                         -> let LinearMap fuw = curryLinearMap $ fℝuw \
                            in (applyLinear-+$>fuw) -+$> u; \
   composeLinear = bilinearFunction $ \f (LinearMap g) \
-                     -> LinearMap $ (applyLinear-+$>f)-+$>g }
+                     -> LinearMap $ (applyLinear-+$>f)-+$>g; \
+  useTupleLinearSpaceComponents = usingNonTupleTypeAsTupleError }
 
 LinearScalarSpace(ℝ)
 LinearScalarSpace(Float)
@@ -207,7 +208,8 @@ instance ∀ s . (Num' s, Eq s) => LinearSpace (V s) where {                  \
              -> foldl' (^+^) zeroV $ liftA2 (arr fromTensor >>> \
                          getLinearFunction . getLinearFunction applyLinear) f t; \
   composeLinear = bilinearFunction $   \
-         \f (LinearMap g) -> LinearMap $ fmap ((applyLinear-+$>f)-+$>) g }
+         \f (LinearMap g) -> LinearMap $ fmap ((applyLinear-+$>f)-+$>) g; \
+  useTupleLinearSpaceComponents = usingNonTupleTypeAsTupleError }
 FreeLinearSpace( V0
                , LinearMap
                , \(Tensor V0) -> zeroV
@@ -399,6 +401,7 @@ instance (Num' n, UArr.Unbox n) => LinearSpace (Sequence n) where
   applyTensorLinMap = bilinearFunction $ arr curryLinearMap >>>
          \(LinearMap m) (Tensor t)
              -> sumV $ zipWith (getLinearFunction . getLinearFunction applyLinear) m t
+  useTupleLinearSpaceComponents = usingNonTupleTypeAsTupleError
 instance (Num' n, UArr.Unbox n) => LinearSpace (FinSuppSeq n) where
   type DualVector (FinSuppSeq n) = Sequence n
   dualSpaceWitness = case closedScalarWitness :: ClosedScalarWitness n of
@@ -421,6 +424,7 @@ instance (Num' n, UArr.Unbox n) => LinearSpace (FinSuppSeq n) where
   applyTensorLinMap = bilinearFunction $ arr curryLinearMap >>>
          \(LinearMap m) (Tensor t)
              -> sumV $ zipWith (getLinearFunction . getLinearFunction applyLinear) m t
+  useTupleLinearSpaceComponents = usingNonTupleTypeAsTupleError
   
 
 
@@ -522,6 +526,7 @@ instance (Num' s, LinearSpace v, Scalar v ~ s) => LinearSpace (SymmetricTensor s
                              $ uncurryLinearMap
                                 . fmap (uncurryLinearMap . fromTensor . fmap fromTensor)
                                        $ LinearMap f) t  
+  useTupleLinearSpaceComponents = usingNonTupleTypeAsTupleError
 
 
 
