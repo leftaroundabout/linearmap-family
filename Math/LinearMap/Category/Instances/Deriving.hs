@@ -249,7 +249,7 @@ makeLinearSpaceFromBasis' _ cxtv = do
                         -> sumV [ (applyLinear-+$>(LinearMap fi :: u+>w))
                                    -+$> untrie t i
                                 | (i, Tensor fi) <- enumerate f ]
-         $(varP 'useTupleLinearSpaceComponents) = error "Not a tuple type"
+         $(varP 'useTupleLinearSpaceComponents) = \_ -> usingNonTupleTypeAsTupleError
  
        |]
      return $ tySyns ++ methods
@@ -498,7 +498,7 @@ instance ∀ v . ( BasisGeneratedSpace v
                          -+$> untrie t i
                       | (i, Tensor fi) <- enumerate f ]
           )
-  useTupleLinearSpaceComponents = error "Not a tuple type"
+  useTupleLinearSpaceComponents _ = usingNonTupleTypeAsTupleError
 
 
 zipWith' :: (a -> b -> c) -> [a] -> [b] -> ([c], [b])

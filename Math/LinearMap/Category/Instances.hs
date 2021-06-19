@@ -134,7 +134,7 @@ instance LinearSpace (S) where { \
                            in (applyLinear-+$>fuw) -+$> u; \
   composeLinear = bilinearFunction $ \f (LinearMap g) \
                      -> LinearMap $ (applyLinear-+$>f)-+$>g; \
-  useTupleLinearSpaceComponents = usingNonTupleTypeAsTupleError }
+  useTupleLinearSpaceComponents _ = usingNonTupleTypeAsTupleError }
 
 LinearScalarSpace(ℝ)
 LinearScalarSpace(Float)
@@ -209,7 +209,7 @@ instance ∀ s . (Num' s, Eq s) => LinearSpace (V s) where {                  \
                          getLinearFunction . getLinearFunction applyLinear) f t; \
   composeLinear = bilinearFunction $   \
          \f (LinearMap g) -> LinearMap $ fmap ((applyLinear-+$>f)-+$>) g; \
-  useTupleLinearSpaceComponents = usingNonTupleTypeAsTupleError }
+  useTupleLinearSpaceComponents _ = usingNonTupleTypeAsTupleError }
 FreeLinearSpace( V0
                , LinearMap
                , \(Tensor V0) -> zeroV
@@ -401,7 +401,7 @@ instance (Num' n, UArr.Unbox n) => LinearSpace (Sequence n) where
   applyTensorLinMap = bilinearFunction $ arr curryLinearMap >>>
          \(LinearMap m) (Tensor t)
              -> sumV $ zipWith (getLinearFunction . getLinearFunction applyLinear) m t
-  useTupleLinearSpaceComponents = usingNonTupleTypeAsTupleError
+  useTupleLinearSpaceComponents _ = usingNonTupleTypeAsTupleError
 instance (Num' n, UArr.Unbox n) => LinearSpace (FinSuppSeq n) where
   type DualVector (FinSuppSeq n) = Sequence n
   dualSpaceWitness = case closedScalarWitness :: ClosedScalarWitness n of
@@ -424,7 +424,7 @@ instance (Num' n, UArr.Unbox n) => LinearSpace (FinSuppSeq n) where
   applyTensorLinMap = bilinearFunction $ arr curryLinearMap >>>
          \(LinearMap m) (Tensor t)
              -> sumV $ zipWith (getLinearFunction . getLinearFunction applyLinear) m t
-  useTupleLinearSpaceComponents = usingNonTupleTypeAsTupleError
+  useTupleLinearSpaceComponents _ = usingNonTupleTypeAsTupleError
   
 
 
@@ -526,7 +526,7 @@ instance (Num' s, LinearSpace v, Scalar v ~ s) => LinearSpace (SymmetricTensor s
                              $ uncurryLinearMap
                                 . fmap (uncurryLinearMap . fromTensor . fmap fromTensor)
                                        $ LinearMap f) t  
-  useTupleLinearSpaceComponents = usingNonTupleTypeAsTupleError
+  useTupleLinearSpaceComponents _ = usingNonTupleTypeAsTupleError
 
 
 
