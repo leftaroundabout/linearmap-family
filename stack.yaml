@@ -3,9 +3,9 @@ packages:
 - './'
 extra-deps:
 - manifolds-core-0.5.1.0
-- constrained-categories-0.4.0.0
+- constrained-categories-0.4.1.0
 - trivial-constraint-0.4.0.0
 - vector-space-0.15
 - free-vector-spaces-0.1.5.0
 - pragmatic-show-0.1.2.1
-resolver: lts-14.0
+resolver: lts-17.2
