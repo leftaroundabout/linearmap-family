@@ -109,22 +109,26 @@ makeLinearSpaceFromBasis' _ cxtv = do
    return (pure cxt', pure v')
  
  exts <- extsEnabled
- if not $ TypeFamilies`elem`exts && ScopedTypeVariables`elem`exts
-   then reportError "This macro requires -XTypeFamilies and -XScopedTypeVariables."
+ if not $ all (`elem`exts) [TypeFamilies, ScopedTypeVariables, TypeApplications]
+   then reportError "This macro requires -XTypeFamilies, -XScopedTypeVariables and -XTypeApplications."
    else pure ()
  
  sequence
   [ InstanceD Nothing <$> cxt <*> [t|Semimanifold $v|] <*> do
-     tySyns <- sequence [
+     tySyns <- 
 #if MIN_VERSION_template_haskell(2,15,0)
-        error "The TH type of TySynInstD has changed"
+      [d|
+        type instance Needle $v = $v
+        type instance Interior $v = $v
+        |]
 #else
+      sequence [
         TySynInstD ''Needle <$> do
           TySynEqn . (:[]) <$> v <*> v
       , TySynInstD ''Interior <$> do
           TySynEqn . (:[]) <$> v <*> v
-#endif
       ]
+#endif
      methods <- [d|
          $(varP 'toInterior) = pure
          $(varP 'fromInterior) = id
@@ -138,30 +142,36 @@ makeLinearSpaceFromBasis' _ cxtv = do
          $(varP '(.-~!)) = (^-^)
        |]
   , InstanceD Nothing <$> cxt <*> [t|AffineSpace $v|] <*> do
-     tySyns <- sequence [
+     tySyns <- 
 #if MIN_VERSION_template_haskell(2,15,0)
-        error "The TH type of TySynInstD has changed"
+      [d|
+        type instance Diff $v = $v
+        |]
 #else
+       sequence [
         TySynInstD ''Diff <$> do
           TySynEqn . (:[]) <$> v <*> v
-#endif
       ]
+#endif
      methods <- [d|
          $(varP '(.+^)) = (^+^)
          $(varP '(.-.)) = (^-^)
        |]
      return $ tySyns ++ methods
   , InstanceD Nothing <$> cxt <*> [t|TensorSpace $v|] <*> do
-     tySyns <- sequence [
+     tySyns <-
 #if MIN_VERSION_template_haskell(2,15,0)
-        error "The TH type of TySynInstD has changed"
+         [d|
+           type instance TensorProduct $v w = Basis $v :->: w
+           |]
 #else
+      sequence [
         TySynInstD ''TensorProduct <$> do
           wType <- VarT <$> newName "w" :: Q Type
           TySynEqn . (:[wType]) <$> v
             <*> [t| Basis $v :->: $(pure wType) |]
-#endif
       ]
+#endif
      methods <- [d|
          $(varP 'wellDefinedVector) = \v
             -> if v==v then Just v else Nothing
@@ -197,15 +207,18 @@ makeLinearSpaceFromBasis' _ cxtv = do
          $(varP 'proveTensorProductIsTrie) = \φ -> φ
        |]
   , InstanceD Nothing <$> cxt <*> [t|LinearSpace $v|] <*> do
-     tySyns <- sequence [
+     tySyns <- 
 #if MIN_VERSION_template_haskell(2,15,0)
-        error "The TH type of TySynInstD has changed"
+         [d|
+           type instance DualVector $v = DualVectorFromBasis $v
+           |]
 #else
+       sequence [
         TySynInstD ''DualVector <$> do
           TySynEqn . (:[]) <$> v
             <*> [t| DualVectorFromBasis $v |]
-#endif
       ]
+#endif
      methods <- [d|
  
  
@@ -285,7 +298,11 @@ makeFiniteDimensionalFromBasis' _ cxtv = do
 
     tySyns <- sequence [
 #if MIN_VERSION_template_haskell(2,15,0)
-       error "The TH type of TySynInstD has changed"
+       DataInstD [] Nothing
+          <$> (AppT (ConT ''SubBasis) <$> v)
+          <*> pure Nothing
+          <*> pure [NormalC subBasisCstr []]
+          <*> pure []
 #else
        DataInstD [] ''SubBasis
           <$> ((:[]) <$> v)

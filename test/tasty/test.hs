@@ -13,6 +13,7 @@
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE TypeFamilies               #-}
+{-# LANGUAGE TypeApplications           #-}
 {-# LANGUAGE UnicodeSyntax              #-}
 {-# LANGUAGE UndecidableInstances       #-}
 {-# LANGUAGE TemplateHaskell            #-}
