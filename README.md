@@ -1,4 +1,4 @@
-[![Build Status](https://travis-ci.com/leftaroundabout/linearmap-family.svg?branch=master](https://travis-ci.org/leftaroundabout/linearmap-family)
+[![Build Status](https://travis-ci.com/leftaroundabout/linearmap-family.svg?branch=master)](https://travis-ci.com/leftaroundabout/linearmap-family)
 
 This project has two goals:
 
