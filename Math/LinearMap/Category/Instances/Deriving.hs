@@ -84,13 +84,20 @@ import Language.Haskell.TH
 --   is not necessary to have a scalar product (i.e. an 'InnerSpace' instance)
 --   at all.
 --
---   This macro, invoked like
+--   The macro, invoked like
 -- @
 -- makeLinearSpaceFromBasis [t| V |]
 -- @
 --
 --   will then generate @V@-instances for the classes 'Semimanifold',
 --   'PseudoAffine', 'AffineSpace', 'TensorSpace' and 'LinearSpace'.
+--
+--   It also works on parameterised types, in that case you need to use
+--   universal-quantification syntax, e.g.
+--
+-- @
+-- makeLinearSpaceFromBasis [t| ∀ n . (KnownNat n) => V n |]
+-- @
 makeLinearSpaceFromBasis :: Q Type -> DecsQ
 makeLinearSpaceFromBasis v
    = makeLinearSpaceFromBasis' def $ deQuantifyType v
