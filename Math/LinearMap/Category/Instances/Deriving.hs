@@ -114,65 +114,26 @@ makeLinearSpaceFromBasis' _ cxtv = do
    else pure ()
  
  sequence
-  [ InstanceD Nothing <$> cxt <*> [t|Semimanifold $v|] <*> do
-     tySyns <- 
-#if MIN_VERSION_template_haskell(2,15,0)
-      [d|
-        type instance Needle $v = $v
-        type instance Interior $v = $v
-        |]
-#else
-      sequence [
-        TySynInstD ''Needle <$> do
-          TySynEqn . (:[]) <$> v <*> v
-      , TySynInstD ''Interior <$> do
-          TySynEqn . (:[]) <$> v <*> v
-      ]
-#endif
-     methods <- [d|
+  [ InstanceD Nothing <$> cxt <*> [t|Semimanifold $v|] <*> [d|
+         type instance Needle $v = $v
+         type instance Interior $v = $v
          $(varP 'toInterior) = pure
          $(varP 'fromInterior) = id
          $(varP 'translateP) = Tagged (^+^)
          $(varP '(.+~^)) = (^+^)
          $(varP 'semimanifoldWitness) = SemimanifoldWitness BoundarylessWitness
       |]
-     return $ tySyns ++ methods
   , InstanceD Nothing <$> cxt <*> [t|PseudoAffine $v|] <*> do
       [d|
          $(varP '(.-~!)) = (^-^)
        |]
-  , InstanceD Nothing <$> cxt <*> [t|AffineSpace $v|] <*> do
-     tySyns <- 
-#if MIN_VERSION_template_haskell(2,15,0)
-      [d|
-        type instance Diff $v = $v
-        |]
-#else
-       sequence [
-        TySynInstD ''Diff <$> do
-          TySynEqn . (:[]) <$> v <*> v
-      ]
-#endif
-     methods <- [d|
+  , InstanceD Nothing <$> cxt <*> [t|AffineSpace $v|] <*> [d|
+         type instance Diff $v = $v
          $(varP '(.+^)) = (^+^)
          $(varP '(.-.)) = (^-^)
        |]
-     return $ tySyns ++ methods
-  , InstanceD Nothing <$> cxt <*> [t|TensorSpace $v|] <*> do
-     tySyns <-
-#if MIN_VERSION_template_haskell(2,15,0)
-         [d|
-           type instance TensorProduct $v w = Basis $v :->: w
-           |]
-#else
-      sequence [
-        TySynInstD ''TensorProduct <$> do
-          wType <- VarT <$> newName "w" :: Q Type
-          TySynEqn . (:[wType]) <$> v
-            <*> [t| Basis $v :->: $(pure wType) |]
-      ]
-#endif
-     methods <- [d|
+  , InstanceD Nothing <$> cxt <*> [t|TensorSpace $v|] <*> [d|
+         type instance TensorProduct $v w = Basis $v :->: w
          $(varP 'wellDefinedVector) = \v
             -> if v==v then Just v else Nothing
          $(varP 'wellDefinedTensor) = \(Tensor v)
@@ -201,27 +162,12 @@ makeLinearSpaceFromBasis' _ cxtv = do
          $(varP 'coerceFmapTensorProduct) = \_ Coercion
            -> error "Cannot yet coerce tensors defined from a `HasBasis` instance. This would require `RoleAnnotations` on `:->:`. Cf. https://gitlab.haskell.org/ghc/ghc/-/issues/8177"
        |]
-     return $ tySyns ++ methods
   , InstanceD Nothing <$> cxt <*> [t|BasisGeneratedSpace $v|] <*> do
       [d|
          $(varP 'proveTensorProductIsTrie) = \φ -> φ
        |]
-  , InstanceD Nothing <$> cxt <*> [t|LinearSpace $v|] <*> do
-     tySyns <- 
-#if MIN_VERSION_template_haskell(2,15,0)
-         [d|
-           type instance DualVector $v = DualVectorFromBasis $v
-           |]
-#else
-       sequence [
-        TySynInstD ''DualVector <$> do
-          TySynEqn . (:[]) <$> v
-            <*> [t| DualVectorFromBasis $v |]
-      ]
-#endif
-     methods <- [d|
- 
- 
+  , InstanceD Nothing <$> cxt <*> [t|LinearSpace $v|] <*> [d|
+         type instance DualVector $v = DualVectorFromBasis $v
          $(varP 'dualSpaceWitness) = case closedScalarWitness @(Scalar $v) of
               ClosedScalarWitness -> DualSpaceWitness
          $(varP 'linearId) = LinearMap . trie $ basisValue
@@ -265,7 +211,6 @@ makeLinearSpaceFromBasis' _ cxtv = do
          $(varP 'useTupleLinearSpaceComponents) = \_ -> usingNonTupleTypeAsTupleError
  
        |]
-     return $ tySyns ++ methods
   ]
 
 data FiniteDimensionalFromBasisDerivationConfig
