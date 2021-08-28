@@ -116,12 +116,14 @@ makeLinearSpaceFromBasis' _ cxtv = do
  sequence
   [ InstanceD Nothing <$> cxt <*> [t|Semimanifold $v|] <*> [d|
          type instance Needle $v = $v
+#if !MIN_VERSION_manifolds_core(0,6,0)
          type instance Interior $v = $v
          $(varP 'toInterior) = pure
          $(varP 'fromInterior) = id
          $(varP 'translateP) = Tagged (^+^)
-         $(varP '(.+~^)) = (^+^)
          $(varP 'semimanifoldWitness) = SemimanifoldWitness BoundarylessWitness
+#endif
+         $(varP '(.+~^)) = (^+^)
       |]
   , InstanceD Nothing <$> cxt <*> [t|PseudoAffine $v|] <*> do
       [d|
@@ -348,12 +350,14 @@ newtype DualVectorFromBasis v = DualVectorFromBasis { getDualVectorFromBasis :: 
 
 instance AdditiveGroup v => Semimanifold (DualVectorFromBasis v) where
   type Needle (DualVectorFromBasis v) = DualVectorFromBasis v
+#if !MIN_VERSION_manifolds_core(0,6,0)
   type Interior (DualVectorFromBasis v) = DualVectorFromBasis v
   toInterior = pure
   fromInterior = id
   translateP = Tagged (^+^)
-  (.+~^) = (^+^)
   semimanifoldWitness = SemimanifoldWitness BoundarylessWitness
+#endif
+  (.+~^) = (^+^)
 
 instance AdditiveGroup v => AffineSpace (DualVectorFromBasis v) where
   type Diff (DualVectorFromBasis v) = DualVectorFromBasis v
@@ -379,7 +383,10 @@ instance ∀ v . ( HasBasis v, Num' (Scalar v)
   fromFlatTensor = LinearFunction $ \(Tensor t)
           -> recompose $ enumerate t
   scalarSpaceWitness = ScalarSpaceWitness
-  linearManifoldWitness = LinearManifoldWitness BoundarylessWitness
+  linearManifoldWitness = LinearManifoldWitness
+#if !MIN_VERSION_manifolds_core(0,6,0)
+        BoundarylessWitness
+#endif
   addTensors (Tensor v) (Tensor w) = Tensor $ (^+^) <$> v <*> w
   subtractTensors (Tensor v) (Tensor w) = Tensor $ (^-^) <$> v <*> w
   tensorProduct = bilinearFunction
