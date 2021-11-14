@@ -17,7 +17,7 @@
 {-# LANGUAGE UnicodeSyntax              #-}
 {-# LANGUAGE UndecidableInstances       #-}
 {-# LANGUAGE TemplateHaskell            #-}
-{-# LANGUAGE GeneralisedNewtypeDeriving #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE DerivingStrategies         #-}
 
 import qualified Prelude as Hask

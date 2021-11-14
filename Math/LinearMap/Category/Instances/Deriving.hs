@@ -145,7 +145,10 @@ makeLinearSpaceFromBasis' _ cxtv = do
          $(varP 'fromFlatTensor) = LinearFunction $ \(Tensor t)
                  -> recompose $ enumerate t
          $(varP 'scalarSpaceWitness) = ScalarSpaceWitness
-         $(varP 'linearManifoldWitness) = LinearManifoldWitness BoundarylessWitness
+         $(varP 'linearManifoldWitness) = LinearManifoldWitness
+#if !MIN_VERSION_manifolds_core(0,6,0)
+                                 BoundarylessWitness
+#endif
          $(varP 'addTensors) = \(Tensor v) (Tensor w)
              -> Tensor $ (^+^) <$> v <*> w
          $(varP 'subtractTensors) = \(Tensor v) (Tensor w)
