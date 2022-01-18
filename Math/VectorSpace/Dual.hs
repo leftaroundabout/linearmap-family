@@ -20,8 +20,8 @@
 
 module Math.VectorSpace.Dual
        ( Dualness(..), Dual, DualityWitness(..), ValidDualness(..)
-       , usingAnyDualness
-        ) where
+       , usingAnyDualness, DualnessSingletons(..)
+       ) where
 
 import Math.LinearMap.Category.Class
 import Data.Kind (Type)
