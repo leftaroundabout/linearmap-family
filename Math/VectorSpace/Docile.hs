@@ -26,6 +26,7 @@
 {-# LANGUAGE EmptyCase            #-}
 {-# LANGUAGE AllowAmbiguousTypes  #-}
 {-# LANGUAGE TypeApplications     #-}
+{-# LANGUAGE DataKinds            #-}
 {-# LANGUAGE DefaultSignatures    #-}
 
 module Math.VectorSpace.Docile where
@@ -1212,18 +1213,36 @@ instance RieszDecomposable (V0 ℝ) where
   rieszDecomposition _ = []
 instance RieszDecomposable (V1 ℝ) where
   rieszDecomposition m = [(ex, sRiesz $ fmap (LinearFunction (^._x)) $ m)]
+#if MIN_VERSION_free_vector_spaces(0,2,0)
+   where ex = e @0
+#endif
 instance RieszDecomposable (V2 ℝ) where
   rieszDecomposition m = [ (ex, sRiesz $ fmap (LinearFunction (^._x)) $ m)
                          , (ey, sRiesz $ fmap (LinearFunction (^._y)) $ m) ]
+#if MIN_VERSION_free_vector_spaces(0,2,0)
+   where ex = e @0
+         ey = e @1
+#endif
 instance RieszDecomposable (V3 ℝ) where
   rieszDecomposition m = [ (ex, sRiesz $ fmap (LinearFunction (^._x)) $ m)
                          , (ey, sRiesz $ fmap (LinearFunction (^._y)) $ m)
                          , (ez, sRiesz $ fmap (LinearFunction (^._z)) $ m) ]
+#if MIN_VERSION_free_vector_spaces(0,2,0)
+   where ex = e @0
+         ey = e @1
+         ez = e @2
+#endif
 instance RieszDecomposable (V4 ℝ) where
   rieszDecomposition m = [ (ex, sRiesz $ fmap (LinearFunction (^._x)) $ m)
                          , (ey, sRiesz $ fmap (LinearFunction (^._y)) $ m)
                          , (ez, sRiesz $ fmap (LinearFunction (^._z)) $ m)
                          , (ew, sRiesz $ fmap (LinearFunction (^._w)) $ m) ]
+#if MIN_VERSION_free_vector_spaces(0,2,0)
+   where ex = e @0
+         ey = e @1
+         ez = e @2
+         ew = e @3
+#endif
 
 infixl 7 .<
 
@@ -1322,19 +1341,43 @@ instance TensorDecomposable (ZeroDim ℝ) where
   showsPrecBasis _ = absurd
 instance TensorDecomposable (V0 ℝ) where
   tensorDecomposition _ = []
+#if MIN_VERSION_free_vector_spaces(0,2,0)
+  showsPrecBasis = showsPrec
+#else
   showsPrecBasis _ (Mat.E q) = (V0^.q ++)
+#endif
 instance TensorDecomposable (V1 ℝ) where
+#if MIN_VERSION_free_vector_spaces(0,2,0)
+  tensorDecomposition (Tensor (V1 w)) = [(e @0, w)]
+  showsPrecBasis = showsPrec
+#else
   tensorDecomposition (Tensor (V1 w)) = [(ex, w)]
   showsPrecBasis _ (Mat.E q) = (V1"ex"^.q ++)
+#endif
 instance TensorDecomposable (V2 ℝ) where
+#if MIN_VERSION_free_vector_spaces(0,2,0)
+  tensorDecomposition (Tensor (V2 x y)) = [ (e @0, x), (e @1, y) ]
+  showsPrecBasis = showsPrec
+#else
   tensorDecomposition (Tensor (V2 x y)) = [ (ex, x), (ey, y) ]
   showsPrecBasis _ (Mat.E q) = (V2"ex""ey"^.q ++)
+#endif
 instance TensorDecomposable (V3 ℝ) where
+#if MIN_VERSION_free_vector_spaces(0,2,0)
+  tensorDecomposition (Tensor (V3 x y z)) = [ (e @0, x), (e @1, y), (e @2, z) ]
+  showsPrecBasis = showsPrec
+#else
   tensorDecomposition (Tensor (V3 x y z)) = [ (ex, x), (ey, y), (ez, z) ]
   showsPrecBasis _ (Mat.E q) = (V3"ex""ey""ez"^.q ++)
+#endif
 instance TensorDecomposable (V4 ℝ) where
+#if MIN_VERSION_free_vector_spaces(0,2,0)
+  tensorDecomposition (Tensor (V4 x y z w)) = [(e @0,x), (e @1,y), (e @2,z), (e @3,w)]
+  showsPrecBasis = showsPrec
+#else
   tensorDecomposition (Tensor (V4 x y z w)) = [ (ex, x), (ey, y), (ez, z), (ew, w) ]
   showsPrecBasis _ (Mat.E q) = (V4"ex""ey""ez""ew"^.q ++)
+#endif
 
 tensorDecomposeShowsPrec :: ∀ u v s
   . ( TensorDecomposable u, FiniteDimensional v, Show v, Scalar u ~ s, Scalar v ~ s )
