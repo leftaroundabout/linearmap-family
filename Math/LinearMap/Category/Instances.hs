@@ -76,6 +76,7 @@ instance LinearSpace v => Semimanifold (EmptyMfd v) where
     LinearManifoldWitness -> SemimanifoldWitness
 instance LinearSpace v => PseudoAffine (EmptyMfd v) where
   p .-~. _ = case p of {}
+  p .-~! _ = case p of {}
 #endif
 
 
@@ -468,6 +469,7 @@ instance (TensorSpace v, Scalar v ~ s) => Semimanifold (SymmetricTensor s v) whe
 #endif
 instance (TensorSpace v, Scalar v ~ s) => PseudoAffine (SymmetricTensor s v) where
   (.-~!) = (^-^)
+  p.-~.q = pure (p^-^q)
 instance (Num' s, TensorSpace v, Scalar v ~ s) => TensorSpace (SymmetricTensor s v) where
   type TensorProduct (SymmetricTensor s v) x = Tensor s v (Tensor s v x)
   wellDefinedVector (SymTensor t) = SymTensor <$> wellDefinedVector t
@@ -605,6 +607,7 @@ instance ( GHC.Generic1 f, TensorSpace y
          , Monoidal f (LinearFunction (Scalar y)) (LinearFunction (Scalar y)) )
      => PseudoAffine (LinearApplicativeSpace f y) where
   (.-~!) = (.-.)
+  p.-~.q = pure (p.-.q)
 
 
 

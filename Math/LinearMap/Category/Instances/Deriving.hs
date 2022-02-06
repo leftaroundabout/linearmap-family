@@ -128,6 +128,7 @@ makeLinearSpaceFromBasis' _ cxtv = do
   , InstanceD Nothing <$> cxt <*> [t|PseudoAffine $v|] <*> do
       [d|
          $(varP '(.-~!)) = (^-^)
+         $(varP '(.-~.)) = \p q -> pure (p^-^q)
        |]
   , InstanceD Nothing <$> cxt <*> [t|AffineSpace $v|] <*> [d|
          type instance Diff $v = $v
@@ -369,6 +370,7 @@ instance AdditiveGroup v => AffineSpace (DualVectorFromBasis v) where
 
 instance AdditiveGroup v => PseudoAffine (DualVectorFromBasis v) where
   (.-~!) = (^-^)
+  p.-~.q = pure (p^-^q)
 
 instance ∀ v . ( HasBasis v, Num' (Scalar v)
                , Scalar (Scalar v) ~ Scalar v

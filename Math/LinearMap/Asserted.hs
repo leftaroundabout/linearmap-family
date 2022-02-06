@@ -103,6 +103,7 @@ instance VectorSpace w => Semimanifold (LinearFunction s v w) where
   (.+~^) = (^+^)
 instance VectorSpace w => PseudoAffine (LinearFunction s v w) where
   f.-~.g = return $ f^-^g
+  f.-~!g = f^-^g
 
 instance Functor (LinearFunction s v) Coercion Coercion where
   fmap Coercion = Coercion
