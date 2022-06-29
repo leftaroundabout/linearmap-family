@@ -25,6 +25,7 @@
 {-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE CPP                        #-}
 {-# LANGUAGE TupleSections              #-}
+{-# LANGUAGE PatternSynonyms            #-}
 
 module Math.LinearMap.Category.Instances.Deriving
    ( makeLinearSpaceFromBasis, makeFiniteDimensionalFromBasis
@@ -53,6 +54,7 @@ import Control.Arrow.Constrained
 import Data.Coerce
 import Data.Type.Coercion
 import Data.Tagged
+import qualified Data.Kind as Kind
 import Data.Traversable (traverse)
 import Data.Default.Class
 
@@ -573,4 +575,233 @@ instance ∀ v . ( BasisGeneratedSpace v, FiniteDimensional v
           (enumerateSubBasis entireBasis)
           (\v -> map (abs . realToFrac . decompose' v . fst)
                   $ enumerate (trie $ const ()) )
+
+
+newtype AbstractDualVector a c
+           = AbstractDualVector_ { getConcreteDualVector :: DualVector c }
+deriving newtype instance (Eq (DualVector c)) => Eq (AbstractDualVector a c)
+
+class ( Coercible v (VectorSpaceImplementation v)
+      , DualVector v
+          ~ AbstractDualVector v (VectorSpaceImplementation v) )
+        => AbstractVectorSpace v where
+  type VectorSpaceImplementation v :: Kind.Type
+  scalarsSameInAbstraction
+    :: ( ( Scalar (VectorSpaceImplementation v) ~ Scalar v
+         , Scalar (DualVector v) ~ Scalar v
+         , Scalar (DualVector (VectorSpaceImplementation v)) ~ Scalar v )
+         => ρ ) -> ρ
+  abstractTensorProductsCoercion
+    :: TensorSpace w => Coercion (TensorProduct v w)
+                                 (TensorProduct (VectorSpaceImplementation v) w)
+
+abstractTensorsCoercion :: ∀ a c w
+  . ( AbstractVectorSpace a, LinearSpace c
+    , c ~ VectorSpaceImplementation a, TensorSpace w )
+      => Coercion (AbstractDualVector a c⊗w) (DualVector c⊗w)
+abstractTensorsCoercion = Coercion
+
+abstractLinmapCoercion :: ∀ a c w
+  . ( AbstractVectorSpace a, LinearSpace c
+    , c ~ VectorSpaceImplementation a, TensorSpace w )
+      => Coercion (AbstractDualVector a c+>w) (DualVector c+>w)
+abstractLinmapCoercion = case ( dualSpaceWitness @c
+                              , abstractTensorProductsCoercion @a @w ) of
+   (DualSpaceWitness, Coercion) -> Coercion
+
+coerceLinearMapCodomain :: ∀ v w x . ( LinearSpace v, Coercible w x )
+         => (v+>w) -> (v+>x)
+coerceLinearMapCodomain = case dualSpaceWitness @v of
+ DualSpaceWitness -> \(LinearMap m)
+     -> LinearMap $ (coerceFmapTensorProduct ([]::[DualVector v])
+                            (Coercion :: Coercion w x) $ m)
+
+instance (Show (DualVector c)) => Show (AbstractDualVector a c) where
+  showsPrec p (AbstractDualVector_ φ) = showParen (p>10)
+       $ ("AbstractDualVector "++) . showsPrec 11 φ
+
+instance ∀ a c . ( AbstractVectorSpace a, VectorSpaceImplementation a ~ c
+                 , AdditiveGroup (DualVector c) )
+     => AdditiveGroup (AbstractDualVector a c) where
+  zeroV = AbstractDualVector zeroV
+  (^+^) = coerce ((^+^) @(DualVector c))
+  negateV = coerce (negateV @(DualVector c))
+
+instance ∀ a c . (AbstractVectorSpace a, VectorSpaceImplementation a ~ c
+                 , AdditiveGroup (DualVector c))
+     => AffineSpace (AbstractDualVector a c) where
+  type Diff (AbstractDualVector a c) = AbstractDualVector a c
+  (.+^) = coerce ((^+^) @(DualVector c))
+  (.-.) = coerce ((^-^) @(DualVector c))
+
+instance ∀ a c . ( AbstractVectorSpace a, VectorSpaceImplementation a ~ c
+                 , AdditiveGroup (DualVector c) )
+     => Semimanifold (AbstractDualVector a c) where
+  type Needle (AbstractDualVector a c) = AbstractDualVector a c
+  (.+~^) = (^+^)
+
+instance ∀ a c . ( AbstractVectorSpace a, VectorSpaceImplementation a ~ c
+                 , AdditiveGroup (DualVector c) )
+     => PseudoAffine (AbstractDualVector a c) where
+  v.-~.w = pure (v^-^w)
+  (.-~!) = (^-^)
+
+instance ∀ a c . ( AbstractVectorSpace a, VectorSpaceImplementation a ~ c
+                 , VectorSpace (DualVector c) )
+     => VectorSpace (AbstractDualVector a c) where
+  type Scalar (AbstractDualVector a c) = Scalar a
+  (*^) = scalarsSameInAbstraction @a (coerce ((*^) @(DualVector c)))
+
+instance ∀ a c . ( AbstractVectorSpace a, VectorSpaceImplementation a ~ c
+                 , TensorSpace (DualVector c) )
+     => TensorSpace (AbstractDualVector a c) where
+  type TensorProduct (AbstractDualVector a c) w
+          = TensorProduct (DualVector c) w
+  scalarSpaceWitness = scalarsSameInAbstraction @a
+     (case scalarSpaceWitness @(DualVector c) of ScalarSpaceWitness -> ScalarSpaceWitness)
+  linearManifoldWitness = scalarsSameInAbstraction @a
+     (case linearManifoldWitness @(DualVector c) of
+       LinearManifoldWitness -> LinearManifoldWitness)
+  zeroTensor = zt
+   where zt :: ∀ w . (TensorSpace w, Scalar w ~ Scalar a)
+            => (AbstractDualVector a c ⊗ w)
+         zt = scalarsSameInAbstraction @a
+                (coerce (zeroTensor @(DualVector c) @w))
+  addTensors = at
+   where at :: ∀ w . (TensorSpace w, Scalar w ~ Scalar a)
+            => (AbstractDualVector a c ⊗ w) -> (AbstractDualVector a c ⊗ w)
+                                            -> (AbstractDualVector a c ⊗ w)
+         at = scalarsSameInAbstraction @a
+                (coerce (addTensors @(DualVector c) @w))
+  subtractTensors = st
+   where st :: ∀ w . (TensorSpace w, Scalar w ~ Scalar a)
+            => (AbstractDualVector a c ⊗ w) -> (AbstractDualVector a c ⊗ w)
+                                            -> (AbstractDualVector a c ⊗ w)
+         st = scalarsSameInAbstraction @a
+                (coerce (subtractTensors @(DualVector c) @w))
+  negateTensor = nt
+   where nt :: ∀ w . (TensorSpace w, Scalar w ~ Scalar a)
+            => (AbstractDualVector a c ⊗ w) -+> (AbstractDualVector a c ⊗ w)
+         nt = scalarsSameInAbstraction @a
+                (coerce (negateTensor @(DualVector c) @w))
+  scaleTensor = st
+   where st :: ∀ w . (TensorSpace w, Scalar w ~ Scalar a)
+            => Bilinear (Scalar a) (AbstractDualVector a c ⊗ w)
+                                   (AbstractDualVector a c ⊗ w)
+         st = scalarsSameInAbstraction @a
+                (coerce (scaleTensor @(DualVector c) @w))
+  toFlatTensor = scalarsSameInAbstraction @a
+                    ( coerce (toFlatTensor @(DualVector c)) )
+  fromFlatTensor = scalarsSameInAbstraction @a
+                    ( coerce (fromFlatTensor @(DualVector c)) )
+  tensorProduct = tp
+   where tp :: ∀ w . (TensorSpace w, Scalar w ~ Scalar a)
+            => Bilinear (AbstractDualVector a c) w
+                                   (AbstractDualVector a c ⊗ w)
+         tp = scalarsSameInAbstraction @a
+                (coerce (tensorProduct @(DualVector c) @w))
+  wellDefinedVector (AbstractDualVector v) = AbstractDualVector <$> wellDefinedVector v
+  wellDefinedTensor = wdt
+   where wdt :: ∀ w . (TensorSpace w, Scalar w ~ Scalar a)
+            => (AbstractDualVector a c ⊗ w) -> Maybe (AbstractDualVector a c ⊗ w)
+         wdt = scalarsSameInAbstraction @a
+                (coerce (wellDefinedTensor @(DualVector c) @w))
+  transposeTensor = LinearFunction tt
+   where tt :: ∀ w . (TensorSpace w, Scalar w ~ Scalar a)
+            => (AbstractDualVector a c ⊗ w) -> (w ⊗ AbstractDualVector a c) 
+         tt t = Tensor $ coerceFmapTensorProduct ([] :: [w])
+                (Coercion @(DualVector c) @(AbstractDualVector a c))
+               $ getTensorProduct ( scalarsSameInAbstraction @a
+                   (transposeTensor $ coerce t)
+                           :: w ⊗ (DualVector c) )
+  fmapTensor = ft
+   where ft :: ∀ w x . ( TensorSpace w, Scalar w ~ Scalar a
+                       , TensorSpace x, Scalar x ~ Scalar a )
+           => Bilinear (w-+>x) (AbstractDualVector a c ⊗ w) (AbstractDualVector a c ⊗ x) 
+         ft = scalarsSameInAbstraction @a
+                 (coerce $ fmapTensor @(DualVector c) @w @x)
+  fzipTensorWith = ft
+   where ft :: ∀ u w x . ( TensorSpace w, Scalar w ~ Scalar a
+                         , TensorSpace u, Scalar u ~ Scalar a
+                         , TensorSpace x, Scalar x ~ Scalar a )
+           => Bilinear ((w,x)-+>u)
+                       (AbstractDualVector a c ⊗ w, AbstractDualVector a c ⊗ x)
+                       (AbstractDualVector a c ⊗ u) 
+         ft = scalarsSameInAbstraction @a
+                 (coerce $ fzipTensorWith @(DualVector c) @u @w @x)
+  coerceFmapTensorProduct _ = coerceFmapTensorProduct ([]::[DualVector c])
+
+witnessAbstractDualVectorTensorSpacyness
+  :: ∀ a c r . ( AbstractVectorSpace a, VectorSpaceImplementation a ~ c
+               , LinearSpace a, LinearSpace c
+               , TensorSpace (DualVector c), Num (Scalar a) )
+    => (( TensorSpace (AbstractDualVector a c)
+        , LinearSpace (DualVector c)
+        , Scalar (DualVector c) ~ Scalar a )
+            => r) -> r
+witnessAbstractDualVectorTensorSpacyness φ = case dualSpaceWitness @c of
+   DualSpaceWitness -> scalarsSameInAbstraction @a φ
+
+instance ∀ a c . ( AbstractVectorSpace a, VectorSpaceImplementation a ~ c
+                 , LinearSpace a, LinearSpace c
+                 , TensorSpace (DualVector c), Num (Scalar a) )
+     => LinearSpace (AbstractDualVector a c) where
+  type DualVector (AbstractDualVector a c) = a
+  dualSpaceWitness = case (dualSpaceWitness @c, scalarSpaceWitness @c) of
+    (DualSpaceWitness, ScalarSpaceWitness)
+        -> scalarsSameInAbstraction @a DualSpaceWitness
+  linearId = witnessAbstractDualVectorTensorSpacyness @a @c
+       (sym (abstractLinmapCoercion @a)
+           $ sampleLinearFunction @(DualVector c)
+           -+$> linearFunction AbstractDualVector)
+  tensorId = tid
+   where tid :: ∀ w . (LinearSpace w, Scalar w ~ Scalar a)
+            => (AbstractDualVector a c ⊗ w) +> (AbstractDualVector a c ⊗ w) 
+         tid = case ( dualSpaceWitness @w, dualSpaceWitness @c ) of
+          (DualSpaceWitness, DualSpaceWitness)
+            -> witnessAbstractDualVectorTensorSpacyness @a (
+                let LinearMap ida = linearId :: (DualVector c ⊗ w) +> (DualVector c ⊗ w)
+                in LinearMap $ 
+                    sym (abstractTensorProductsCoercion @a
+                          @(DualVector w ⊗ (AbstractDualVector a c⊗w)) )
+                    . coerceFmapTensorProduct ([]::[c ⊗ DualVector w])
+                       (Coercion @(DualVector c ⊗ w) @(AbstractDualVector a c ⊗ w))
+                    $ ida )
+  applyDualVector = scalarsSameInAbstraction @a ( bilinearFunction
+     $ \v (AbstractDualVector d) -> (applyDualVector -+$> d)-+$>(coerce v::c) )
+  applyLinear = witnessAbstractDualVectorTensorSpacyness @a ( LinearFunction
+     $ \f -> (applyLinear -+$> abstractLinmapCoercion $ f) . LinearFunction coerce
+      )
+  applyTensorFunctional = atf
+   where atf :: ∀ u . ( LinearSpace u, Scalar u ~ Scalar a )
+                  => Bilinear (DualVector (AbstractDualVector a c⊗u))
+                                       (AbstractDualVector a c⊗u) (Scalar a)
+         atf = case (scalarSpaceWitness @a, dualSpaceWitness @u) of
+          (ScalarSpaceWitness, DualSpaceWitness)
+            -> witnessAbstractDualVectorTensorSpacyness @a (
+                LinearFunction $ \f
+                 -> (applyTensorFunctional @(DualVector c)
+                         -+$> abstractLinmapCoercion @a $ f)
+                      . LinearFunction (abstractTensorsCoercion @a $)
+              )
+  applyTensorLinMap = atlm
+   where atlm :: ∀ u w . ( LinearSpace u, Scalar u ~ Scalar a
+                         , TensorSpace w, Scalar w ~ Scalar a )
+                  => Bilinear ((AbstractDualVector a c⊗u)+>w)
+                                       (AbstractDualVector a c⊗u) w
+         atlm = case (dualSpaceWitness @c, dualSpaceWitness @u) of
+          (DualSpaceWitness, DualSpaceWitness)
+                      -> witnessAbstractDualVectorTensorSpacyness @a (
+             LinearFunction $ \(LinearMap f) ->
+                     let f' = LinearMap (abstractTensorProductsCoercion
+                                           @a @((Tensor (Scalar a) (DualVector u) w))
+                                          $ coerce f) :: (DualVector c⊗u)+>w
+                     in (applyTensorLinMap @(DualVector c)-+$>f')
+                              . LinearFunction (abstractTensorsCoercion @a $)
+           )
+  useTupleLinearSpaceComponents = \_ -> usingNonTupleTypeAsTupleError
+
+pattern AbstractDualVector
+    :: AbstractVectorSpace v => DualVector (VectorSpaceImplementation v) -> DualVector v
+pattern AbstractDualVector φ = AbstractDualVector_ φ
 
