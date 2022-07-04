@@ -831,6 +831,11 @@ copyNewtypeInstances cxtv classes = do
              -> return c''
           _ -> error $ show aName ++ " is not a newtype."
    return (pure cxt', (pure a', pure c'))
+ 
+ let allClasses
+      | ''LinearSpace `elem` classes
+                   = ''AbstractVectorSpace : classes
+      | otherwise  = classes
 
  sequence [case dClass of
      "AdditiveGroup" -> InstanceD Nothing <$> cxt <*>
@@ -846,7 +851,116 @@ copyNewtypeInstances cxtv classes = do
          $(varP '(.-.)) = coerce ((.-.) @($c))
          $(varP '(.+^)) = coerce ((.+^) @($c))
       |]
+     "VectorSpace" -> InstanceD Nothing <$> cxt <*>
+                          [t|VectorSpace $a|] <*> [d|
+         type instance Scalar $a = Scalar ($c)
+         $(varP '(*^)) = coerce ((*^) @($c))
+      |]
+     "AbstractVectorSpace" -> InstanceD Nothing <$> cxt <*>
+                          [t|AbstractVectorSpace $a|] <*> [d|
+         type instance VectorSpaceImplementation $a = $c
+         $(varP 'scalarsSameInAbstraction) = \φ -> φ
+         $(varP 'abstractTensorProductsCoercion) = Coercion
+      |]
+     "Semimanifold" -> InstanceD Nothing <$> cxt <*>
+                          [t|Semimanifold $a|] <*> [d|
+         type instance Needle $a = $a
+         $(varP '(.+~^)) = coerce ((^+^) @($c))
+      |]
+     "PseudoAffine" -> InstanceD Nothing <$> cxt <*>
+                          [t|PseudoAffine $a|] <*> [d|
+         $(varP '(.-~.)) = coerce ((.-~.) @($c))
+         $(varP '(.-~!)) = coerce ((.-.) @($c))
+      |]
+     "TensorSpace" -> InstanceD Nothing <$> cxt <*>
+                          [t|TensorSpace $a|] <*> [d|
+         type instance TensorProduct $a w = TensorProduct $c w
+         $(varP 'scalarSpaceWitness) = case scalarSpaceWitness @($c) of
+           ScalarSpaceWitness -> ScalarSpaceWitness
+         $(varP 'linearManifoldWitness) = case linearManifoldWitness @($c) of
+           LinearManifoldWitness -> LinearManifoldWitness
+         $(varP 'toFlatTensor) = coerce (toFlatTensor @($c))
+         $(varP 'fromFlatTensor) = coerce (fromFlatTensor @($c))
+         $(varP 'zeroTensor) = zt
+          where zt :: ∀ w . (TensorSpace w, Scalar w ~ Scalar $c) => ($a ⊗ w)
+                zt = coerce (zeroTensor @($c) @w)
+         $(varP 'addTensors) = at
+          where at :: ∀ w . (TensorSpace w, Scalar w ~ Scalar $c)
+                   => ($a ⊗ w) -> ($a ⊗ w) -> ($a ⊗ w)
+                at = coerce (addTensors @($c) @w)
+         $(varP 'subtractTensors) = st
+          where st :: ∀ w . (TensorSpace w, Scalar w ~ Scalar $c)
+                   => ($a ⊗ w) -> ($a ⊗ w) -> ($a ⊗ w)
+                st = coerce (subtractTensors @($c) @w)
+         $(varP 'scaleTensor) = st
+          where st :: ∀ w . (TensorSpace w, Scalar w ~ Scalar $c)
+                   => Bilinear (Scalar $c) ($a ⊗ w) ($a ⊗ w)
+                st = coerce (scaleTensor @($c) @w)
+         $(varP 'negateTensor) = nt
+          where nt :: ∀ w . (TensorSpace w, Scalar w ~ Scalar $c)
+                   => ($a ⊗ w) -+> ($a ⊗ w)
+                nt = coerce (negateTensor @($c) @w)
+         $(varP 'wellDefinedVector) = coerce (wellDefinedVector @($c))
+         $(varP 'wellDefinedTensor) = wdt
+          where wdt :: ∀ w . (TensorSpace w, Scalar w ~ Scalar $c)
+                   => ($a ⊗ w) -> Maybe ($a ⊗ w)
+                wdt = coerce (wellDefinedTensor @($c) @w)
+         $(varP 'tensorProduct) = tp
+          where tp :: ∀ w . (TensorSpace w, Scalar w ~ Scalar $c)
+                   => Bilinear $a w ($a ⊗ w)
+                tp = coerce (tensorProduct @($c) @w)
+         $(varP 'transposeTensor) = tt
+          where tt :: ∀ w . (TensorSpace w, Scalar w ~ Scalar $c)
+                   => ($a ⊗ w) -+> (w ⊗ $a)
+                tt = case coerceFmapTensorProduct @w [] (Coercion @($c) @($a)) of
+                      Coercion -> coerce (transposeTensor @($c) @w)
+         $(varP 'fmapTensor) = ft
+          where ft :: ∀ v w . ( TensorSpace v, Scalar v ~ Scalar $c
+                              , TensorSpace w, Scalar w ~ Scalar $c )
+                   => Bilinear (v -+> w) ($a ⊗ v) ($a ⊗ w)
+                ft = coerce (fmapTensor @($c) @v @w)
+         $(varP 'fzipTensorWith) = fzt
+          where fzt :: ∀ v w x . ( TensorSpace v, Scalar v ~ Scalar $c
+                                 , TensorSpace w, Scalar w ~ Scalar $c
+                                 , TensorSpace x, Scalar x ~ Scalar $c )
+                   => Bilinear ((w, x) -+> v) ($a ⊗ w, $a ⊗ x) ($a ⊗ v)
+                fzt = coerce (fzipTensorWith @($c) @v @w @x)
+         $(varP 'coerceFmapTensorProduct) = \_ crc
+                     -> case coerceFmapTensorProduct @($c) [] crc of
+            Coercion -> Coercion
+      |]
+     "LinearSpace" -> InstanceD Nothing <$> cxt <*>
+                          [t|LinearSpace $a|] <*> [d|
+         type instance DualVector $a = AbstractDualVector $a $c
+         $(varP 'dualSpaceWitness) = DualSpaceWitness
+         $(varP 'linearId) = coerce (linearId @($c))
+         $(varP 'tensorId) = tid
+          where tid :: ∀ w . (LinearSpace w, Scalar w ~ Scalar $c)
+                   => ($a ⊗ w) +> ($a ⊗ w) 
+                tid = case dualSpaceWitness @w of
+                 DualSpaceWitness -> case coerceFmapTensorProduct @(DualVector w) []
+                                             $ Coercion @($c⊗w) @($a⊗w) of
+                   Coercion -> coerce (tensorId @($c) @w)
+         $(varP 'applyDualVector)
+             = LinearFunction $ \(AbstractDualVector d) -- for some reason simply coercing
+                      -> coerce (applyDualVector @($c)) -- that function does not work.
+                       -+$> d
+         $(varP 'applyLinear) = al
+          where al :: ∀ w . (TensorSpace w, Scalar w ~ Scalar $c)
+                   => Bilinear ($a +> w) $a w
+                al = coerce (applyLinear @($c) @w)
+         $(varP 'applyTensorFunctional) = atf
+          where atf :: ∀ u . ( LinearSpace u, Scalar u ~ Scalar $c )
+                         => Bilinear (DualVector ($a⊗u)) ($a⊗u) (Scalar $c)
+                atf = coerce (applyTensorFunctional @($c) @u)
+         $(varP 'applyTensorLinMap) = atlm
+          where atlm :: ∀ u w . ( LinearSpace u, Scalar u ~ Scalar $c
+                                , TensorSpace w, Scalar w ~ Scalar $c )
+                         => Bilinear (($a⊗u)+>w) ($a⊗u) w
+                atlm = coerce (applyTensorLinMap @($c) @u @w)
+         $(varP 'useTupleLinearSpaceComponents) = \_ -> usingNonTupleTypeAsTupleError
+      |]
      _ -> error $ "Unsupported class to derive newtype instance for: ‘"++dClass++"’"
-   | Name (OccName dClass) _ <- classes
+   | Name (OccName dClass) _ <- allClasses
    ]
 

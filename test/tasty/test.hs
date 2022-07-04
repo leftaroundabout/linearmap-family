@@ -39,7 +39,10 @@ import qualified Test.QuickCheck as QC
 newtype ℝ⁴ = ℝ⁴ { getℝ⁴ :: V4 ℝ }
  deriving (Eq, Show)
 
-copyNewtypeInstances [t| ℝ⁴ |] [''AdditiveGroup, ''AffineSpace]
+copyNewtypeInstances [t| ℝ⁴ |]
+   [ ''AdditiveGroup, ''AffineSpace, ''VectorSpace
+   , ''Semimanifold, ''PseudoAffine
+   , ''TensorSpace, ''LinearSpace ]
 
 newtype ℝ⁵ a = ℝ⁵ { getℝ⁵ :: [ℝ] }
  deriving (Eq, Show)
