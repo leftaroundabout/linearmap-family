@@ -25,6 +25,7 @@
 {-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE CPP                        #-}
 {-# LANGUAGE TupleSections              #-}
+{-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE PatternSynonyms            #-}
 
 module Math.LinearMap.Category.Instances.Deriving
@@ -63,7 +64,10 @@ import Math.LinearMap.Asserted
 import Math.VectorSpace.ZeroDimensional
 import Data.VectorSpace.Free
 
+import GHC.Generics (Generic)
+
 import Language.Haskell.TH
+import qualified Language.Haskell.TH.Datatype as D
 
 -- | Given a type @V@ that is already a 'VectorSpace' and 'HasBasis', generate
 --   the other class instances that are needed to use the type with this
@@ -706,14 +710,13 @@ instance ∀ a c . ( AbstractVectorSpace a, VectorSpaceImplementation a ~ c
             => (AbstractDualVector a c ⊗ w) -> Maybe (AbstractDualVector a c ⊗ w)
          wdt = scalarsSameInAbstraction @a
                 (coerce (wellDefinedTensor @(DualVector c) @w))
-  transposeTensor = LinearFunction tt
-   where tt :: ∀ w . (TensorSpace w, Scalar w ~ Scalar a)
-            => (AbstractDualVector a c ⊗ w) -> (w ⊗ AbstractDualVector a c) 
-         tt t = Tensor $ coerceFmapTensorProduct ([] :: [w])
-                (Coercion @(DualVector c) @(AbstractDualVector a c))
-               $ getTensorProduct ( scalarsSameInAbstraction @a
-                   (transposeTensor $ coerce t)
-                           :: w ⊗ (DualVector c) )
+  transposeTensor = scalarsSameInAbstraction @a tt
+   where tt :: ∀ w . ( TensorSpace w, Scalar w ~ Scalar a
+                     , Scalar (DualVector c) ~ Scalar a )
+            => (AbstractDualVector a c ⊗ w) -+> (w ⊗ AbstractDualVector a c)
+         tt = case coerceFmapTensorProduct @w []
+                       (Coercion @(DualVector c) @(AbstractDualVector a c)) of
+             Coercion -> coerce (transposeTensor @(DualVector c) @w)
   fmapTensor = ft
    where ft :: ∀ w x . ( TensorSpace w, Scalar w ~ Scalar a
                        , TensorSpace x, Scalar x ~ Scalar a )
@@ -804,4 +807,29 @@ instance ∀ a c . ( AbstractVectorSpace a, VectorSpaceImplementation a ~ c
 pattern AbstractDualVector
     :: AbstractVectorSpace v => DualVector (VectorSpaceImplementation v) -> DualVector v
 pattern AbstractDualVector φ = AbstractDualVector_ φ
+
+
+newtypeInstanceAdditiveGroup :: Q (Cxt, Type) -> DecsQ
+newtypeInstanceAdditiveGroup cxtv = do
+ (cxt,(a,c)) <- do
+   (cxt', a') <- cxtv
+   c' <- case a' of
+      ConT aName -> do
+         D.reifyDatatype aName >>= \case
+          D.DatatypeInfo{ D.datatypeVariant = D.Newtype
+                        , D.datatypeCons = [
+                           D.ConstructorInfo
+                              { D.constructorFields = [c''] } ]
+                        }
+             -> return c''
+   return (pure cxt', (pure a', pure c'))
+
+ sequence
+   [ InstanceD Nothing <$> cxt <*> [t|AdditiveGroup $a|] <*> [d|
+         $(varP 'zeroV) = coerce (zeroV @($c))
+         $(varP '(^+^)) = coerce ((^+^) @($c))
+         $(varP '(^-^)) = coerce ((^-^) @($c))
+         $(varP 'negateV) = coerce (negateV @($c))
+      |]
+   ]
 
