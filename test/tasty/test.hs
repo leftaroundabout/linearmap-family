@@ -36,6 +36,10 @@ import Test.Tasty.QuickCheck
 import qualified Test.QuickCheck as QC
 
 
+newtype ℝ⁴ = ℝ⁴ { getℝ⁴ :: V4 ℝ }
+ deriving (Eq, Show)
+
+copyNewtypeInstances [t| ℝ⁴ |] [''AdditiveGroup, ''AffineSpace]
 
 newtype ℝ⁵ a = ℝ⁵ { getℝ⁵ :: [ℝ] }
  deriving (Eq, Show)
@@ -113,6 +117,10 @@ main = do
      $ \v -> (riesz-+$>coRiesz-+$>v) === (v :: ℝ⁵ Int)
     , testProperty "Riesz representation, non-orthonormal basis"
      $ \v -> (riesz-+$>coRiesz-+$>v) ≈≈≈ (v :: H¹ℝ⁵)
+    ]
+   , testGroup "Newtype-derived space"
+    [ testProperty "Addition"
+     $ \v w -> ℝ⁴ v^+^ℝ⁴ w === ℝ⁴ (v^+^w)
     ]
    ]
 

@@ -30,11 +30,13 @@
 
 module Math.LinearMap.Category.Instances.Deriving
    ( makeLinearSpaceFromBasis, makeFiniteDimensionalFromBasis
+   , copyNewtypeInstances
    -- * The instantiated classes
    , AffineSpace(..), Semimanifold(..), PseudoAffine(..)
    , TensorSpace(..), LinearSpace(..), FiniteDimensional(..), SemiInner(..)
    -- * Internals
-   , BasisGeneratedSpace(..), LinearSpaceFromBasisDerivationConfig, def ) where
+   , BasisGeneratedSpace(..), LinearSpaceFromBasisDerivationConfig, def
+   ) where
 
 import Math.LinearMap.Category.Class
 import Math.VectorSpace.Docile
@@ -67,6 +69,7 @@ import Data.VectorSpace.Free
 import GHC.Generics (Generic)
 
 import Language.Haskell.TH
+import Language.Haskell.TH.Syntax (Name(..), OccName(..))
 import qualified Language.Haskell.TH.Datatype as D
 
 -- | Given a type @V@ that is already a 'VectorSpace' and 'HasBasis', generate
@@ -809,10 +812,14 @@ pattern AbstractDualVector
 pattern AbstractDualVector φ = AbstractDualVector_ φ
 
 
-newtypeInstanceAdditiveGroup :: Q (Cxt, Type) -> DecsQ
-newtypeInstanceAdditiveGroup cxtv = do
+-- | More powerful version of @deriving newtype@, specialised to the classes from
+--   this package (and of @manifolds-core@). The 'DualVector' space will be a separate
+--   type, even if the type you abstract over is self-dual.
+copyNewtypeInstances :: Q Type -> [Name] -> DecsQ
+copyNewtypeInstances cxtv classes = do
+
  (cxt,(a,c)) <- do
-   (cxt', a') <- cxtv
+   (cxt', a') <- deQuantifyType cxtv
    c' <- case a' of
       ConT aName -> do
          D.reifyDatatype aName >>= \case
@@ -822,14 +829,24 @@ newtypeInstanceAdditiveGroup cxtv = do
                               { D.constructorFields = [c''] } ]
                         }
              -> return c''
+          _ -> error $ show aName ++ " is not a newtype."
    return (pure cxt', (pure a', pure c'))
 
- sequence
-   [ InstanceD Nothing <$> cxt <*> [t|AdditiveGroup $a|] <*> [d|
+ sequence [case dClass of
+     "AdditiveGroup" -> InstanceD Nothing <$> cxt <*>
+                          [t|AdditiveGroup $a|] <*> [d|
          $(varP 'zeroV) = coerce (zeroV @($c))
          $(varP '(^+^)) = coerce ((^+^) @($c))
          $(varP '(^-^)) = coerce ((^-^) @($c))
          $(varP 'negateV) = coerce (negateV @($c))
       |]
+     "AffineSpace" -> InstanceD Nothing <$> cxt <*>
+                          [t|AffineSpace $a|] <*> [d|
+         type instance Diff $a = $a
+         $(varP '(.-.)) = coerce ((.-.) @($c))
+         $(varP '(.+^)) = coerce ((.+^) @($c))
+      |]
+     _ -> error $ "Unsupported class to derive newtype instance for: ‘"++dClass++"’"
+   | Name (OccName dClass) _ <- classes
    ]
 
