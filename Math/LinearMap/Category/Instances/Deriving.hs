@@ -30,7 +30,7 @@
 
 module Math.LinearMap.Category.Instances.Deriving
    ( makeLinearSpaceFromBasis, makeFiniteDimensionalFromBasis
-   , copyNewtypeInstances
+   , copyNewtypeInstances, pattern AbstractDualVector
    -- * The instantiated classes
    , AffineSpace(..), Semimanifold(..), PseudoAffine(..)
    , TensorSpace(..), LinearSpace(..), FiniteDimensional(..), SemiInner(..)
@@ -39,12 +39,14 @@ module Math.LinearMap.Category.Instances.Deriving
    ) where
 
 import Math.LinearMap.Category.Class
+import Math.LinearMap.Category.Instances
 import Math.VectorSpace.Docile
 
 import Data.VectorSpace
 import Data.AffineSpace
 import Data.Basis
 import qualified Data.Map as Map
+import Data.Tree (Forest)
 import Data.MemoTrie
 import Data.Hashable
 
@@ -602,6 +604,11 @@ class ( Coercible v (VectorSpaceImplementation v)
     :: TensorSpace w => Coercion (TensorProduct v w)
                                  (TensorProduct (VectorSpaceImplementation v) w)
 
+abstractDualVectorCoercion :: ∀ a
+   . Coercion (AbstractDualVector a (VectorSpaceImplementation a))
+              (DualVector (VectorSpaceImplementation a))
+abstractDualVectorCoercion = Coercion
+
 abstractTensorsCoercion :: ∀ a c w
   . ( AbstractVectorSpace a, LinearSpace c
     , c ~ VectorSpaceImplementation a, TensorSpace w )
@@ -837,6 +844,8 @@ copyNewtypeInstances cxtv classes = do
                    = ''AbstractVectorSpace : classes
       | otherwise  = classes
 
+ vtnameHash <- abs . hash . show <$> a
+
  sequence [case dClass of
      "AdditiveGroup" -> InstanceD Nothing <$> cxt <*>
                           [t|AdditiveGroup $a|] <*> [d|
@@ -855,6 +864,10 @@ copyNewtypeInstances cxtv classes = do
                           [t|VectorSpace $a|] <*> [d|
          type instance Scalar $a = Scalar ($c)
          $(varP '(*^)) = coerce ((*^) @($c))
+      |]
+     "InnerSpace" -> InstanceD Nothing <$> cxt <*>
+                          [t|InnerSpace $a|] <*> [d|
+         $(varP '(<.>)) = coerce ((<.>) @($c))
       |]
      "AbstractVectorSpace" -> InstanceD Nothing <$> cxt <*>
                           [t|AbstractVectorSpace $a|] <*> [d|
@@ -941,10 +954,8 @@ copyNewtypeInstances cxtv classes = do
                  DualSpaceWitness -> case coerceFmapTensorProduct @(DualVector w) []
                                              $ Coercion @($c⊗w) @($a⊗w) of
                    Coercion -> coerce (tensorId @($c) @w)
-         $(varP 'applyDualVector)
-             = LinearFunction $ \(AbstractDualVector d) -- for some reason simply coercing
-                      -> coerce (applyDualVector @($c)) -- that function does not work.
-                       -+$> d
+         $(varP 'applyDualVector) = case abstractDualVectorCoercion @($a) of
+            Coercion -> coerce (applyDualVector @($c))
          $(varP 'applyLinear) = al
           where al :: ∀ w . (TensorSpace w, Scalar w ~ Scalar $c)
                    => Bilinear ($a +> w) $a w
@@ -960,6 +971,91 @@ copyNewtypeInstances cxtv classes = do
                 atlm = coerce (applyTensorLinMap @($c) @u @w)
          $(varP 'useTupleLinearSpaceComponents) = \_ -> usingNonTupleTypeAsTupleError
       |]
+     "FiniteDimensional" -> InstanceD Nothing <$> cxt <*>
+                          [t|FiniteDimensional $a|] <*> do
+        subBasisCstr <- newName $ "SubBasis"++show vtnameHash
+        
+        tySyns <- sequence [
+#if MIN_VERSION_template_haskell(2,15,0)
+           NewtypeInstD [] Nothing
+              <$> (AppT (ConT ''SubBasis) <$> a)
+              <*> pure Nothing
+              <*> (NormalC subBasisCstr . pure .
+                          (Bang NoSourceUnpackedness NoSourceStrictness,)
+                     <$> [t| SubBasis $c |])
+              <*> pure []
+#else
+           NewtypeInstD [] ''SubBasis
+              <$> ((:[]) <$> a)
+              <*> pure Nothing
+              <*> (NormalC subBasisCstr . pure . 
+                          (Bang NoSourceUnpackedness NoSourceStrictness,)
+                     <$> [t| SubBasis $c |])
+              <*> pure []
+#endif
+         ]
+        methods <- [d|
+         $(varP 'dualFinitenessWitness) = DualFinitenessWitness DualSpaceWitness
+         $(varP 'entireBasis) = coerce (entireBasis @($c))
+         $(varP 'enumerateSubBasis) = coerce (enumerateSubBasis @($c))
+         $(varP 'decomposeLinMap) = dclm
+          where dclm :: ∀ w . (LSpace w, Scalar w ~ Scalar $c)
+                   => ($a +> w) -> (SubBasis $a, DList w)
+                dclm = coerce (decomposeLinMap @($c) @w)
+         $(varP 'decomposeLinMapWithin) = dclm
+          where dclm :: ∀ w . (LSpace w, Scalar w ~ Scalar $c)
+                   => SubBasis $a -> ($a +> w) -> Either (SubBasis $a, DList w) (DList w)
+                dclm = coerce (decomposeLinMapWithin @($c) @w)
+         $(varP 'recomposeSB) = coerce (recomposeSB @($c))
+         $(varP 'recomposeSBTensor) = rst
+          where rst :: ∀ w . (FiniteDimensional w, Scalar w ~ Scalar $c)
+                  => SubBasis $a -> SubBasis w -> [Scalar $c] -> ($a ⊗ w, [Scalar $a])
+                rst = coerce (recomposeSBTensor @($c) @w)
+         $(varP 'recomposeLinMap) = rlm
+          where rlm :: ∀ w . (LSpace w, Scalar w ~ Scalar $c)
+                  => SubBasis $a -> [w] -> ($a +> w, [w])
+                rlm = coerce (recomposeLinMap @($c) @w)
+         $(varP 'recomposeContraLinMap) = rclm
+          where rclm :: ∀ f w . (LinearSpace w, Scalar w ~ Scalar $c, Hask.Functor f)
+                  => (f (Scalar w) -> w) -> f (DualVector $a) -> $a +> w
+                rclm f = (coerce $ recomposeContraLinMap @($c) @w @f) f
+                          . fmap getConcreteDualVector
+         $(varP 'recomposeContraLinMapTensor) = rclmt
+          where rclmt :: ∀ f w u . ( LinearSpace w, Scalar w ~ Scalar $c
+                                   , FiniteDimensional u, Scalar u ~ Scalar $c
+                                   , Hask.Functor f )
+                  => (f (Scalar w) -> w) -> f ($a+>DualVector u) -> ($a⊗u) +> w
+                rclmt f = (coerce $ recomposeContraLinMapTensor @($c) @u @w @f) f
+                            . fmap (coerce :: ($a+>DualVector u) -> ($c+>DualVector u))
+         $(varP 'uncanonicallyFromDual) = case abstractDualVectorCoercion @($a) of
+            Coercion -> coerce (uncanonicallyFromDual @($c))
+         $(varP 'uncanonicallyToDual) = case abstractDualVectorCoercion @($a) of
+            Coercion -> coerce (uncanonicallyToDual @($c))
+         $(varP 'tensorEquality) = te
+          where te :: ∀ w . (TensorSpace w, Eq w, Scalar w ~ Scalar $c)
+                       => ($a ⊗ w) -> ($a ⊗ w) -> Bool
+                te = coerce (tensorEquality @($c) @w)
+          |]
+        return $ tySyns ++ methods
+     "SemiInner" -> InstanceD Nothing <$> cxt <*>
+                          [t|SemiInner $a|] <*> [d|
+          $(varP 'dualBasisCandidates) = case abstractDualVectorCoercion @($a) of
+            Coercion -> coerce (dualBasisCandidates @($c))
+          $(varP 'tensorDualBasisCandidates) = tdbc
+           where tdbc :: ∀ w . (SemiInner w, Scalar w ~ Scalar $c)
+                    => [(Int, $a ⊗ w)]
+                     -> Forest (Int, $a +> DualVector w)
+                 tdbc = case (dualSpaceWitness @($a), dualSpaceWitness @w) of
+                   (DualSpaceWitness, DualSpaceWitness)
+                       -> case ( abstractDualVectorCoercion @($a)
+                               , abstractTensorProductsCoercion @($a) @(DualVector w)
+                               ) of
+                     (Coercion, Coercion)
+                         -> coerce (tensorDualBasisCandidates @($c) @w)
+          $(varP 'symTensorDualBasisCandidates)
+               = case abstractDualVectorCoercion @($a) of
+                  Coercion -> coerce (symTensorDualBasisCandidates @($c))
+       |]
      _ -> error $ "Unsupported class to derive newtype instance for: ‘"++dClass++"’"
    | Name (OccName dClass) _ <- allClasses
    ]

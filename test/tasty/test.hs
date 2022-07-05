@@ -42,7 +42,24 @@ newtype ℝ⁴ = ℝ⁴ { getℝ⁴ :: V4 ℝ }
 copyNewtypeInstances [t| ℝ⁴ |]
    [ ''AdditiveGroup, ''AffineSpace, ''VectorSpace
    , ''Semimanifold, ''PseudoAffine
-   , ''TensorSpace, ''LinearSpace ]
+   , ''TensorSpace, ''LinearSpace
+   , ''FiniteDimensional, ''SemiInner, ''InnerSpace ]
+
+newtype H¹ℝ⁴ = H¹ℝ⁴ { getH¹ℝ⁴ :: V4 ℝ }
+ deriving (Eq, Show)
+
+copyNewtypeInstances [t| H¹ℝ⁴ |]
+   [ ''AdditiveGroup, ''AffineSpace, ''VectorSpace
+   , ''Semimanifold, ''PseudoAffine
+   , ''TensorSpace, ''LinearSpace
+   , ''FiniteDimensional, ''SemiInner ]
+
+derivative₄ :: H¹ℝ⁴ -> ℝ⁴
+derivative₄ (H¹ℝ⁴ (V4 w x y z)) = ℝ⁴ (V4 z w x y) ^-^ ℝ⁴ (V4 x y z w)
+
+instance InnerSpace H¹ℝ⁴ where
+  H¹ℝ⁴ v <.> H¹ℝ⁴ w = v<.>w + derivative₄ (H¹ℝ⁴ v)<.>derivative₄ (H¹ℝ⁴ w)
+
 
 newtype ℝ⁵ a = ℝ⁵ { getℝ⁵ :: [ℝ] }
  deriving (Eq, Show)
@@ -93,11 +110,11 @@ newtype H¹ℝ⁵ = H¹ℝ⁵ { getH¹ℝ⁵ :: ℝ⁵ Int }
 
 makeFiniteDimensionalFromBasis [t| H¹ℝ⁵ |]
 
-derivative :: H¹ℝ⁵ -> ℝ⁵ Int
-derivative (H¹ℝ⁵ (ℝ⁵ (x₀:xs))) = ℝ⁵ (x₀:xs) ^-^ ℝ⁵ (xs++[x₀])
+derivative₅ :: H¹ℝ⁵ -> ℝ⁵ Int
+derivative₅ (H¹ℝ⁵ (ℝ⁵ (x₀:xs))) = ℝ⁵ (x₀:xs) ^-^ ℝ⁵ (xs++[x₀])
 
 instance InnerSpace H¹ℝ⁵ where
-  H¹ℝ⁵ v <.> H¹ℝ⁵ w = v<.>w + derivative (H¹ℝ⁵ v)<.>derivative (H¹ℝ⁵ w)
+  H¹ℝ⁵ v <.> H¹ℝ⁵ w = v<.>w + derivative₅ (H¹ℝ⁵ v)<.>derivative₅ (H¹ℝ⁵ w)
 
 instance Arbitrary (V4 ℝ) where
   arbitrary = V4<$>arbitrary<*>arbitrary<*>arbitrary<*>arbitrary
@@ -124,6 +141,15 @@ main = do
    , testGroup "Newtype-derived space"
     [ testProperty "Addition"
      $ \v w -> ℝ⁴ v^+^ℝ⁴ w === ℝ⁴ (v^+^w)
+    , testProperty "Riesz representation, orthonormal basis"
+     $ \v -> (riesz-+$>coRiesz-+$>ℝ⁴ v) === ℝ⁴ v
+    , testProperty "Riesz is trivial in orthonormal basis"
+     $ \v -> (riesz-+$>AbstractDualVector v) ≈≈≈ ℝ⁴ v
+    , testProperty "Riesz representation, non-orthonormal basis"
+     $ \v -> (riesz-+$>coRiesz-+$>H¹ℝ⁴ v) ≈≈≈ H¹ℝ⁴ v
+    , testProperty "Riesz nontriviality in general case"
+     . QC.expectFailure
+     $ \v -> (riesz-+$>AbstractDualVector v) ≈≈≈ H¹ℝ⁴ v
     ]
    ]
 
