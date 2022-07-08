@@ -949,8 +949,8 @@ copyNewtypeInstances cxtv classes = do
 
  (cxt,(a,c)) <- do
    (cxt', a') <- deQuantifyType cxtv
-   c' <- case a' of
-      ConT aName -> do
+   let unravelApps (AppT tc _) = unravelApps tc
+       unravelApps (ConT aName) = do
          D.reifyDatatype aName >>= \case
           D.DatatypeInfo{ D.datatypeVariant = D.Newtype
                         , D.datatypeCons = [
@@ -959,6 +959,9 @@ copyNewtypeInstances cxtv classes = do
                         }
              -> return c''
           _ -> error $ show aName ++ " is not a newtype."
+       unravelApps a'' = error $ "Don't know how to handle type "++show a''
+                            ++" (specified: "++show a'++")"
+   c' <- unravelApps a'
    return (pure cxt', (pure a', pure c'))
  
  let allClasses
