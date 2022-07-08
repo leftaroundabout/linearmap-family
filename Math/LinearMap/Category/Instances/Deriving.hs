@@ -653,6 +653,13 @@ instance ∀ a c . ( AbstractVectorSpace a, VectorSpaceImplementation a ~ c
      => Semimanifold (AbstractDualVector a c) where
   type Needle (AbstractDualVector a c) = AbstractDualVector a c
   (.+~^) = (^+^)
+#if !MIN_VERSION_manifolds_core(0,6,0)
+  type instance Interior (AbstractDualVector a c) = AbstractDualVector a c
+  toInterior = pure
+  fromInterior = id
+  translateP = Tagged (^+^)
+  semimanifoldWitness = SemimanifoldWitness BoundarylessWitness
+#endif
 
 instance ∀ a c . ( AbstractVectorSpace a, VectorSpaceImplementation a ~ c
                  , AdditiveGroup (DualVector c) )
@@ -675,7 +682,13 @@ instance ∀ a c . ( AbstractVectorSpace a, VectorSpaceImplementation a ~ c
      (case scalarSpaceWitness @(DualVector c) of ScalarSpaceWitness -> ScalarSpaceWitness)
   linearManifoldWitness = scalarsSameInAbstraction @a
      (case linearManifoldWitness @(DualVector c) of
-       LinearManifoldWitness -> LinearManifoldWitness)
+#if MIN_VERSION_manifolds_core(0,6,0)
+       LinearManifoldWitness -> LinearManifoldWitness
+#else
+       LinearManifoldWitness BoundarylessWitness
+          -> LinearManifoldWitness BoundarylessWitness
+#endif
+         )
   zeroTensor = zt
    where zt :: ∀ w . (TensorSpace w, Scalar w ~ Scalar a)
             => (AbstractDualVector a c ⊗ w)
@@ -988,6 +1001,13 @@ copyNewtypeInstances cxtv classes = do
                           [t|Semimanifold $a|] <*> [d|
          type instance Needle $a = $a
          $(varP '(.+~^)) = coerce ((^+^) @($c))
+#if !MIN_VERSION_manifolds_core(0,6,0)
+         type instance Interior $a = $a
+         $(varP 'toInterior) = pure
+         $(varP 'fromInterior) = id
+         $(varP 'translateP) = Tagged (^+^)
+         $(varP 'semimanifoldWitness) = SemimanifoldWitness BoundarylessWitness
+#endif
       |]
      "PseudoAffine" -> InstanceD Nothing <$> cxt <*>
                           [t|PseudoAffine $a|] <*> [d|
@@ -1000,7 +1020,12 @@ copyNewtypeInstances cxtv classes = do
          $(varP 'scalarSpaceWitness) = case scalarSpaceWitness @($c) of
            ScalarSpaceWitness -> ScalarSpaceWitness
          $(varP 'linearManifoldWitness) = case linearManifoldWitness @($c) of
+#if MIN_VERSION_manifolds_core(0,6,0)
            LinearManifoldWitness -> LinearManifoldWitness
+#else
+           LinearManifoldWitness BoundarylessWitness
+                -> LinearManifoldWitness BoundarylessWitness
+#endif
          $(varP 'toFlatTensor) = coerce (toFlatTensor @($c))
          $(varP 'fromFlatTensor) = coerce (fromFlatTensor @($c))
          $(varP 'zeroTensor) = zt
