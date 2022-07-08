@@ -814,6 +814,115 @@ instance ∀ a c . ( AbstractVectorSpace a, VectorSpaceImplementation a ~ c
            )
   useTupleLinearSpaceComponents = \_ -> usingNonTupleTypeAsTupleError
 
+instance ∀ a c . ( AbstractVectorSpace a, VectorSpaceImplementation a ~ c
+                 , FiniteDimensional a, FiniteDimensional c
+                 , TensorSpace (DualVector c), Eq (DualVector c), Num (Scalar a) )
+     => FiniteDimensional (AbstractDualVector a c) where
+  newtype SubBasis (AbstractDualVector a c) = AbstractDualVectorSubBasis {
+                        getAbstractDualVectorSubBasis :: SubBasis (DualVector c) }
+  dualFinitenessWitness = scalarsSameInAbstraction @a
+       ( case (scalarSpaceWitness @a, dualSpaceWitness @a) of
+        (ScalarSpaceWitness, DualSpaceWitness)
+            -> DualFinitenessWitness DualSpaceWitness )
+  entireBasis = case dualFinitenessWitness @c of
+    DualFinitenessWitness _ -> coerce (entireBasis @(DualVector c))
+  enumerateSubBasis = case dualFinitenessWitness @c of
+    DualFinitenessWitness _ 
+          -> coerce (enumerateSubBasis @(DualVector c))
+  decomposeLinMap = scalarsSameInAbstraction @a dclm
+   where dclm :: ∀ w . (LSpace w, Scalar w ~ Scalar c)
+            => (AbstractDualVector a c +> w)
+                  -> (SubBasis (AbstractDualVector a c), DList w)
+         dclm = case (dualFinitenessWitness @c, abstractTensorProductsCoercion @a @w) of
+          (DualFinitenessWitness DualSpaceWitness, Coercion)
+              -> coerce (decomposeLinMap @(DualVector c) @w)
+  decomposeLinMapWithin = scalarsSameInAbstraction @a dclm
+   where dclm :: ∀ w . (LSpace w, Scalar w ~ Scalar c)
+            => SubBasis (AbstractDualVector a c) -> (AbstractDualVector a c +> w)
+                   -> Either (SubBasis (AbstractDualVector a c), DList w) (DList w)
+         dclm = case (dualFinitenessWitness @c, abstractTensorProductsCoercion @a @w) of
+          (DualFinitenessWitness DualSpaceWitness, Coercion)
+              -> coerce (decomposeLinMapWithin @(DualVector c) @w)
+  recomposeSB = case dualFinitenessWitness @c of
+          DualFinitenessWitness DualSpaceWitness -> scalarsSameInAbstraction @a
+                                (coerce $ recomposeSB @(DualVector c))
+  recomposeSBTensor = scalarsSameInAbstraction @a rst
+   where rst :: ∀ w . (FiniteDimensional w, Scalar w ~ Scalar c)
+           => SubBasis (AbstractDualVector a c) -> SubBasis w -> [Scalar c]
+                  -> (AbstractDualVector a c ⊗ w, [Scalar c])
+         rst = case dualFinitenessWitness @c of
+          DualFinitenessWitness DualSpaceWitness
+                  -> coerce (recomposeSBTensor @(DualVector c) @w)
+  recomposeLinMap = scalarsSameInAbstraction @a rlm
+   where rlm :: ∀ w . (LSpace w, Scalar w ~ Scalar c)
+           => SubBasis (AbstractDualVector a c)
+                 -> [w] -> (AbstractDualVector a c +> w, [w])
+         rlm = case (dualFinitenessWitness @c, abstractTensorProductsCoercion @a @w) of
+          (DualFinitenessWitness DualSpaceWitness, Coercion)
+              -> coerce (recomposeLinMap @(DualVector c) @w)
+  recomposeContraLinMap = scalarsSameInAbstraction @a rclm
+   where rclm :: ∀ f w . (LinearSpace w, Scalar w ~ Scalar c, Hask.Functor f)
+           => (f (Scalar w) -> w) -> f a -> AbstractDualVector a c +> w
+         rclm = case (dualFinitenessWitness @c, abstractTensorProductsCoercion @a @w) of
+          (DualFinitenessWitness DualSpaceWitness, Coercion) -> \f ->
+             (coerce $ recomposeContraLinMap @(DualVector c) @w @f) f
+               . fmap (coerce :: a -> c)
+  recomposeContraLinMapTensor = scalarsSameInAbstraction @a rclmt
+   where rclmt :: ∀ f w u . ( LinearSpace w, Scalar w ~ Scalar c
+                            , FiniteDimensional u, Scalar u ~ Scalar c
+                            , Hask.Functor f )
+           => (f (Scalar w) -> w) -> f (AbstractDualVector a c+>DualVector u)
+                   -> (AbstractDualVector a c⊗u) +> w
+         rclmt = scalarsSameInAbstraction @a (case dualSpaceWitness @u of
+           DualSpaceWitness ->
+                 case ( dualFinitenessWitness @c
+                      , abstractTensorProductsCoercion @a @(DualVector u)
+                      , abstractTensorProductsCoercion @a
+                          @(Tensor (Scalar a) (DualVector u) w) ) of
+            (DualFinitenessWitness DualSpaceWitness, Coercion, Coercion) -> \f ->
+              (coerce $ recomposeContraLinMapTensor @(DualVector c) @u @w @f) f
+                . fmap (coerce :: (AbstractDualVector a c+>DualVector u)
+                                    -> (DualVector c+>DualVector u))
+          )
+  uncanonicallyFromDual = case dualFinitenessWitness @c of
+    DualFinitenessWitness DualSpaceWitness
+        -> coerce (uncanonicallyFromDual @(DualVector c))
+  uncanonicallyToDual = case dualFinitenessWitness @c of
+    DualFinitenessWitness DualSpaceWitness
+        -> coerce (uncanonicallyToDual @(DualVector c))
+  tensorEquality = te
+   where te :: ∀ w . (TensorSpace w, Eq w, Scalar w ~ Scalar a)
+                => (AbstractDualVector a c ⊗ w) -> (AbstractDualVector a c ⊗ w) -> Bool
+         te = case dualFinitenessWitness @c of
+           DualFinitenessWitness _ -> scalarsSameInAbstraction @a
+                (coerce (tensorEquality @(DualVector c) @w))
+
+instance ∀ a c . ( AbstractVectorSpace a, VectorSpaceImplementation a ~ c
+                 , SemiInner a, LinearSpace c, SemiInner (DualVector c)
+                 , TensorSpace (DualVector c), Eq (DualVector c), Num (Scalar a) )
+     => SemiInner (AbstractDualVector a c) where
+  dualBasisCandidates = case dualSpaceWitness @c of
+    DualSpaceWitness -> coerce (dualBasisCandidates @(DualVector c))
+  tensorDualBasisCandidates = scalarsSameInAbstraction @a tdbc
+   where tdbc :: ∀ w . (SemiInner w, Scalar w ~ Scalar c)
+            => [(Int, AbstractDualVector a c ⊗ w)]
+             -> Forest (Int, AbstractDualVector a c +> DualVector w)
+         tdbc = case (dualSpaceWitness @c, dualSpaceWitness @w) of
+           (DualSpaceWitness, DualSpaceWitness)
+               -> case abstractTensorProductsCoercion @a @(DualVector w) of
+             Coercion -> coerce (tensorDualBasisCandidates @(DualVector c) @w)
+  symTensorDualBasisCandidates = scalarsSameInAbstraction @a
+          ( case ( coerceFmapTensorProduct @c [] (Coercion @a @c)
+                          . abstractTensorProductsCoercion @a @a
+                 , coerceFmapTensorProduct @(DualVector c) []
+                      (Coercion @(AbstractDualVector a c) @(DualVector c))
+                 , dualSpaceWitness @c ) of
+             (Coercion, Coercion, DualSpaceWitness)
+               -> coerce (symTensorDualBasisCandidates @(DualVector c))
+          )
+
+ 
+
 pattern AbstractDualVector
     :: AbstractVectorSpace v => DualVector (VectorSpaceImplementation v) -> DualVector v
 pattern AbstractDualVector φ = AbstractDualVector_ φ
