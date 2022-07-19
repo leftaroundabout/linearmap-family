@@ -664,7 +664,7 @@ recomposeMultiple bw n dc
 deriving instance Show (SubBasis ℝ)
   
 instance ∀ u v . ( FiniteDimensional u, FiniteDimensional v
-                 , Scalar u ~ Scalar v, Scalar (DualVector u) ~ Scalar (DualVector v) )
+                 , Scalar u ~ Scalar v )
             => FiniteDimensional (u,v) where
   data SubBasis (u,v) = TupleBasis !(SubBasis u) !(SubBasis v)
   entireBasis = TupleBasis entireBasis entireBasis
@@ -929,31 +929,6 @@ instance ∀ s v .
                      -> LinearMap s (LinearMap s (DualVector v) v) w
          rcCLM (DualFinitenessWitness DualSpaceWitness) f
             = recomposeContraLinMap f
-  recomposeContraLinMapTensor = rcCLMT'
-   where rcCLMT' :: ∀ f u w . (Hask.Functor f, LinearSpace w, s~Scalar w
-                                            , FiniteDimensional u, s~Scalar u)
-                    => (f s->w) -> f (SymmetricTensor s v +> DualVector u)
-                                  -> (SymmetricTensor s v ⊗ u) +> w
-         rcCLMT' f tenss
-           = LinearMap . arr (fmap rassocTensor . rassocTensor . asTensor)
-                 . rcCLMT (dualFinitenessWitness, dualFinitenessWitness) f
-                      $ fmap getLinearMap tenss
-          where rcCLMT :: (DualFinitenessWitness v, DualFinitenessWitness u)
-                 -> (f s->w) -> f (Tensor s (DualVector v)
-                                            (Tensor s (DualVector v) (DualVector u)))
-                  -- -> LinearMap s (Tensor s (SymmetricTensor s v) u) w
-                  --  ∼ TensorProduct (LinearMap s (SymmetricTensor s v) (DualVector u)) w
-                  --  ⩵ TensorProduct (SymmetricTensor s (DualVector v)) (DualVector u ⊗ w)
-                  --  ⩵ Tensor s (DualVector v) (DualVector v ⊗ (DualVector u ⊗ w))
-                     -> LinearMap s (LinearMap s (DualVector v)
-                                                 (LinearMap s (DualVector v) u)) w
-                  --  ∼ Tensor s (Tensor s (DualVector v)
-                  --                       (DualVector v ⊗ DualVector u)) w
-                  --  ∼ Tensor s (DualVector v)
-                  --             (Tensor s (DualVector v ⊗ DualVector u) w)
-                rcCLMT ( DualFinitenessWitness DualSpaceWitness
-                       , DualFinitenessWitness DualSpaceWitness ) f
-                             = recomposeContraLinMap f
   uncanonicallyFromDual = case dualFinitenessWitness :: DualFinitenessWitness v of
      DualFinitenessWitness DualSpaceWitness -> LinearFunction
           $ \(SymTensor t) -> SymTensor $ arr fromLinearMap . uncanonicallyFromDual $ t

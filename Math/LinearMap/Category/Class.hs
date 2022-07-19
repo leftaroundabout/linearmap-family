@@ -365,8 +365,7 @@ type v ⊗ w = Tensor (Scalar v) v w
 --   'LinearSpace', but makes the condition explicit that the scalar and dual vectors
 --   also form a linear space. 'LinearSpace' only stores that constraint in
 --   'dualSpaceWitness' (to avoid UndecidableSuperclasses).
-type LSpace v = ( LinearSpace v, LinearSpace (Scalar v), LinearSpace (DualVector v)
-                , Num' (Scalar v) )
+type LSpace v = ( LinearSpace v, Num' (Scalar v) )
 
 instance (LinearSpace v, TensorSpace w, Scalar v~s, Scalar w~s)
                => AdditiveGroup (LinearMap s v w) where

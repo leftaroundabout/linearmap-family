@@ -19,6 +19,7 @@
 {-# LANGUAGE ScopedTypeVariables  #-}
 {-# LANGUAGE UnicodeSyntax        #-}
 {-# LANGUAGE TupleSections        #-}
+{-# LANGUAGE TypeApplications     #-}
 {-# LANGUAGE ConstraintKinds      #-}
 {-# LANGUAGE ExplicitNamespaces   #-}
 
@@ -315,11 +316,13 @@ newtype Norm v = Norm {
 type Seminorm v = Norm v
 
 -- | @(m<>n|$|v)^2 ⩵ (m|$|v)^2 + (n|$|v)^2@
-instance LSpace v => Semigroup (Norm v) where
-  Norm m <> Norm n = Norm $ m^+^n
+instance ∀ v . LSpace v => Semigroup (Norm v) where
+  Norm m <> Norm n = case dualSpaceWitness @v of
+    DualSpaceWitness -> Norm $ m^+^n
 -- | @mempty|$|v ≡ 0@
-instance LSpace v => Monoid (Seminorm v) where
-  mempty = Norm zeroV
+instance ∀ v . LSpace v => Monoid (Seminorm v) where
+  mempty = case dualSpaceWitness @v of
+    DualSpaceWitness -> Norm zeroV
   mappend = (<>)
 
 -- | A multidimensional variance of points @v@ with some distribution can be
