@@ -45,19 +45,20 @@ copyNewtypeInstances [t| ℝ⁴ |]
    , ''TensorSpace, ''LinearSpace
    , ''FiniteDimensional, ''SemiInner, ''InnerSpace ]
 
-newtype H¹ℝ⁴ = H¹ℝ⁴ { getH¹ℝ⁴ :: V4 ℝ }
+newtype H¹ℝ⁴ a = H¹ℝ⁴ { getH¹ℝ⁴ :: ((a,a),(a,a)) }
  deriving (Eq, Show)
 
-copyNewtypeInstances [t| H¹ℝ⁴ |]
+copyNewtypeInstances [t| ∀ a
+          . (RealFloat' a, FiniteDimensional a, SemiInner a) => H¹ℝ⁴ a |]
    [ ''AdditiveGroup, ''AffineSpace, ''VectorSpace
    , ''Semimanifold, ''PseudoAffine
    , ''TensorSpace, ''LinearSpace
    , ''FiniteDimensional, ''SemiInner ]
 
-derivative₄ :: H¹ℝ⁴ -> ℝ⁴
-derivative₄ (H¹ℝ⁴ (V4 w x y z)) = ℝ⁴ (V4 z w x y) ^-^ ℝ⁴ (V4 x y z w)
+derivative₄ :: H¹ℝ⁴ ℝ -> ℝ⁴
+derivative₄ (H¹ℝ⁴ ((w,x),(y,z))) = ℝ⁴ (V4 z w x y) ^-^ ℝ⁴ (V4 x y z w)
 
-instance InnerSpace H¹ℝ⁴ where
+instance InnerSpace (H¹ℝ⁴ ℝ) where
   H¹ℝ⁴ v <.> H¹ℝ⁴ w = v<.>w + derivative₄ (H¹ℝ⁴ v)<.>derivative₄ (H¹ℝ⁴ w)
 
 
@@ -146,10 +147,10 @@ main = do
     , testProperty "Riesz is trivial in orthonormal basis"
      $ \v -> (riesz-+$>AbstractDualVector v) ≈≈≈ ℝ⁴ v
     , testProperty "Riesz representation, non-orthonormal basis"
-     $ \v -> (riesz-+$>coRiesz-+$>H¹ℝ⁴ v) ≈≈≈ H¹ℝ⁴ v
+     $ \v -> (riesz-+$>coRiesz-+$>H¹ℝ⁴ v) ≈≈≈ (H¹ℝ⁴ v :: H¹ℝ⁴ Double)
     , testProperty "Riesz nontriviality in general case"
      . QC.expectFailure
-     $ \v -> (riesz-+$>AbstractDualVector v) ≈≈≈ H¹ℝ⁴ v
+     $ \v -> (riesz-+$>AbstractDualVector v) ≈≈≈ (H¹ℝ⁴ v :: H¹ℝ⁴ Double)
     ]
    ]
 
