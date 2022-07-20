@@ -606,17 +606,24 @@ newtype AbstractDualVector a c
            = AbstractDualVector_ { getConcreteDualVector :: DualVector c }
 deriving newtype instance (Eq (DualVector c)) => Eq (AbstractDualVector a c)
 
-class ( Coercible v (VectorSpaceImplementation v) )
-        => AbstractVectorSpace v where
+class ( Coercible v (VectorSpaceImplementation v)
+      , AdditiveGroup (VectorSpaceImplementation v) )
+        => AbstractAdditiveGroup v where
   type VectorSpaceImplementation v :: Kind.Type
+
+class (AbstractAdditiveGroup v, VectorSpace (VectorSpaceImplementation v))
+        => AbstractVectorSpace v where
   scalarsSameInAbstraction
     :: ( Scalar (VectorSpaceImplementation v) ~ Scalar v
          => ρ ) -> ρ
+
+class (AbstractVectorSpace v, TensorSpace (VectorSpaceImplementation v))
+        => AbstractTensorSpace v where
   abstractTensorProductsCoercion
     :: Coercion (TensorProduct v w)
                 (TensorProduct (VectorSpaceImplementation v) w)
 
-class ( AbstractVectorSpace v, LinearSpace (VectorSpaceImplementation v)
+class ( AbstractTensorSpace v, LinearSpace (VectorSpaceImplementation v)
       , DualVector v
           ~ AbstractDualVector v (VectorSpaceImplementation v) )
     => AbstractLinearSpace v
@@ -642,7 +649,7 @@ abstractTensorsCoercion :: ∀ a c w
 abstractTensorsCoercion = Coercion
 
 abstractLinmapCoercion :: ∀ a c w
-  . ( AbstractVectorSpace a, LinearSpace c
+  . ( AbstractLinearSpace a, LinearSpace c
     , c ~ VectorSpaceImplementation a, TensorSpace w )
       => Coercion (AbstractDualVector a c+>w) (DualVector c+>w)
 abstractLinmapCoercion = case ( dualSpaceWitness @c
@@ -969,27 +976,27 @@ pattern AbstractDualVector φ = AbstractDualVector_ φ
 
 
 abstractVS_zeroV :: ∀ v .
-    (AbstractVectorSpace v, AdditiveGroup (VectorSpaceImplementation v))
+    (AbstractAdditiveGroup v)
        => v
 abstractVS_zeroV = coerce (zeroV @(VectorSpaceImplementation v))
 
 abstractVS_addvs :: ∀ v .
-    (AbstractVectorSpace v, AdditiveGroup (VectorSpaceImplementation v))
+    (AbstractAdditiveGroup v)
        => v -> v -> v
 abstractVS_addvs = coerce ((^+^) @(VectorSpaceImplementation v))
 
 abstractVS_subvs :: ∀ v .
-    (AbstractVectorSpace v, AdditiveGroup (VectorSpaceImplementation v))
+    (AbstractAdditiveGroup v)
        => v -> v -> v
 abstractVS_subvs = coerce ((^-^) @(VectorSpaceImplementation v))
 
 abstractVS_negateV :: ∀ v .
-    (AbstractVectorSpace v, AdditiveGroup (VectorSpaceImplementation v))
+    (AbstractAdditiveGroup v)
        => v -> v
 abstractVS_negateV = coerce (negateV @(VectorSpaceImplementation v))
 
 abstractVS_scalev :: ∀ v .
-    (AbstractVectorSpace v, VectorSpace (VectorSpaceImplementation v))
+    (AbstractVectorSpace v)
        => Scalar v -> v -> v
 abstractVS_scalev = scalarsSameInAbstraction @v
   ( coerce ((*^) @(VectorSpaceImplementation v)) )
@@ -1010,15 +1017,15 @@ abstractVS_scalarsSameInAbstraction φ
    = φ
 
 abstractVS_scalarSpaceWitness :: ∀ v .
-    (AbstractVectorSpace v, TensorSpace (VectorSpaceImplementation v))
+    (AbstractTensorSpace v)
        => ScalarSpaceWitness v
 abstractVS_scalarSpaceWitness
    = case scalarSpaceWitness @(VectorSpaceImplementation v) of
       ScalarSpaceWitness -> scalarsSameInAbstraction @v ScalarSpaceWitness 
 
 abstractVS_linearManifoldWitness :: ∀ v .
-    ( AbstractVectorSpace v, AffineSpace v, Needle v ~ v, Diff v ~ v
-    , TensorSpace (VectorSpaceImplementation v) )
+    ( AbstractTensorSpace v, AffineSpace v, Needle v ~ v, Diff v ~ v
+    )
        => LinearManifoldWitness v
 abstractVS_linearManifoldWitness
    = case linearManifoldWitness @(VectorSpaceImplementation v) of
@@ -1030,8 +1037,7 @@ abstractVS_linearManifoldWitness
 #endif
 
 abstractVS_toFlatTensor :: ∀ v .
-    ( AbstractVectorSpace v
-    , TensorSpace (VectorSpaceImplementation v)
+    ( AbstractTensorSpace v
     , Coercible (TensorProduct v (Scalar v))
                 (TensorProduct (VectorSpaceImplementation v)
                                (Scalar (VectorSpaceImplementation v))) )
@@ -1039,8 +1045,7 @@ abstractVS_toFlatTensor :: ∀ v .
 abstractVS_toFlatTensor = coerce (toFlatTensor @(VectorSpaceImplementation v))
 
 abstractVS_fromFlatTensor :: ∀ v .
-    ( AbstractVectorSpace v
-    , TensorSpace (VectorSpaceImplementation v)
+    ( AbstractTensorSpace v
     , Coercible (TensorProduct v (Scalar v))
                 (TensorProduct (VectorSpaceImplementation v)
                                (Scalar (VectorSpaceImplementation v))) )
@@ -1048,8 +1053,7 @@ abstractVS_fromFlatTensor :: ∀ v .
 abstractVS_fromFlatTensor = coerce (fromFlatTensor @(VectorSpaceImplementation v))
 
 abstractVS_zeroTensor :: ∀ v w
-       . ( AbstractVectorSpace v
-         , TensorSpace (VectorSpaceImplementation v)
+       . ( AbstractTensorSpace v
          , TensorSpace w, Scalar w ~ Scalar v
          , Coercible (TensorProduct v w)
                      (TensorProduct (VectorSpaceImplementation v) w) )
@@ -1058,8 +1062,7 @@ abstractVS_zeroTensor = scalarsSameInAbstraction @v
   (coerce (zeroTensor @(VectorSpaceImplementation v) @w))
 
 abstractVS_addTensors :: ∀ v w
-       . ( AbstractVectorSpace v
-         , TensorSpace (VectorSpaceImplementation v)
+       . ( AbstractTensorSpace v
          , TensorSpace w, Scalar w ~ Scalar v
          , Coercible (TensorProduct v w)
                      (TensorProduct (VectorSpaceImplementation v) w) )
@@ -1068,8 +1071,7 @@ abstractVS_addTensors = scalarsSameInAbstraction @v
   (coerce (addTensors @(VectorSpaceImplementation v) @w))
 
 abstractVS_subtractTensors :: ∀ v w
-       . ( AbstractVectorSpace v
-         , TensorSpace (VectorSpaceImplementation v)
+       . ( AbstractTensorSpace v
          , TensorSpace w, Scalar w ~ Scalar v
          , Coercible (TensorProduct v w)
                      (TensorProduct (VectorSpaceImplementation v) w) )
@@ -1078,8 +1080,7 @@ abstractVS_subtractTensors = scalarsSameInAbstraction @v
   (coerce (subtractTensors @(VectorSpaceImplementation v) @w))
 
 abstractVS_scaleTensor :: ∀ v w
-       . ( AbstractVectorSpace v
-         , TensorSpace (VectorSpaceImplementation v)
+       . ( AbstractTensorSpace v
          , TensorSpace w, Scalar w ~ Scalar v
          , Coercible (TensorProduct v w)
                      (TensorProduct (VectorSpaceImplementation v) w) )
@@ -1088,8 +1089,7 @@ abstractVS_scaleTensor = scalarsSameInAbstraction @v
   (coerce (scaleTensor @(VectorSpaceImplementation v) @w))
 
 abstractVS_negateTensor :: ∀ v w
-       . ( AbstractVectorSpace v
-         , TensorSpace (VectorSpaceImplementation v)
+       . ( AbstractTensorSpace v
          , TensorSpace w, Scalar w ~ Scalar v
          , Coercible (TensorProduct v w)
                      (TensorProduct (VectorSpaceImplementation v) w) )
@@ -1098,14 +1098,12 @@ abstractVS_negateTensor = scalarsSameInAbstraction @v
   (coerce (negateTensor @(VectorSpaceImplementation v) @w))
 
 abstractVS_wellDefinedVector :: ∀ v
-         . ( AbstractVectorSpace v
-           , TensorSpace (VectorSpaceImplementation v)
+         . ( AbstractTensorSpace v
            ) => v -> Maybe v
 abstractVS_wellDefinedVector = coerce (wellDefinedVector @(VectorSpaceImplementation v))
 
 abstractVS_wellDefinedTensor :: ∀ v w
-         . ( AbstractVectorSpace v
-           , TensorSpace (VectorSpaceImplementation v)
+         . ( AbstractTensorSpace v
            , TensorSpace w, Scalar w ~ Scalar v
            ) => (v ⊗ w) -> Maybe (v ⊗ w)
 abstractVS_wellDefinedTensor
@@ -1113,16 +1111,14 @@ abstractVS_wellDefinedTensor
         (case abstractTensorProductsCoercion @v @w of
            Coercion -> coerce (wellDefinedTensor @(VectorSpaceImplementation v) @w))
 
-abstractVS_tensorProduct :: ∀ v w . ( AbstractVectorSpace v
-           , TensorSpace (VectorSpaceImplementation v)
+abstractVS_tensorProduct :: ∀ v w . ( AbstractTensorSpace v
            , TensorSpace w, Scalar w ~ Scalar v
            ) => Bilinear v w (v ⊗ w)
 abstractVS_tensorProduct = scalarsSameInAbstraction @v
     ( case ( abstractTensorProductsCoercion @v @w ) of
        Coercion -> coerce (tensorProduct @(VectorSpaceImplementation v) @w) )
 
-abstractVS_transposeTensor :: ∀ v w . ( AbstractVectorSpace v
-           , TensorSpace (VectorSpaceImplementation v)
+abstractVS_transposeTensor :: ∀ v w . ( AbstractTensorSpace v
            , TensorSpace w, Scalar w ~ Scalar v
            ) => (v ⊗ w) -+> (w ⊗ v)
 abstractVS_transposeTensor
@@ -1134,8 +1130,7 @@ abstractVS_transposeTensor
       (coerce (transposeTensor @(VectorSpaceImplementation v) @w))
   )
 
-abstractVS_fmapTensor :: ∀ v u w . ( AbstractVectorSpace v
-           , TensorSpace (VectorSpaceImplementation v)
+abstractVS_fmapTensor :: ∀ v u w . ( AbstractTensorSpace v
            , TensorSpace u, Scalar u ~ Scalar v
            , TensorSpace w, Scalar w ~ Scalar v )
                    => Bilinear (u -+> w) (v ⊗ u) (v ⊗ w)
@@ -1146,8 +1141,7 @@ abstractVS_fmapTensor
            (Coercion, Coercion)
               -> coerce (fmapTensor @(VectorSpaceImplementation v) @u @w) )
 
-abstractVS_fzipTensorsWith :: ∀ v u w x . ( AbstractVectorSpace v
-           , TensorSpace (VectorSpaceImplementation v)
+abstractVS_fzipTensorsWith :: ∀ v u w x . ( AbstractTensorSpace v
            , TensorSpace u, Scalar u ~ Scalar v
            , TensorSpace w, Scalar w ~ Scalar v
            , TensorSpace x, Scalar x ~ Scalar v )
@@ -1161,8 +1155,7 @@ abstractVS_fzipTensorsWith = scalarsSameInAbstraction @v
         )
 
 abstractVS_coerceFmapTensorProduct :: ∀ v u w p .
-         ( AbstractVectorSpace v
-         , TensorSpace (VectorSpaceImplementation v)
+         ( AbstractTensorSpace v
          ) => p v -> Coercion u w -> Coercion (TensorProduct v u) (TensorProduct v w)
 abstractVS_coerceFmapTensorProduct _ crc
       = case ( abstractTensorProductsCoercion @v @u
@@ -1489,16 +1482,20 @@ copyNewtypeInstances cxtv classes = do
    c' <- extractImplementationType a' []
    return (tvbs', pure cxt', (pure a', pure c'))
  
- let allClasses
-      | ''LinearSpace `elem` classes
-                   = ''AbstractVectorSpace : ''AbstractLinearSpace : classes
-      | ''AdditiveGroup `elem` classes
-                   = ''AbstractVectorSpace : classes
-      | otherwise  = classes
+ let allClasses =
+       [ ''AbstractAdditiveGroup | _<-[()], ''AdditiveGroup `elem` classes ]
+      ++ [ ''AbstractVectorSpace | _<-[()], ''VectorSpace `elem` classes ]
+      ++ [ ''AbstractTensorSpace | _<-[()], ''TensorSpace `elem` classes ]
+      ++ [ ''AbstractLinearSpace | _<-[()], ''LinearSpace `elem` classes ]
+      ++ classes
 
  vtnameHash <- abs . hash . show <$> a
 
  sequence [case dClass of
+     "AbstractAdditiveGroup" -> InstanceD Nothing <$> cxt <*>
+                          [t|AbstractAdditiveGroup $a|] <*> [d|
+         type instance VectorSpaceImplementation $a = $c
+      |]
      "AdditiveGroup" -> InstanceD Nothing <$> cxt <*>
                           [t|AdditiveGroup $a|] <*> [d|
          $(varP 'zeroV) = abstractVS_zeroV
@@ -1517,16 +1514,14 @@ copyNewtypeInstances cxtv classes = do
          type instance Scalar $a = Scalar ($c)
          $(varP '(*^)) = abstractVS_scalev
       |]
+     "AbstractVectorSpace" -> InstanceD Nothing <$> cxt <*>
+                          [t|AbstractVectorSpace $a|] <*> [d|
+         $(varP 'scalarsSameInAbstraction)
+            = abstractVS_scalarsSameInAbstraction @($a)
+      |]
      "InnerSpace" -> InstanceD Nothing <$> cxt <*>
                           [t|InnerSpace $a|] <*> [d|
          $(varP '(<.>)) = abstractVS_innerProd
-      |]
-     "AbstractVectorSpace" -> InstanceD Nothing <$> cxt <*>
-                          [t|AbstractVectorSpace $a|] <*> [d|
-         type instance VectorSpaceImplementation $a = $c
-         $(varP 'scalarsSameInAbstraction)
-            = abstractVS_scalarsSameInAbstraction @($a)
-         $(varP 'abstractTensorProductsCoercion) = Coercion
       |]
      "Semimanifold" -> InstanceD Nothing <$> cxt <*>
                           [t|Semimanifold $a|] <*> [d|
@@ -1565,8 +1560,10 @@ copyNewtypeInstances cxtv classes = do
          $(varP 'fzipTensorWith) = abstractVS_fzipTensorsWith
          $(varP 'coerceFmapTensorProduct) = abstractVS_coerceFmapTensorProduct
       |]
-     "AbstractLinearSpace" -> InstanceD Nothing <$> cxt <*>
-                          [t|AbstractLinearSpace $a|] <*> [d|
+     "AbstractTensorSpace" -> InstanceD Nothing <$> cxt <*>
+                          [t|AbstractTensorSpace $a|] <*> [d|
+         $(varP 'abstractTensorProductsCoercion)
+                  = Coercion
       |]
      "LinearSpace" -> InstanceD Nothing <$> cxt <*>
                           [t|LinearSpace $a|] <*> [d|
@@ -1579,6 +1576,9 @@ copyNewtypeInstances cxtv classes = do
          $(varP 'applyTensorFunctional) = abstractVS_applyTensorFunctional
          $(varP 'applyTensorLinMap) = abstractVS_applyTensorLinMap
          $(varP 'useTupleLinearSpaceComponents) = \_ -> usingNonTupleTypeAsTupleError
+      |]
+     "AbstractLinearSpace" -> InstanceD Nothing <$> cxt <*>
+                          [t|AbstractLinearSpace $a|] <*> [d|
       |]
      "FiniteDimensional" -> InstanceD Nothing <$> cxt <*>
                           [t|FiniteDimensional $a|] <*> do
