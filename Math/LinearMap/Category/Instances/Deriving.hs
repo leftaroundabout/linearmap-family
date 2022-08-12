@@ -617,8 +617,11 @@ class (AbstractAdditiveGroup v, VectorSpace (VectorSpaceImplementation v))
     :: ( Scalar (VectorSpaceImplementation v) ~ Scalar v
          => ρ ) -> ρ
 
-class (AbstractVectorSpace v, TensorSpace (VectorSpaceImplementation v))
-        => AbstractTensorSpace v where
+class ( AbstractVectorSpace v, TensorSpace (VectorSpaceImplementation v)
+#if !MIN_VERSION_manifolds_core(0,6,0)
+      , Semimanifold v, Interior v ~ v
+#endif
+      ) => AbstractTensorSpace v where
   abstractTensorProductsCoercion
     :: Coercion (TensorProduct v w)
                 (TensorProduct (VectorSpaceImplementation v) w)
