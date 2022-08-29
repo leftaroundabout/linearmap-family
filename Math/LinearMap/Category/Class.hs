@@ -47,6 +47,7 @@ import Math.LinearMap.Asserted
 import Math.VectorSpace.ZeroDimensional
 import Data.VectorSpace.Free
 
+import Data.Kind (Type)
 import qualified GHC.Generics as Gnrx
 import GHC.Generics (Generic, (:*:)((:*:)))
 
@@ -80,7 +81,7 @@ class (VectorSpace v, PseudoAffine v) => TensorSpace v where
   -- For Euclidean spaces, this is generally constructed by replacing each @s@
   -- scalar field in the @v@ vector with an entire @w@ vector. I.e., you have
   -- then a “nested vector” or, if @v@ is a @DualVector@ / “row vector”, a matrix.
-  type TensorProduct v w :: *
+  type TensorProduct v w :: Type
   scalarSpaceWitness :: ScalarSpaceWitness v
   linearManifoldWitness :: LinearManifoldWitness v
   zeroTensor :: (TensorSpace w, Scalar w ~ Scalar v)
@@ -151,7 +152,7 @@ class (TensorSpace v, Num (Scalar v)) => LinearSpace v where
   --   (In this case, a dual vector will be just a “row vector” if you consider
   --   @v@-vectors as “column vectors”. 'LinearMap' will then effectively have
   --   a matrix layout.)
-  type DualVector v :: *
+  type DualVector v :: Type
   
   dualSpaceWitness :: DualSpaceWitness v
  

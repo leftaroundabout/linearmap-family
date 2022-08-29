@@ -54,6 +54,8 @@ import Data.Void
 import Prelude ()
 import qualified Prelude as Hask
 
+import Data.Kind (Type)
+
 import Control.Category.Constrained.Prelude hiding ((^))
 import Control.Arrow.Constrained
 import Control.Monad.Trans.State
@@ -498,7 +500,7 @@ class (LSpace v, Eq v) => FiniteDimensional v where
   --   need to contain any information, it can simply have the full finite
   --   basis as its only value. Even for large sparse spaces, it should only
   --   have a very coarse structure that can be shared by many vectors.
-  data SubBasis v :: *
+  data SubBasis v :: Type
   
   entireBasis :: SubBasis v
   
