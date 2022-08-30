@@ -418,7 +418,7 @@ infixl 1 |&>
 -- v '<.>^' (w |&> 'euclideanNorm')  ≡  v '<.>' w
 -- @
 (|&>) :: LSpace v => DualVector v -> Variance v -> v
-dv |&> Norm m = GHC.sym coerceDoubleDual $ m-+$>dv
+dv |&> Norm m = symVSC coerceDoubleDual $ m-+$>dv
 
 
 -- | 'spanNorm' / 'spanVariance' are inefficient if the number of vectors

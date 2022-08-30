@@ -957,7 +957,7 @@ instance ∀ s u v .
           = case ( dualFinitenessWitness :: DualFinitenessWitness u
                  , dualSpaceWitness :: DualSpaceWitness v )  of
      (DualFinitenessWitness DualSpaceWitness, DualSpaceWitness) -> \(LinMapBasis bu bv)
-                   -> arr (fmap asLinearMap) . enumerateSubBasis $ TensorBasis bu bv
+                   -> arr (fmap $ getVSCCoercion asLinearMap) . enumerateSubBasis $ TensorBasis bu bv
   subbasisDimension (LinMapBasis bu bv) 
           = case ( dualFinitenessWitness :: DualFinitenessWitness u ) of
      (DualFinitenessWitness _) -> subbasisDimension bu * subbasisDimension bv

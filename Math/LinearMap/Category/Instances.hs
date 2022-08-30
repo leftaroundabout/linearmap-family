@@ -107,26 +107,27 @@ instance TensorSpace (S) where { \
   scaleTensor = bilinearFunction $ \μ (Tensor t) -> Tensor $ μ*^t; \
   addTensors (Tensor v) (Tensor w) = Tensor $ v ^+^ w; \
   subtractTensors (Tensor v) (Tensor w) = Tensor $ v ^-^ w; \
-  negateTensor = pretendLike Tensor lNegateV; \
-  toFlatTensor = follow Tensor; \
-  fromFlatTensor = flout Tensor; \
-  tensorProduct = LinearFunction $ \μ -> follow Tensor . scaleWith μ; \
-  transposeTensor = toFlatTensor . flout Tensor; \
-  fmapTensor = LinearFunction $ pretendLike Tensor; \
-  fzipTensorWith = LinearFunction \
-                   $ \f -> follow Tensor <<< f <<< flout Tensor *** flout Tensor; \
-  coerceFmapTensorProduct _ Coercion = Coercion; \
+  negateTensor = LinearFunction negateV; \
+  toFlatTensor = LinearFunction $ follow Tensor; \
+  fromFlatTensor = LinearFunction $ flout Tensor; \
+  tensorProduct = bilinearFunction $ \μ \
+           -> follow Tensor . getLinearFunction (scaleWith μ); \
+  transposeTensor = toFlatTensor . LinearFunction (flout Tensor); \
+  fmapTensor = bilinearFunction $ \f (Tensor t) -> Tensor (f-+$>t); \
+  fzipTensorWith = bilinearFunction \
+                   $ \(LinearFunction f) -> follow Tensor <<< f <<< flout Tensor *** flout Tensor; \
+  coerceFmapTensorProduct _ VSCCoercion = VSCCoercion; \
   wellDefinedTensor (Tensor w) = Tensor <$> wellDefinedVector w }; \
 instance LinearSpace (S) where { \
   type DualVector (S) = (S); \
   dualSpaceWitness = DualSpaceWitness; \
   linearId = LinearMap 1; \
-  tensorId = uncurryLinearMap $ LinearMap $ fmap (follow Tensor) -+$> id; \
+  tensorId = uncurryLinearMap $ LinearMap $ fmap (LinearFunction $ follow Tensor) -+$> id; \
   idTensor = Tensor 1; \
-  fromLinearForm = flout LinearMap; \
-  coerceDoubleDual = Coercion; \
-  contractTensorMap = flout Tensor . flout LinearMap; \
-  contractMapTensor = flout LinearMap . flout Tensor; \
+  fromLinearForm = LinearFunction $ flout LinearMap; \
+  coerceDoubleDual = VSCCoercion; \
+  contractTensorMap = LinearFunction $ flout Tensor . flout LinearMap; \
+  contractMapTensor = LinearFunction $ flout LinearMap . flout Tensor; \
   applyDualVector = scale; \
   applyLinear = LinearFunction $ \(LinearMap w) -> scaleV w; \
   applyTensorFunctional = bilinearFunction $ \(LinearMap du) (Tensor u) -> du<.>^u; \
@@ -168,9 +169,9 @@ instance ∀ s . (Num' s, Eq s) => TensorSpace (V s) where {                    
   scaleTensor = bilinearFunction   \
           $ \μ -> Tensor . fmap (μ*^) . getTensorProduct; \
   toFlatTensor = case closedScalarWitness :: ClosedScalarWitness s of{ \
-                         ClosedScalarWitness -> follow Tensor}; \
+                         ClosedScalarWitness -> LinearFunction $ follow Tensor}; \
   fromFlatTensor = case closedScalarWitness :: ClosedScalarWitness s of{ \
-                         ClosedScalarWitness -> flout Tensor}; \
+                         ClosedScalarWitness -> LinearFunction $ flout Tensor}; \
   tensorProduct = bilinearFunction $ \w v -> Tensor $ fmap (*^v) w; \
   transposeTensor = LinearFunction (tp); \
   fmapTensor = bilinearFunction $       \
@@ -178,7 +179,7 @@ instance ∀ s . (Num' s, Eq s) => TensorSpace (V s) where {                    
   fzipTensorWith = bilinearFunction $ \
           \(LinearFunction f) (Tensor vw, Tensor vx) \
                   -> Tensor $ liftA2 (curry f) vw vx; \
-  coerceFmapTensorProduct _ Coercion = Coercion; \
+  coerceFmapTensorProduct _ VSCCoercion = VSCCoercion; \
   wellDefinedTensor = getTensorProduct >>> Hask.traverse wellDefinedVector \
                        >>> fmap Tensor };                  \
 instance ∀ s . (Num' s, Eq s) => LinearSpace (V s) where {                  \
@@ -192,9 +193,9 @@ instance ∀ s . (Num' s, Eq s) => LinearSpace (V s) where {                  \
    ; ti DualSpaceWitness = LinearMap $ \
           fmap (\f -> fmap (LinearFunction $ Tensor . f)-+$>asTensor $ id) \
                (tenid :: V (w -> V w)) }; \
-  coerceDoubleDual = Coercion; \
+  coerceDoubleDual = VSCCoercion; \
   fromLinearForm = case closedScalarWitness :: ClosedScalarWitness s of{ \
-                         ClosedScalarWitness -> flout LinearMap}; \
+                         ClosedScalarWitness -> LinearFunction $ flout LinearMap}; \
   contractTensorMap = LinearFunction $ (contraction) . coerce . getLinearMap;      \
   contractMapTensor = LinearFunction $ (contraction) . coerce . getTensorProduct;      \
 {-contractTensorWith = bilinearFunction $ \
@@ -332,7 +333,7 @@ instance (Num' n, UArr.Unbox n) => TensorSpace (FinSuppSeq n) where
   fmapTensor = bilinearFunction $ \f (Tensor a) -> Tensor $ map (f$) a
   fzipTensorWith = bilinearFunction $ \f (Tensor a, Tensor b)
                      -> Tensor $ zipWith (curry $ arr f) a b
-  coerceFmapTensorProduct _ Coercion = Coercion
+  coerceFmapTensorProduct _ VSCCoercion = VSCCoercion
   wellDefinedTensor (Tensor a) = Tensor <$> Hask.traverse wellDefinedVector a
   
 
@@ -372,7 +373,7 @@ instance (Num' n, UArr.Unbox n) => TensorSpace (Sequence n) where
   fmapTensor = bilinearFunction $ \f (Tensor a) -> Tensor $ map (f$) a
   fzipTensorWith = bilinearFunction $ \f (Tensor a, Tensor b)
                      -> Tensor $ zipWith (curry $ arr f) a b
-  coerceFmapTensorProduct _ Coercion = Coercion
+  coerceFmapTensorProduct _ VSCCoercion = VSCCoercion
 
 instance (Num' n, UArr.Unbox n) => LinearSpace (Sequence n) where
   type DualVector (Sequence n) = FinSuppSeq n
@@ -490,7 +491,7 @@ instance (Num' s, TensorSpace v, Scalar v ~ s) => TensorSpace (SymmetricTensor s
   tensorProduct = bilinearFunction $ \(SymTensor t) g
                     -> Tensor $ fmap (LinearFunction (⊗g)) $ t
   transposeTensor = LinearFunction $ \(Tensor f) -> getLinearFunction (
-                            arr (fmap Coercion) . transposeTensor . arr lassocTensor) f
+                            arr (fmap VSCCoercion) . transposeTensor . arr lassocTensor) f
   fmapTensor = bilinearFunction $ \f (Tensor t) -> Tensor $ fmap (fmap f) $ t
   fzipTensorWith = bilinearFunction $ \f (Tensor s, Tensor t)
                  -> Tensor $ fzipWith (fzipWith f) $ (s,t)
@@ -504,11 +505,11 @@ instance (Num' s, LinearSpace v, Scalar v ~ s) => LinearSpace (SymmetricTensor s
           (ClosedScalarWitness, DualSpaceWitness) -> DualSpaceWitness
   linearId = case dualSpaceWitness :: DualSpaceWitness v of
     DualSpaceWitness -> LinearMap $ rassocTensor . asTensor
-                          . fmap (follow SymTensor . asTensor) $ id
+                          . fmap (unsafeFollowVSC SymTensor . asTensor) $ id
   tensorId = LinearMap $ asTensor . fmap asTensor . curryLinearMap
                            . fmap asTensor
                            . curryLinearMap
-                           . fmap (follow $ \t -> Tensor $ rassocTensor $ t)
+                           . fmap (unsafeFollowVSC $ \t -> Tensor $ rassocTensor $ t)
                            $ id
   applyLinear = case dualSpaceWitness :: DualSpaceWitness v of
     DualSpaceWitness -> bilinearFunction $ \(LinearMap f) (SymTensor t)
@@ -545,7 +546,7 @@ squareVs vs = SymTensor $ tensorProducts [(v,v) | v<-vs]
 type v⊗〃+>w = LinearMap (Scalar v) (SymmetricTensor (Scalar v) v) w
 
 currySymBilin :: LinearSpace v => (v⊗〃+>w) -+> (v+>(v+>w))
-currySymBilin = LinearFunction . arr $ fmap fromTensor . fromTensor . flout LinearMap
+currySymBilin = LinearFunction . arr $ fmap fromTensor . fromTensor . VSCCoercion
 
 
 
