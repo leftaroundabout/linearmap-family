@@ -107,7 +107,7 @@ instance TensorSpace (S) where { \
   scaleTensor = bilinearFunction $ \μ (Tensor t) -> Tensor $ μ*^t; \
   addTensors (Tensor v) (Tensor w) = Tensor $ v ^+^ w; \
   subtractTensors (Tensor v) (Tensor w) = Tensor $ v ^-^ w; \
-  negateTensor = LinearFunction negateV; \
+  negateTensor = LinearFunction $ \(Tensor v) -> Tensor (negateV v); \
   toFlatTensor = LinearFunction $ follow Tensor; \
   fromFlatTensor = LinearFunction $ flout Tensor; \
   tensorProduct = bilinearFunction $ \μ \
