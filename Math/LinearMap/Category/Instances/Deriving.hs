@@ -1450,7 +1450,11 @@ copyNewtypeInstances cxtv classes = do
  (tvbs, cxt, (a,c)) <- do
    (tvbs', cxt', a') <- deQuantifyType cxtv
    let extractImplementationType (AppT tc (VarT tvb)) atvbs
+#if MIN_VERSION_template_haskell(2,17,0)
+              = extractImplementationType tc $ atvbs++[PlainTV tvb SpecifiedSpec]
+#else
               = extractImplementationType tc $ atvbs++[PlainTV tvb]
+#endif
        extractImplementationType (ConT aName) atvbs = do
          D.reifyDatatype aName >>= \case
           D.DatatypeInfo{ D.datatypeVariant = D.Newtype
@@ -1459,14 +1463,25 @@ copyNewtypeInstances cxtv classes = do
                            D.ConstructorInfo
                               { D.constructorFields = [c''] } ]
                         }
+#if MIN_VERSION_template_haskell(2,17,0)
+             -> let replaceTVs :: [TyVarBndr ()] -> [TyVarBndr Specificity] -> Type -> Type
+                    replaceTVs (PlainTV infoTV _:infoTVs)
+                               (PlainTV instTV _:instTVs)
+                        = replaceTVs infoTVs instTVs . replaceTV infoTV instTV
+                    replaceTVs (KindedTV infoTV flag _:infoTVs) instTVs
+                        = replaceTVs (PlainTV infoTV flag:infoTVs) instTVs
+                    replaceTVs infoTVs (KindedTV instTV flag _:instTVs)
+                        = replaceTVs infoTVs (PlainTV instTV flag:instTVs)
+#else
              -> let replaceTVs :: [TyVarBndr] -> [TyVarBndr] -> Type -> Type
-                    replaceTVs [] [] = id
                     replaceTVs (PlainTV infoTV:infoTVs) (PlainTV instTV:instTVs)
                         = replaceTVs infoTVs instTVs . replaceTV infoTV instTV
                     replaceTVs (KindedTV infoTV _:infoTVs) instTVs
                         = replaceTVs (PlainTV infoTV:infoTVs) instTVs
                     replaceTVs infoTVs (KindedTV instTV _:instTVs)
                         = replaceTVs infoTVs (PlainTV instTV:instTVs)
+#endif
+                    replaceTVs [] [] = id
                     replaceTVs infoTVs instTVs
                         = error $ "infoTVs = "++show infoTVs++", instTVs = "++show instTVs
                     replaceTV :: Name -> Name -> Type -> Type
@@ -1592,7 +1607,13 @@ copyNewtypeInstances cxtv classes = do
         
         tySyns <- sequence [
 #if MIN_VERSION_template_haskell(2,15,0)
-           NewtypeInstD [] (Just tvbs)
+           NewtypeInstD [] (Just (
+#if MIN_VERSION_template_haskell(2,17,0)
+                                  map (fmap $ const ()) tvbs
+#else
+                                  tvbs
+#endif
+                                      ))
               <$> (AppT (ConT ''SubBasis) <$> a)
               <*> pure Nothing
               <*> (NormalC subBasisCstr . pure .
