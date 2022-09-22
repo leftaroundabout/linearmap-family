@@ -50,6 +50,7 @@ library
                        Math.LinearMap.Category.TensorQuot
                        Math.LinearMap.Category.Instances
                        Math.VectorSpace.Docile
+                       TypeLevel.Maybe
   other-extensions:    FlexibleInstances, UndecidableInstances, FunctionalDependencies, TypeOperators, TypeFamilies
   build-depends:       base >=4.8 && <5,
                        vector-space >=0.11 && <0.18, MemoTrie,
