@@ -78,3 +78,11 @@ zipWithTimesAssoc φ = case (sing @a, sing @b, sing @c) of
   (_      , _      , SNothing) -> φ
   (SJust _, SJust _, SJust _ ) -> φ
 
+zipWithTimesCommu :: ∀ a b r . (SingI a, SingI b)
+    => ((ZipWithTimes a b ~ ZipWithTimes b a) => r)
+           -> r
+zipWithTimesCommu φ = case (sing @a, sing @b) of
+  (SNothing, _      ) -> φ
+  (_      , SNothing) -> φ
+  (SJust _, SJust _ ) -> φ
+
