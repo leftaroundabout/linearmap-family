@@ -24,7 +24,7 @@ module Math.VectorSpace.DimensionAware where
 
 import Data.VectorSpace
 
-import Data.Singletons (SingI)
+import Data.Singletons (SingI, sing, Sing)
 
 import GHC.TypeLits
 
@@ -41,10 +41,10 @@ class VectorSpace v => DimensionAware v where
   type StaticDimension v :: Maybe Nat
   type StaticDimension v = 'Nothing
 
-  staticDimensionSingI :: (SingI (StaticDimension v) => r) -> r
-  default staticDimensionSingI :: SingI (StaticDimension v)
-               => (SingI (StaticDimension v) => r) -> r
-  staticDimensionSingI φ = φ
+  staticDimensionSing :: Sing (StaticDimension v)
+  default staticDimensionSing :: SingI (StaticDimension v)
+               => Sing (StaticDimension v)
+  staticDimensionSing = sing
 
 
 instance DimensionAware Float   where type StaticDimension Float   = 'Just 1
@@ -55,6 +55,6 @@ instance DimensionAware Integer where type StaticDimension Integer = 'Just 1
 instance ∀ u v . (DimensionAware u, DimensionAware v, Scalar u ~ Scalar v)
                    => DimensionAware (u,v) where
   type StaticDimension (u,v) = Maybe.ZipWithPlus (StaticDimension u) (StaticDimension v)
-  staticDimensionSingI φ = staticDimensionSingI @u (staticDimensionSingI @v
-             (Maybe.zipWithPlusSingI @(StaticDimension u) @(StaticDimension v) φ))
+  staticDimensionSing = Maybe.zipWithPlusSing (staticDimensionSing @u)
+                                              (staticDimensionSing @v)
 

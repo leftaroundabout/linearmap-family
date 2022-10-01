@@ -51,38 +51,31 @@ zipWithPlusCong :: ∀ a a' b b' r . (a ~ a', b ~ b')
     => ((ZipWithPlus a b ~ ZipWithPlus a' b') => r) -> r
 zipWithPlusCong φ = φ
 
-zipWithPlusSingI :: ∀ a b r . (SingI a, SingI b)
-    => (SingI (ZipWithPlus a b) => r) -> r
-zipWithPlusSingI φ = case (sing @a, sing @b) of
-  (SNothing, _      ) -> φ
-  (_      , SNothing) -> φ
-  (SJust α, SJust β ) -> withKnownNat (α%+β) φ
+zipWithPlusSing :: ∀ a b r . Sing a -> Sing b -> Sing (ZipWithPlus a b)
+zipWithPlusSing SNothing _ = sing
+zipWithPlusSing _ SNothing = sing
+zipWithPlusSing (SJust α) (SJust β) = withKnownNat (α%+β) sing
 
 zipWithTimesCong :: ∀ a a' b b' r . (a ~ a', b ~ b')
     => ((ZipWithTimes a b ~ ZipWithTimes a' b') => r) -> r
 zipWithTimesCong φ = φ
 
-zipWithTimesSingI :: ∀ a b r . (SingI a, SingI b)
-    => (SingI (ZipWithTimes a b) => r) -> r
-zipWithTimesSingI φ = case (sing @a, sing @b) of
-  (SNothing, _      ) -> φ
-  (_      , SNothing) -> φ
-  (SJust α, SJust β ) -> withKnownNat (α%*β) φ
+zipWithTimesSing :: ∀ a b r . Sing a -> Sing b -> Sing (ZipWithTimes a b)
+zipWithTimesSing SNothing _ = sing
+zipWithTimesSing _ SNothing = sing
+zipWithTimesSing (SJust α) (SJust β) = withKnownNat (α%*β) sing
 
-zipWithTimesAssoc :: ∀ a b c r . (SingI a, SingI b, SingI c)
-    => ((ZipWithTimes a (ZipWithTimes b c) ~ ZipWithTimes (ZipWithTimes a b) c) => r)
+zipWithTimesAssoc :: ∀ a b c r . Sing a -> Sing b -> Sing c
+    -> ((ZipWithTimes a (ZipWithTimes b c) ~ ZipWithTimes (ZipWithTimes a b) c) => r)
            -> r
-zipWithTimesAssoc φ = case (sing @a, sing @b, sing @c) of
-  (SNothing, _     ,  _      ) -> φ
-  (_      , SNothing, _      ) -> φ
-  (_      , _      , SNothing) -> φ
-  (SJust _, SJust _, SJust _ ) -> φ
+zipWithTimesAssoc SNothing _ _ φ = φ
+zipWithTimesAssoc _ SNothing _ φ = φ
+zipWithTimesAssoc _ _ SNothing φ = φ
+zipWithTimesAssoc (SJust _) (SJust _) (SJust _) φ = φ
 
-zipWithTimesCommu :: ∀ a b r . (SingI a, SingI b)
-    => ((ZipWithTimes a b ~ ZipWithTimes b a) => r)
-           -> r
-zipWithTimesCommu φ = case (sing @a, sing @b) of
-  (SNothing, _      ) -> φ
-  (_      , SNothing) -> φ
-  (SJust _, SJust _ ) -> φ
+zipWithTimesCommu :: ∀ a b r . Sing a -> Sing b
+    -> ((ZipWithTimes a b ~ ZipWithTimes b a) => r) -> r
+zipWithTimesCommu SNothing _ φ = φ
+zipWithTimesCommu _ SNothing φ = φ
+zipWithTimesCommu (SJust _) (SJust _) φ = φ
 
