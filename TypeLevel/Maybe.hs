@@ -30,15 +30,16 @@ module TypeLevel.Maybe where
 #if MIN_VERSION_singletons(3,0,0)
 import Prelude.Singletons (SNum(..))
 import Data.Maybe.Singletons
-import GHC.TypeLits.Singletons (SNat(..), withKnownNat)
+import GHC.TypeLits.Singletons (SNat(..), withKnownNat, sDiv)
 #else
 import Data.Singletons.Prelude.Num (SNum(..))
 import Data.Singletons.Prelude.Maybe (SMaybe(..))
-import Data.Singletons.TypeLits (SNat(..), withKnownNat)
+import Data.Singletons.TypeLits (SNat(..), withKnownNat, sDiv)
 #endif
 import Data.Singletons
 import qualified Data.Type.Natural as DTN
 import GHC.TypeLits
+import Unsafe.Coerce
 
 type family ZipWith (f :: k -> l -> m) (a :: Maybe k) (b :: Maybe l) :: Maybe m where
   ZipWith f 'Nothing y = 'Nothing
@@ -55,6 +56,43 @@ type family ZipWithTimes (a :: Maybe Nat) (b :: Maybe Nat) :: Maybe Nat where
   ZipWithTimes x 'Nothing = 'Nothing
   ZipWithTimes ('Just x) ('Just y) = 'Just (x*y)
 
+type family MaybePred (a :: Nat) :: Maybe Nat where
+  MaybePred 0 = 'Nothing
+  MaybePred n = 'Just (n-1)
+
+type family BindMaybePred (a :: Maybe Nat) :: Maybe Nat where
+  BindMaybePred 'Nothing = 'Nothing
+  BindMaybePred ('Just n) = MaybePred n
+
+type TriangularNum (a :: Nat) = (a * (a+1))`Div`2
+
+type family FmapTriangularNum (a :: Maybe Nat) where
+  FmapTriangularNum 'Nothing = 'Nothing
+  FmapTriangularNum ('Just n) = ('Just (TriangularNum n))
+
+justNatSing :: ∀ (n :: Nat) . Sing n -> Sing ('Just n)
+justNatSing SNat = sing
+
+succMaybePredSing :: ∀ n . DTN.SNat n -> Sing (MaybePred (n+1))
+succMaybePredSing s = unsafeCoerce (DTN.withKnownNat s (justNatSing (SNat @n)))
+
+maybePredSing :: ∀ a . Sing a -> Sing (MaybePred a)
+maybePredSing α = withKnownNat α
+   (case DTN.viewNat (DTN.sNat @a) of
+      DTN.IsZero -> sing
+      DTN.IsSucc β -> succMaybePredSing β
+    )
+
+binMaybePredSing :: ∀ a . Sing a -> Sing (BindMaybePred a)
+binMaybePredSing SNothing = sing
+binMaybePredSing (SJust ν) = maybePredSing ν
+
+triangularNumSing :: ∀ a . Sing a -> Sing (TriangularNum a)
+triangularNumSing α = (α %* (α%+(sing @1)))`sDiv`(sing @2)
+
+fmapTriangularNumSing :: ∀ a . Sing a -> Sing (FmapTriangularNum a)
+fmapTriangularNumSing SNothing = SNothing
+fmapTriangularNumSing (SJust α) = SJust (triangularNumSing α)
 
 zipWithPlusSing :: ∀ a b r . Sing a -> Sing b -> Sing (ZipWithPlus a b)
 zipWithPlusSing SNothing _ = sing
