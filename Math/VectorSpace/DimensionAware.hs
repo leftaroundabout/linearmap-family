@@ -28,7 +28,7 @@ import Data.Singletons (SingI, sing, Sing)
 
 import GHC.TypeLits
 
-import qualified TypeLevel.Maybe as Maybe
+import qualified Math.VectorSpace.DimensionAware.Theorems.MaybeNat as Maybe
 
 -- | This class does not really pose any restrictions on a vector space type, but
 --   allows it to express its dimension.

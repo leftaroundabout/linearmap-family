@@ -1,5 +1,5 @@
 -- |
--- Module      : TypeLevel.Maybe
+-- Module      : Math.VectorSpace.DimensionAware.Theorems.MaybeNat
 -- Copyright   : (c) Justus Sagemüller 2022
 -- License     : GPL v3
 -- 
@@ -25,7 +25,7 @@
 {-# LANGUAGE NoStarIsType               #-}
 {-# LANGUAGE CPP                        #-}
 
-module TypeLevel.Maybe where
+module Math.VectorSpace.DimensionAware.Theorems.MaybeNat where
 
 #if MIN_VERSION_singletons(3,0,0)
 import Prelude.Singletons (SNum(..))
