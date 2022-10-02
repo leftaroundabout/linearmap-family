@@ -55,18 +55,11 @@ type family ZipWithTimes (a :: Maybe Nat) (b :: Maybe Nat) :: Maybe Nat where
   ZipWithTimes x 'Nothing = 'Nothing
   ZipWithTimes ('Just x) ('Just y) = 'Just (x*y)
 
-zipWithPlusCong :: ∀ a a' b b' r . (a ~ a', b ~ b')
-    => ((ZipWithPlus a b ~ ZipWithPlus a' b') => r) -> r
-zipWithPlusCong φ = φ
 
 zipWithPlusSing :: ∀ a b r . Sing a -> Sing b -> Sing (ZipWithPlus a b)
 zipWithPlusSing SNothing _ = sing
 zipWithPlusSing _ SNothing = sing
 zipWithPlusSing (SJust α) (SJust β) = withKnownNat (α%+β) sing
-
-zipWithTimesCong :: ∀ a a' b b' r . (a ~ a', b ~ b')
-    => ((ZipWithTimes a b ~ ZipWithTimes a' b') => r) -> r
-zipWithTimesCong φ = φ
 
 zipWithTimesSing :: ∀ a b r . Sing a -> Sing b -> Sing (ZipWithTimes a b)
 zipWithTimesSing SNothing _ = sing
