@@ -23,14 +23,22 @@
 {-# LANGUAGE DataKinds                  #-}
 {-# LANGUAGE PolyKinds                  #-}
 {-# LANGUAGE NoStarIsType               #-}
+{-# LANGUAGE CPP                        #-}
 
 module TypeLevel.Maybe where
 
+#if MIN_VERSION_singletons(3,0,0)
 import Prelude.Singletons (SNum(..))
-import Data.Singletons
 import Data.Maybe.Singletons
+import GHC.TypeLits.Singletons (SNat(..), withKnownNat)
+#else
+import Data.Singletons.Prelude.Num (SNum(..))
+import Data.Singletons.Prelude.Maybe (SMaybe(..))
+import Data.Singletons.TypeLits (SNat(..), withKnownNat)
+#endif
+import Data.Singletons
+import qualified Data.Type.Natural as DTN
 import GHC.TypeLits
-import GHC.TypeLits.Singletons
 
 type family ZipWith (f :: k -> l -> m) (a :: Maybe k) (b :: Maybe l) :: Maybe m where
   ZipWith f 'Nothing y = 'Nothing
