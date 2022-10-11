@@ -14,6 +14,7 @@
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE AllowAmbiguousTypes        #-}
 {-# LANGUAGE TypeApplications           #-}
+{-# LANGUAGE DataKinds                  #-}
 {-# LANGUAGE Rank2Types                 #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE UnicodeSyntax              #-}
@@ -40,6 +41,7 @@ module Math.LinearMap.Category.Instances.Deriving
 
 import Math.LinearMap.Category.Class
 import Math.LinearMap.Category.Instances
+import Math.VectorSpace.DimensionAware
 import Math.VectorSpace.Docile
 
 import Data.VectorSpace
@@ -69,6 +71,14 @@ import Math.VectorSpace.ZeroDimensional
 import Data.VectorSpace.Free
 
 import GHC.Generics (Generic)
+import GHC.TypeLits (Nat)
+
+#if MIN_VERSION_singletons(3,0,0)
+import Prelude.Singletons (SingI, sing, withSingI)
+#else
+import Data.Singletons.Prelude (SingI, sing, withSingI)
+#endif
+import qualified Math.VectorSpace.DimensionAware.Theorems.MaybeNat as Maybe
 
 import Language.Haskell.TH
 import Language.Haskell.TH.Syntax (Name(..), OccName(..)
@@ -709,6 +719,12 @@ instance ∀ a c . ( AbstractLinearSpace a, VectorSpaceImplementation a ~ c
      => VectorSpace (AbstractDualVector a c) where
   type Scalar (AbstractDualVector a c) = Scalar a
   (*^) = scalarsSameInAbstractionAndDuals @a (coerce ((*^) @(DualVector c)))
+
+instance ∀ a c . ( AbstractLinearSpace a, VectorSpaceImplementation a ~ c
+                 , TensorSpace (DualVector c), DimensionAware c )
+     => DimensionAware (AbstractDualVector a c) where
+  type StaticDimension (AbstractDualVector a c) = StaticDimension c
+  staticDimensionSing = withSingI (staticDimensionSing @c) sing
 
 instance ∀ a c . ( AbstractLinearSpace a, VectorSpaceImplementation a ~ c
                  , TensorSpace (DualVector c) )
@@ -1564,6 +1580,10 @@ copyNewtypeInstances cxtv classes = do
                           [t|PseudoAffine $a|] <*> [d|
          $(varP '(.-~.)) = \p q -> Just (abstractVS_subvs p q)
          $(varP '(.-~!)) = abstractVS_subvs
+      |]
+     "DimensionAware" -> InstanceD Nothing <$> cxt <*>
+                          [t|DimensionAware $a|] <*> [d|
+         type instance StaticDimension $a = StaticDimension $c
       |]
      "TensorSpace" -> InstanceD Nothing <$> cxt <*>
                           [t|TensorSpace $a|] <*> [d|

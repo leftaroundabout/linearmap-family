@@ -42,7 +42,7 @@ newtype ℝ⁴ = ℝ⁴ { getℝ⁴ :: V4 ℝ }
 copyNewtypeInstances [t| ℝ⁴ |]
    [ ''AdditiveGroup, ''AffineSpace, ''VectorSpace
    , ''Semimanifold, ''PseudoAffine
-   , ''TensorSpace, ''LinearSpace
+   , ''DimensionAware, ''TensorSpace, ''LinearSpace
    , ''FiniteDimensional, ''SemiInner, ''InnerSpace ]
 
 newtype H¹ℝ⁴ a = H¹ℝ⁴ { getH¹ℝ⁴ :: ((a,a),(a,a)) }

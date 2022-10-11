@@ -76,6 +76,7 @@ module Math.LinearMap.Category (
             -- ** The classes
             , module Data.VectorSpace
             , LSpace
+            , DimensionAware (..)
             , TensorSpace (..)
             , LinearSpace (..)
             -- ** Orthonormal systems
@@ -115,6 +116,7 @@ import Math.LinearMap.Category.Class
 import Math.LinearMap.Category.Instances
 import Math.LinearMap.Category.Instances.Deriving
 import Math.LinearMap.Asserted
+import Math.VectorSpace.DimensionAware
 import Math.VectorSpace.Docile
 import Math.LinearMap.Category.TensorQuot
 

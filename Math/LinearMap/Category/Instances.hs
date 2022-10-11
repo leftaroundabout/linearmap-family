@@ -13,6 +13,7 @@
 {-# LANGUAGE UndecidableInstances       #-}
 {-# LANGUAGE TypeOperators              #-}
 {-# LANGUAGE TypeFamilies               #-}
+{-# LANGUAGE DataKinds                  #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE StandaloneDeriving         #-}
 {-# LANGUAGE UnicodeSyntax              #-}
@@ -23,6 +24,7 @@
 
 module Math.LinearMap.Category.Instances where
 
+import Math.VectorSpace.DimensionAware
 import Math.LinearMap.Category.Class
 
 import Data.VectorSpace
@@ -150,13 +152,15 @@ LinearScalarSpace(Rational)
   toInterior = pure; fromInterior = id; translateP = Tagged (^+^);
 #endif
 
-#define FreeLinearSpace(V, LV, tp, tenspl, tenid, dspan, contraction, contraaction)  \
+#define FreeLinearSpace(V, d, LV, tp, tenspl, tenid, dspan, contraction, contraaction)  \
 instance Num s => Semimanifold (V s) where {  \
   type Needle (V s) = V s;                      \
   FreeLinSpaceInteriorDecls                      \
   (.+~^) = (^+^) };                               \
 instance Num s => PseudoAffine (V s) where {         \
   v.-~.w = pure (v^-^w); (.-~!) = (^-^) };              \
+instance ∀ s . (Num' s, Eq s) => DimensionAware (V s) where {                     \
+  type StaticDimension (V s) = 'Just (d) };                               \
 instance ∀ s . (Num' s, Eq s) => TensorSpace (V s) where {                     \
   type TensorProduct (V s) w = V w;                               \
   scalarSpaceWitness = case closedScalarWitness :: ClosedScalarWitness s of{ \
@@ -212,7 +216,7 @@ instance ∀ s . (Num' s, Eq s) => LinearSpace (V s) where {                  \
   composeLinear = bilinearFunction $   \
          \f (LinearMap g) -> LinearMap $ fmap ((applyLinear-+$>f)-+$>) g; \
   useTupleLinearSpaceComponents _ = usingNonTupleTypeAsTupleError }
-FreeLinearSpace( V0
+FreeLinearSpace( V0, 0
                , LinearMap
                , \(Tensor V0) -> zeroV
                , \_ -> LinearMap V0
@@ -220,7 +224,7 @@ FreeLinearSpace( V0
                , LinearMap V0
                , \V0 -> zeroV
                , \V0 _ -> 0 )
-FreeLinearSpace( V1
+FreeLinearSpace( V1, 1
                , LinearMap
                , \(Tensor (V1 w₀)) -> w₀⊗V1 1
                , \w -> LinearMap $ V1 (Tensor $ V1 w)
@@ -228,7 +232,7 @@ FreeLinearSpace( V1
                , LinearMap . V1 . blockVectSpan $ V1 1
                , \(V1 (V1 w)) -> w
                , \(V1 x) f -> (f$x)^._x )
-FreeLinearSpace( V2
+FreeLinearSpace( V2, 2
                , LinearMap
                , \(Tensor (V2 w₀ w₁)) -> w₀⊗V2 1 0
                                      ^+^ w₁⊗V2 0 1
@@ -240,7 +244,7 @@ FreeLinearSpace( V2
                , \(V2 (V2 w₀ _)
                       (V2 _ w₁)) -> w₀^+^w₁
                , \(V2 x y) f -> (f$x)^._x + (f$y)^._y )
-FreeLinearSpace( V3
+FreeLinearSpace( V3, 3
                , LinearMap
                , \(Tensor (V3 w₀ w₁ w₂)) -> w₀⊗V3 1 0 0
                                         ^+^ w₁⊗V3 0 1 0
@@ -258,7 +262,7 @@ FreeLinearSpace( V3
                       (V3 _ w₁ _)
                       (V3 _ _ w₂)) -> w₀^+^w₁^+^w₂
                , \(V3 x y z) f -> (f$x)^._x + (f$y)^._y + (f$z)^._z )
-FreeLinearSpace( V4
+FreeLinearSpace( V4, 4
                , LinearMap
                , \(Tensor (V4 w₀ w₁ w₂ w₃)) -> w₀⊗V4 1 0 0 0
                                            ^+^ w₁⊗V4 0 1 0 0
@@ -310,6 +314,8 @@ instance (Num' n, UArr.Unbox n) => Semimanifold (FinSuppSeq n) where
 instance (Num' n, UArr.Unbox n) => PseudoAffine (FinSuppSeq n) where
   v.-~.w = Just $ v.-.w; (.-~!) = (.-.)
 
+instance (Num' n, UArr.Unbox n) => DimensionAware (FinSuppSeq n) where
+  type StaticDimension (FinSuppSeq n) = 'Nothing
 instance (Num' n, UArr.Unbox n) => TensorSpace (FinSuppSeq n) where
   type TensorProduct (FinSuppSeq n) v = [v]
   wellDefinedVector (FinSuppSeq v) = FinSuppSeq <$> UArr.mapM wellDefinedVector v
@@ -347,6 +353,8 @@ instance (Num' n, UArr.Unbox n) => Semimanifold (Sequence n) where
 instance (Num' n, UArr.Unbox n) => PseudoAffine (Sequence n) where
   v.-~.w = Just $ v.-.w; (.-~!) = (.-.)
 
+instance (Num' n, UArr.Unbox n) => DimensionAware (Sequence n) where
+  type StaticDimension (Sequence n) = 'Nothing
 instance (Num' n, UArr.Unbox n) => TensorSpace (Sequence n) where
   type TensorProduct (Sequence n) v = [v]
   wellDefinedVector (SoloChunk n c) = SoloChunk n <$> UArr.mapM wellDefinedVector c

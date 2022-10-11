@@ -28,6 +28,8 @@ import Data.Singletons (SingI, sing, Sing)
 
 import GHC.TypeLits
 
+import Data.Ratio
+
 import qualified Math.VectorSpace.DimensionAware.Theorems.MaybeNat as Maybe
 
 -- | This class does not really pose any restrictions on a vector space type, but
@@ -51,6 +53,8 @@ instance DimensionAware Float   where type StaticDimension Float   = 'Just 1
 instance DimensionAware Double  where type StaticDimension Double  = 'Just 1
 instance DimensionAware Int     where type StaticDimension Int     = 'Just 1
 instance DimensionAware Integer where type StaticDimension Integer = 'Just 1
+instance Integral n => DimensionAware (Ratio n) where
+  type StaticDimension (Ratio n) = 'Just 1
 
 instance ∀ u v . (DimensionAware u, DimensionAware v, Scalar u ~ Scalar v)
                    => DimensionAware (u,v) where

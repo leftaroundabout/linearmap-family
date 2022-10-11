@@ -15,6 +15,7 @@
 {-# LANGUAGE TypeOperators              #-}
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE AllowAmbiguousTypes        #-}
+{-# LANGUAGE TypeApplications           #-}
 {-# LANGUAGE Rank2Types                 #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE PatternSynonyms            #-}
@@ -24,12 +25,14 @@
 {-# LANGUAGE StandaloneDeriving         #-}
 {-# LANGUAGE DeriveGeneric              #-}
 {-# LANGUAGE GADTs                      #-}
+{-# LANGUAGE DataKinds                  #-}
 {-# LANGUAGE DefaultSignatures          #-}
 {-# LANGUAGE CPP                        #-}
 
 module Math.LinearMap.Category.Class where
 
 import Data.VectorSpace
+import Math.VectorSpace.DimensionAware
 import Data.AffineSpace
 
 import Prelude ()
@@ -47,9 +50,13 @@ import Math.LinearMap.Asserted
 import Math.VectorSpace.ZeroDimensional
 import Data.VectorSpace.Free
 
+import Data.Singletons (sing, withSingI)
 import Data.Kind (Type)
+import GHC.TypeLits (Nat)
 import qualified GHC.Generics as Gnrx
 import GHC.Generics (Generic, (:*:)((:*:)))
+
+import qualified Math.VectorSpace.DimensionAware.Theorems.MaybeNat as Maybe
 
 data ClosedScalarWitness s where
   ClosedScalarWitness :: (Scalar s ~ s, DualVector s ~ s) => ClosedScalarWitness s
@@ -277,6 +284,10 @@ fmapLinearMap :: ∀ s v w x . ( LinearSpace v, TensorSpace w, TensorSpace x
 fmapLinearMap = case dualSpaceWitness :: DualSpaceWitness v of
    DualSpaceWitness -> bilinearFunction
           $ \f -> arr asTensor >>> getLinearFunction (fmapTensor-+$>f) >>> arr fromTensor
+
+
+instance DimensionAware (ZeroDim s) where
+  type StaticDimension (ZeroDim s) = 'Just 0
 
 instance Num' s => TensorSpace (ZeroDim s) where
   type TensorProduct (ZeroDim s) v = ZeroDim s
@@ -671,6 +682,16 @@ lassocTensor = VSCCoercion
 rassocTensor :: VSCCoercion (Tensor s (Tensor s u v) w) (Tensor s u (Tensor s v w))
 rassocTensor = VSCCoercion
 
+
+instance ∀ s u v . ( LinearSpace u, DimensionAware u
+                   , TensorSpace v, DimensionAware v
+                   , Scalar u ~ s, Scalar v ~ s )
+                       => DimensionAware (LinearMap s u v) where
+  type StaticDimension (LinearMap s u v)
+          = Maybe.ZipWithTimes (StaticDimension u) (StaticDimension v)
+  staticDimensionSing
+     = Maybe.zipWithTimesSing (staticDimensionSing @u) (staticDimensionSing @v)
+
 instance ∀ s u v . ( LinearSpace u, TensorSpace v, Scalar u ~ s, Scalar v ~ s )
                        => TensorSpace (LinearMap s u v) where
   type TensorProduct (LinearMap s u v) w = TensorProduct (DualVector u) (Tensor s v w)
@@ -812,6 +833,16 @@ instance ∀ s u v . (LinearSpace u, LinearSpace v, Scalar u ~ s, Scalar v ~ s)
                                -> (applyTensorLinMap-+$>f)
                                    . arr (asTensor . hasteLinearMap) -+$> g
   useTupleLinearSpaceComponents _ = usingNonTupleTypeAsTupleError
+
+
+instance ∀ s u v . ( TensorSpace u, DimensionAware u
+                   , TensorSpace v, DimensionAware v
+                   , Scalar u ~ s, Scalar v ~ s)
+                       => DimensionAware (Tensor s u v) where
+  type StaticDimension (Tensor s u v)
+          = Maybe.ZipWithTimes (StaticDimension u) (StaticDimension v)
+  staticDimensionSing = Maybe.zipWithTimesSing (staticDimensionSing @u) 
+                                               (staticDimensionSing @v)
 
 instance ∀ s u v . (TensorSpace u, TensorSpace v, Scalar u ~ s, Scalar v ~ s)
                        => TensorSpace (Tensor s u v) where
@@ -993,6 +1024,16 @@ asLinearFn :: VSCCoercion (Tensor s (LinearFunction s u v) w)
 asLinearFn = VSCCoercion
 
 
+instance ∀ s u v . ( LinearSpace u, DimensionAware u
+                   , LinearSpace v, DimensionAware v
+                   , Scalar u ~ s, Scalar v ~ s )
+     => DimensionAware (LinearFunction s u v) where
+  type StaticDimension (LinearFunction s u v)
+          = Maybe.ZipWithTimes (StaticDimension u) (StaticDimension v)
+  staticDimensionSing = Maybe.zipWithTimesSing (staticDimensionSing @u)
+                                               (staticDimensionSing @v)
+
+
 instance ∀ s u v . (LinearSpace u, LinearSpace v, Scalar u ~ s, Scalar v ~ s)
      => TensorSpace (LinearFunction s u v) where
   type TensorProduct (LinearFunction s u v) w = LinearFunction s (LinearFunction s v u) w
@@ -1141,6 +1182,10 @@ genericTensorspaceError = error "GHC.Generics types can not be used as tensor sp
 usingNonTupleTypeAsTupleError :: a
 usingNonTupleTypeAsTupleError = error "This is not a tuple type, the method should not be callable."
 
+instance ∀ v s . DimensionAware v => DimensionAware (Gnrx.Rec0 v s) where
+  type StaticDimension (Gnrx.Rec0 v s) = StaticDimension v
+  staticDimensionSing = withSingI (staticDimensionSing @v) sing
+
 instance ∀ v s . TensorSpace v => TensorSpace (Gnrx.Rec0 v s) where
   type TensorProduct (Gnrx.Rec0 v s) w = TensorProduct v w
   wellDefinedVector = fmap Gnrx.K1 . wellDefinedVector . Gnrx.unK1
@@ -1185,6 +1230,10 @@ instance ∀ v s . TensorSpace v => TensorSpace (Gnrx.Rec0 v s) where
                            (TensorProduct (Gnrx.Rec0 v s) b)
          cmtp p crc = case coerceFmapTensorProduct ([]::[v]) crc of
                   Coercion -> Coercion
+
+instance ∀ i c f p . DimensionAware (f p) => DimensionAware (Gnrx.M1 i c f p) where
+  type StaticDimension (Gnrx.M1 i c f p) = StaticDimension (f p)
+  staticDimensionSing = withSingI (staticDimensionSing @(f p)) sing
 
 instance ∀ i c f p . TensorSpace (f p) => TensorSpace (Gnrx.M1 i c f p) where
   type TensorProduct (Gnrx.M1 i c f p) w = TensorProduct (f p) w
@@ -1232,6 +1281,14 @@ instance ∀ i c f p . TensorSpace (f p) => TensorSpace (Gnrx.M1 i c f p) where
                   Coercion -> Coercion
 
 
+instance ∀ f g p . ( DimensionAware (f p), DimensionAware (g p)
+                   , Scalar (f p) ~ Scalar (g p) )
+                       => DimensionAware ((f:*:g) p) where
+  type StaticDimension ((f:*:g) p)
+           = Maybe.ZipWithPlus (StaticDimension (f p)) (StaticDimension (g p))
+  staticDimensionSing = Maybe.zipWithPlusSing (staticDimensionSing @(f p))
+                                              (staticDimensionSing @(g p))
+
 instance ∀ f g p . ( TensorSpace (f p), TensorSpace (g p), Scalar (f p) ~ Scalar (g p) )
                        => TensorSpace ((f:*:g) p) where
   type TensorProduct ((f:*:g) p) w = (f p⊗w, g p⊗w)
@@ -1271,6 +1328,12 @@ instance ∀ f g p . ( TensorSpace (f p), TensorSpace (g p), Scalar (f p) ~ Scal
   wellDefinedTensor (Tensor (u,v))
          = liftA2 ((Tensor.) . (,)) (wellDefinedTensor u) (wellDefinedTensor v)
 
+
+instance ∀ m . ( Semimanifold m, DimensionAware (Needle (VRep m))
+               , Scalar (Needle m) ~ Scalar (Needle (VRep m)) )
+                  => DimensionAware (GenericNeedle m) where
+  type StaticDimension (GenericNeedle m) = StaticDimension (Needle (VRep m))
+  staticDimensionSing = withSingI (staticDimensionSing @(Needle (VRep m))) sing
 
 instance ∀ m . ( Semimanifold m, TensorSpace (Needle (VRep m))
                                , Scalar (Needle m) ~ Scalar (Needle (VRep m)) )
@@ -1395,6 +1458,18 @@ instance (AdditiveGroup (DualVector (f p)), AdditiveGroup (DualVector (g p)))
     => PseudoAffine (GenericTupleDual f g p) where
   p.-~.q = Just $ p.-.q
   (.-~!) = (.-.)
+
+
+instance ( DimensionAware (f p), DimensionAware (g p)
+         , VectorSpace (DualVector (f p)), VectorSpace (DualVector (g p))
+         , Scalar (f p) ~ Scalar (g p)
+         , Scalar (f p) ~ Scalar (DualVector (f p))
+         , Scalar (g p) ~ Scalar (DualVector (g p)) )
+    => DimensionAware (GenericTupleDual f g p) where
+  type StaticDimension (GenericTupleDual f g p)
+           = Maybe.ZipWithPlus (StaticDimension (f p)) (StaticDimension (g p))
+  staticDimensionSing = Maybe.zipWithPlusSing (staticDimensionSing @(f p))
+                                              (staticDimensionSing @(g p))
 
 instance ( LinearSpace (f p), LinearSpace (g p)
          , VectorSpace (DualVector (f p)), VectorSpace (DualVector (g p))
@@ -1577,6 +1652,16 @@ instance AdditiveGroup (DualVector (Needle (VRep m)))
     => PseudoAffine (GenericNeedle' m) where
   p.-~.q = pure (p^-^q)
   (.-~!) = (^-^)
+
+
+instance ∀ m . ( Semimanifold m, DimensionAware (DualVector (Needle (VRep m)))
+               , Scalar (Needle m) ~ Scalar (DualVector (Needle (VRep m))) )
+                  => DimensionAware (GenericNeedle' m) where
+  type StaticDimension (GenericNeedle' m)
+         = StaticDimension (DualVector (Needle (VRep m)))
+  staticDimensionSing
+      = withSingI (staticDimensionSing @(DualVector (Needle (VRep m)))) sing
+
 instance ∀ m . ( Semimanifold m, TensorSpace (DualVector (Needle (VRep m)))
                , Scalar (Needle m) ~ Scalar (DualVector (Needle (VRep m))) )
                   => TensorSpace (GenericNeedle' m) where
