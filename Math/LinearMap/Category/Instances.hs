@@ -116,7 +116,7 @@ instance TensorSpace (S) where { \
   fmapTensor = bilinearFunction $ \f (Tensor t) -> Tensor (f-+$>t); \
   fzipTensorWith = bilinearFunction \
                    $ \(LinearFunction f) -> follow Tensor <<< f <<< flout Tensor *** flout Tensor; \
-  coerceFmapTensorProduct _ VSCCoercion = VSCCoercion; \
+  coerceFmapTensorProduct _ VSCCoercion = Coercion; \
   wellDefinedTensor (Tensor w) = Tensor <$> wellDefinedVector w }; \
 instance LinearSpace (S) where { \
   type DualVector (S) = (S); \
@@ -179,7 +179,7 @@ instance ∀ s . (Num' s, Eq s) => TensorSpace (V s) where {                    
   fzipTensorWith = bilinearFunction $ \
           \(LinearFunction f) (Tensor vw, Tensor vx) \
                   -> Tensor $ liftA2 (curry f) vw vx; \
-  coerceFmapTensorProduct _ VSCCoercion = VSCCoercion; \
+  coerceFmapTensorProduct _ VSCCoercion = Coercion; \
   wellDefinedTensor = getTensorProduct >>> Hask.traverse wellDefinedVector \
                        >>> fmap Tensor };                  \
 instance ∀ s . (Num' s, Eq s) => LinearSpace (V s) where {                  \
@@ -333,7 +333,7 @@ instance (Num' n, UArr.Unbox n) => TensorSpace (FinSuppSeq n) where
   fmapTensor = bilinearFunction $ \f (Tensor a) -> Tensor $ map (f$) a
   fzipTensorWith = bilinearFunction $ \f (Tensor a, Tensor b)
                      -> Tensor $ zipWith (curry $ arr f) a b
-  coerceFmapTensorProduct _ VSCCoercion = VSCCoercion
+  coerceFmapTensorProduct _ VSCCoercion = Coercion
   wellDefinedTensor (Tensor a) = Tensor <$> Hask.traverse wellDefinedVector a
   
 
@@ -373,7 +373,7 @@ instance (Num' n, UArr.Unbox n) => TensorSpace (Sequence n) where
   fmapTensor = bilinearFunction $ \f (Tensor a) -> Tensor $ map (f$) a
   fzipTensorWith = bilinearFunction $ \f (Tensor a, Tensor b)
                      -> Tensor $ zipWith (curry $ arr f) a b
-  coerceFmapTensorProduct _ VSCCoercion = VSCCoercion
+  coerceFmapTensorProduct _ VSCCoercion = Coercion
 
 instance (Num' n, UArr.Unbox n) => LinearSpace (Sequence n) where
   type DualVector (Sequence n) = FinSuppSeq n
@@ -491,11 +491,13 @@ instance (Num' s, TensorSpace v, Scalar v ~ s) => TensorSpace (SymmetricTensor s
   tensorProduct = bilinearFunction $ \(SymTensor t) g
                     -> Tensor $ fmap (LinearFunction (⊗g)) $ t
   transposeTensor = LinearFunction $ \(Tensor f) -> getLinearFunction (
-                            arr (fmap VSCCoercion) . transposeTensor . arr lassocTensor) f
+                            undefined -- arr (fmap VSCCoercion)
+                            . transposeTensor . arr lassocTensor) f
   fmapTensor = bilinearFunction $ \f (Tensor t) -> Tensor $ fmap (fmap f) $ t
   fzipTensorWith = bilinearFunction $ \f (Tensor s, Tensor t)
                  -> Tensor $ fzipWith (fzipWith f) $ (s,t)
-  coerceFmapTensorProduct _ crc = fmap (fmap crc)
+  coerceFmapTensorProduct _ crc = undefined -- case fmap (fmap crc) :: VSCCoercion of
+      -- VSCCoercion -> Coercion
   wellDefinedTensor (Tensor t) = Tensor <$> wellDefinedVector t
 
 instance (Num' s, LinearSpace v, Scalar v ~ s) => LinearSpace (SymmetricTensor s v) where
