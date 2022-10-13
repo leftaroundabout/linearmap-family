@@ -1280,7 +1280,6 @@ instance ∀ i c f p . TensorSpace (f p) => TensorSpace (Gnrx.M1 i c f p) where
          cmtp p crc = case coerceFmapTensorProduct ([]::[f p]) crc of
                   Coercion -> Coercion
 
-
 instance ∀ f g p . ( DimensionAware (f p), DimensionAware (g p)
                    , Scalar (f p) ~ Scalar (g p) )
                        => DimensionAware ((f:*:g) p) where
