@@ -37,6 +37,11 @@ build-type:          Simple
 -- extra-source-files:  
 cabal-version:       >=1.10
 
+flag singletons3
+  description: Whether to use a version of the singletons package after its split in a core- and base part
+  default: True
+  manual: False
+
 library
   exposed-modules:     Math.LinearMap.Category
                        Math.LinearMap.Category.Instances.Deriving
@@ -70,7 +75,7 @@ library
                        ghc-typelits-natnormalise >=0.7 && <0.8,
                        type-natural >=1.0 && <1.2,
                        QuickCheck >=2.11 && <2.15
-  if impl(ghc >= 9.0)
+  if flag(singletons3)
     build-depends:
                        singletons >=3.0 && <3.1,
                        singletons-base >=3.0 && <3.1
