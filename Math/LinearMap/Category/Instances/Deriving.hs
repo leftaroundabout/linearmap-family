@@ -131,6 +131,15 @@ data LinearSpaceFromBasisDerivationConfig = LinearSpaceFromBasisDerivationConfig
 instance Default LinearSpaceFromBasisDerivationConfig where
   def = LinearSpaceFromBasisDerivationConfig
 
+
+requireExtensions :: [Extension] -> Q ()
+requireExtensions reqExts = do
+  exts <- extsEnabled
+  forM_ reqExts $ \re -> do
+    if re`elem`exts
+     then return ()
+     else reportError $ "This macro requires -X"++show re++"."
+
 -- | More general version of 'makeLinearSpaceFromBasis', that can be used with
 --   parameterised types.
 makeLinearSpaceFromBasis' :: LinearSpaceFromBasisDerivationConfig
@@ -144,10 +153,7 @@ makeLinearSpaceFromBasis' _ cxtv = do
    (_, cxt', v') <- cxtv
    return (pure cxt', pure v')
  
- exts <- extsEnabled
- if not $ all (`elem`exts) [TypeFamilies, ScopedTypeVariables, TypeApplications]
-   then reportError "This macro requires -XTypeFamilies, -XScopedTypeVariables and -XTypeApplications."
-   else pure ()
+ requireExtensions [ TypeFamilies, ScopedTypeVariables, TypeApplications ]
  
  sequence
   [ InstanceD Nothing <$> cxt <*> [t|Semimanifold $v|] <*> [d|
@@ -1467,6 +1473,8 @@ abstractVS_symTensorDualBasisCandidates = scalarsSameInAbstraction @v
 copyNewtypeInstances :: Q Type -> [Name] -> DecsQ
 copyNewtypeInstances cxtv classes = do
 
+ requireExtensions [ TypeFamilies, ScopedTypeVariables, TypeApplications ]
+ 
  (tvbs, cxt, (a,c)) <- do
    (tvbs', cxt', a') <- deQuantifyType cxtv
    let extractImplementationType (AppT tc (VarT tvb)) atvbs
