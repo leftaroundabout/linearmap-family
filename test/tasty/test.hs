@@ -13,7 +13,9 @@
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE TypeFamilies               #-}
+{-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE TypeApplications           #-}
+{-# LANGUAGE DataKinds                  #-}
 {-# LANGUAGE UnicodeSyntax              #-}
 {-# LANGUAGE UndecidableInstances       #-}
 {-# LANGUAGE TemplateHaskell            #-}
@@ -42,17 +44,18 @@ newtype ℝ⁴ = ℝ⁴ { getℝ⁴ :: V4 ℝ }
 copyNewtypeInstances [t| ℝ⁴ |]
    [ ''AdditiveGroup, ''AffineSpace, ''VectorSpace
    , ''Semimanifold, ''PseudoAffine
-   , ''DimensionAware, ''TensorSpace, ''LinearSpace
+   , ''DimensionAware, ''Dimensional, ''TensorSpace, ''LinearSpace
    , ''FiniteDimensional, ''SemiInner, ''InnerSpace ]
 
 newtype H¹ℝ⁴ a = H¹ℝ⁴ { getH¹ℝ⁴ :: ((a,a),(a,a)) }
  deriving (Eq, Show)
 
 copyNewtypeInstances [t| ∀ a
-          . (RealFloat' a, FiniteDimensional a, SemiInner a) => H¹ℝ⁴ a |]
+          . (RealFloat' a, DimensionAware a, FiniteDimensional a, SemiInner a)
+                 => H¹ℝ⁴ a |]
    [ ''AdditiveGroup, ''AffineSpace, ''VectorSpace
    , ''Semimanifold, ''PseudoAffine
-   , ''TensorSpace, ''LinearSpace
+   , ''DimensionAware, ''Dimensional, ''TensorSpace, ''LinearSpace
    , ''FiniteDimensional, ''SemiInner ]
 
 derivative₄ :: H¹ℝ⁴ ℝ -> ℝ⁴

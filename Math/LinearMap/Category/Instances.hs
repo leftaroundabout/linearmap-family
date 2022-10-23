@@ -13,6 +13,7 @@
 {-# LANGUAGE UndecidableInstances       #-}
 {-# LANGUAGE TypeOperators              #-}
 {-# LANGUAGE TypeFamilies               #-}
+{-# LANGUAGE FunctionalDependencies     #-}
 {-# LANGUAGE DataKinds                  #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE StandaloneDeriving         #-}
@@ -160,7 +161,10 @@ instance Num s => Semimanifold (V s) where {  \
 instance Num s => PseudoAffine (V s) where {         \
   v.-~.w = pure (v^-^w); (.-~!) = (^-^) };              \
 instance ∀ s . (Num' s, Eq s) => DimensionAware (V s) where {                     \
-  type StaticDimension (V s) = 'Just (d) };                               \
+  type StaticDimension (V s) = 'Just (d);       \
+  dimensionalityWitness = IsStaticDimensional };                               \
+instance ∀ s . (Num' s, Eq s) => (d)`Dimensional`V (s) where {                     \
+   };                               \
 instance ∀ s . (Num' s, Eq s) => TensorSpace (V s) where {                     \
   type TensorProduct (V s) w = V w;                               \
   scalarSpaceWitness = case closedScalarWitness :: ClosedScalarWitness s of{ \
@@ -316,6 +320,7 @@ instance (Num' n, UArr.Unbox n) => PseudoAffine (FinSuppSeq n) where
 
 instance (Num' n, UArr.Unbox n) => DimensionAware (FinSuppSeq n) where
   type StaticDimension (FinSuppSeq n) = 'Nothing
+  dimensionalityWitness = IsFlexibleDimensional
 instance (Num' n, UArr.Unbox n) => TensorSpace (FinSuppSeq n) where
   type TensorProduct (FinSuppSeq n) v = [v]
   wellDefinedVector (FinSuppSeq v) = FinSuppSeq <$> UArr.mapM wellDefinedVector v
@@ -355,6 +360,7 @@ instance (Num' n, UArr.Unbox n) => PseudoAffine (Sequence n) where
 
 instance (Num' n, UArr.Unbox n) => DimensionAware (Sequence n) where
   type StaticDimension (Sequence n) = 'Nothing
+  dimensionalityWitness = IsFlexibleDimensional
 instance (Num' n, UArr.Unbox n) => TensorSpace (Sequence n) where
   type TensorProduct (Sequence n) v = [v]
   wellDefinedVector (SoloChunk n c) = SoloChunk n <$> UArr.mapM wellDefinedVector c

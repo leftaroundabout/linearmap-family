@@ -77,6 +77,7 @@ module Math.LinearMap.Category (
             , module Data.VectorSpace
             , LSpace
             , DimensionAware (..)
+            , Dimensional (..)
             , TensorSpace (..)
             , LinearSpace (..)
             -- ** Orthonormal systems

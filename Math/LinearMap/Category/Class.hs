@@ -13,6 +13,7 @@
 {-# LANGUAGE UndecidableInstances       #-}
 {-# LANGUAGE FunctionalDependencies     #-}
 {-# LANGUAGE TypeOperators              #-}
+{-# LANGUAGE NoStarIsType               #-}
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE AllowAmbiguousTypes        #-}
 {-# LANGUAGE TypeApplications           #-}
@@ -38,7 +39,7 @@ import Data.AffineSpace
 import Prelude ()
 import qualified Prelude as Hask
 
-import Control.Category.Constrained.Prelude
+import Control.Category.Constrained.Prelude hiding (type (+))
 import Control.Arrow.Constrained
 
 import Data.Coerce
@@ -51,8 +52,15 @@ import Math.VectorSpace.ZeroDimensional
 import Data.VectorSpace.Free
 
 import Data.Singletons (sing, withSingI)
+#if MIN_VERSION_singletons(3,0,0)
+import Prelude.Singletons (SNum(..))
+import GHC.TypeLits.Singletons (withKnownNat)
+#else
+import Data.Singletons.Prelude.Num (SNum(..))
+import Data.Singletons.TypeLits (withKnownNat)
+#endif
 import Data.Kind (Type)
-import GHC.TypeLits (Nat)
+import GHC.TypeLits (Nat, type (+), type (*), KnownNat)
 import qualified GHC.Generics as Gnrx
 import GHC.Generics (Generic, (:*:)((:*:)))
 
@@ -288,6 +296,8 @@ fmapLinearMap = case dualSpaceWitness :: DualSpaceWitness v of
 
 instance DimensionAware (ZeroDim s) where
   type StaticDimension (ZeroDim s) = 'Just 0
+  dimensionalityWitness = IsStaticDimensional
+instance 0`Dimensional`ZeroDim s where
 
 instance Num' s => TensorSpace (ZeroDim s) where
   type TensorProduct (ZeroDim s) v = ZeroDim s
@@ -683,14 +693,23 @@ rassocTensor :: VSCCoercion (Tensor s (Tensor s u v) w) (Tensor s u (Tensor s v 
 rassocTensor = VSCCoercion
 
 
-instance ∀ s u v . ( LinearSpace u, DimensionAware u
-                   , TensorSpace v, DimensionAware v
+instance ∀ s u v . ( LinearSpace u, TensorSpace v
+                   , DimensionAware u, DimensionAware v
                    , Scalar u ~ s, Scalar v ~ s )
                        => DimensionAware (LinearMap s u v) where
   type StaticDimension (LinearMap s u v)
           = Maybe.ZipWithTimes (StaticDimension u) (StaticDimension v)
-  staticDimensionSing
-     = Maybe.zipWithTimesSing (staticDimensionSing @u) (staticDimensionSing @v)
+  dimensionalityWitness = case (dimensionalityWitness @u, dimensionalityWitness @v) of
+    (IsStaticDimensional, IsStaticDimensional)
+        -> withKnownNat (dimensionalitySing @u %* dimensionalitySing @v)
+              IsStaticDimensional
+    (IsFlexibleDimensional, _) -> IsFlexibleDimensional
+    (_, IsFlexibleDimensional) -> IsFlexibleDimensional
+instance ∀ s n u m v nm . ( n`Dimensional`u, m`Dimensional`v
+                          , LinearSpace u, TensorSpace v, Scalar u ~ s, Scalar v ~ s
+                          , KnownNat nm
+                          , nm ~ (n*m) )
+                   => nm`Dimensional`(LinearMap s u v) where
 
 instance ∀ s u v . ( LinearSpace u, TensorSpace v, Scalar u ~ s, Scalar v ~ s )
                        => TensorSpace (LinearMap s u v) where
@@ -835,14 +854,22 @@ instance ∀ s u v . (LinearSpace u, LinearSpace v, Scalar u ~ s, Scalar v ~ s)
   useTupleLinearSpaceComponents _ = usingNonTupleTypeAsTupleError
 
 
-instance ∀ s u v . ( TensorSpace u, DimensionAware u
-                   , TensorSpace v, DimensionAware v
-                   , Scalar u ~ s, Scalar v ~ s)
+instance ∀ s u v . ( TensorSpace u, TensorSpace v
+                   , DimensionAware u, DimensionAware v
+                   , Scalar u ~ s, Scalar v ~ s )
                        => DimensionAware (Tensor s u v) where
   type StaticDimension (Tensor s u v)
           = Maybe.ZipWithTimes (StaticDimension u) (StaticDimension v)
-  staticDimensionSing = Maybe.zipWithTimesSing (staticDimensionSing @u) 
-                                               (staticDimensionSing @v)
+  dimensionalityWitness = case (dimensionalityWitness @u, dimensionalityWitness @v) of
+    (IsStaticDimensional, IsStaticDimensional)
+        -> withKnownNat (dimensionalitySing @u %* dimensionalitySing @v)
+              IsStaticDimensional
+    (IsFlexibleDimensional, _) -> IsFlexibleDimensional
+    (_, IsFlexibleDimensional) -> IsFlexibleDimensional
+instance ∀ s n u m v nm . ( n`Dimensional`u, m`Dimensional`v
+                          , TensorSpace u, TensorSpace v, Scalar u ~ s, Scalar v ~ s
+                          , KnownNat nm, nm ~ (n*m) )
+                   => nm`Dimensional`(Tensor s u v) where
 
 instance ∀ s u v . (TensorSpace u, TensorSpace v, Scalar u ~ s, Scalar v ~ s)
                        => TensorSpace (Tensor s u v) where
@@ -1024,14 +1051,22 @@ asLinearFn :: VSCCoercion (Tensor s (LinearFunction s u v) w)
 asLinearFn = VSCCoercion
 
 
-instance ∀ s u v . ( LinearSpace u, DimensionAware u
-                   , LinearSpace v, DimensionAware v
-                   , Scalar u ~ s, Scalar v ~ s )
+instance ∀ s u v . ( LinearSpace u, LinearSpace v
+                   , DimensionAware u, DimensionAware v
+                   , Scalar u ~ s, Scalar v ~ s)
      => DimensionAware (LinearFunction s u v) where
   type StaticDimension (LinearFunction s u v)
           = Maybe.ZipWithTimes (StaticDimension u) (StaticDimension v)
-  staticDimensionSing = Maybe.zipWithTimesSing (staticDimensionSing @u)
-                                               (staticDimensionSing @v)
+  dimensionalityWitness = case (dimensionalityWitness @u, dimensionalityWitness @v) of
+    (IsStaticDimensional, IsStaticDimensional)
+        -> withKnownNat (dimensionalitySing @u %* dimensionalitySing @v)
+              IsStaticDimensional
+    (IsFlexibleDimensional, _) -> IsFlexibleDimensional
+    (_, IsFlexibleDimensional) -> IsFlexibleDimensional
+instance ∀ s n u m v nm . ( n`Dimensional`u, m`Dimensional`v
+                          , LinearSpace u, LinearSpace v, Scalar u ~ s, Scalar v ~ s
+                          , KnownNat nm, nm ~ (n*m) )
+                   => nm`Dimensional`(LinearFunction s u v) where
 
 
 instance ∀ s u v . (LinearSpace u, LinearSpace v, Scalar u ~ s, Scalar v ~ s)
@@ -1184,7 +1219,10 @@ usingNonTupleTypeAsTupleError = error "This is not a tuple type, the method shou
 
 instance ∀ v s . DimensionAware v => DimensionAware (Gnrx.Rec0 v s) where
   type StaticDimension (Gnrx.Rec0 v s) = StaticDimension v
-  staticDimensionSing = withSingI (staticDimensionSing @v) sing
+  dimensionalityWitness = case dimensionalityWitness @v of
+    IsStaticDimensional -> IsStaticDimensional
+    IsFlexibleDimensional -> IsFlexibleDimensional
+instance ∀ n v s . n`Dimensional`v => n`Dimensional`(Gnrx.Rec0 v s) where
 
 instance ∀ v s . TensorSpace v => TensorSpace (Gnrx.Rec0 v s) where
   type TensorProduct (Gnrx.Rec0 v s) w = TensorProduct v w
@@ -1233,7 +1271,10 @@ instance ∀ v s . TensorSpace v => TensorSpace (Gnrx.Rec0 v s) where
 
 instance ∀ i c f p . DimensionAware (f p) => DimensionAware (Gnrx.M1 i c f p) where
   type StaticDimension (Gnrx.M1 i c f p) = StaticDimension (f p)
-  staticDimensionSing = withSingI (staticDimensionSing @(f p)) sing
+  dimensionalityWitness = case dimensionalityWitness @(f p) of
+    IsStaticDimensional -> IsStaticDimensional
+    IsFlexibleDimensional -> IsFlexibleDimensional
+instance ∀ n i c f p . n`Dimensional`f p => n`Dimensional`Gnrx.M1 i c f p where
 
 instance ∀ i c f p . TensorSpace (f p) => TensorSpace (Gnrx.M1 i c f p) where
   type TensorProduct (Gnrx.M1 i c f p) w = TensorProduct (f p) w
@@ -1285,8 +1326,17 @@ instance ∀ f g p . ( DimensionAware (f p), DimensionAware (g p)
                        => DimensionAware ((f:*:g) p) where
   type StaticDimension ((f:*:g) p)
            = Maybe.ZipWithPlus (StaticDimension (f p)) (StaticDimension (g p))
-  staticDimensionSing = Maybe.zipWithPlusSing (staticDimensionSing @(f p))
-                                              (staticDimensionSing @(g p))
+  dimensionalityWitness = case ( dimensionalityWitness @(f p)
+                               , dimensionalityWitness @(g p) ) of
+    (IsStaticDimensional, IsStaticDimensional)
+        -> withKnownNat (dimensionalitySing @(f p) %+ dimensionalitySing @(g p))
+              IsStaticDimensional
+    (IsFlexibleDimensional, _) -> IsFlexibleDimensional
+    (_, IsFlexibleDimensional) -> IsFlexibleDimensional
+instance ∀ n f m g p nm . ( n`Dimensional`(f p), m`Dimensional`(g p)
+                          , Scalar (f p) ~ Scalar (g p)
+                          , KnownNat nm, nm ~ (n+m) )
+                   => nm`Dimensional`((f:*:g) p) where
 
 instance ∀ f g p . ( TensorSpace (f p), TensorSpace (g p), Scalar (f p) ~ Scalar (g p) )
                        => TensorSpace ((f:*:g) p) where
@@ -1332,7 +1382,13 @@ instance ∀ m . ( Semimanifold m, DimensionAware (Needle (VRep m))
                , Scalar (Needle m) ~ Scalar (Needle (VRep m)) )
                   => DimensionAware (GenericNeedle m) where
   type StaticDimension (GenericNeedle m) = StaticDimension (Needle (VRep m))
-  staticDimensionSing = withSingI (staticDimensionSing @(Needle (VRep m))) sing
+  dimensionalityWitness = case dimensionalityWitness @(Needle (VRep m)) of
+    IsStaticDimensional -> IsStaticDimensional
+    IsFlexibleDimensional -> IsFlexibleDimensional
+instance ∀ n m . ( Semimanifold m, n`Dimensional`Needle (VRep m)
+                 , KnownNat n
+                 , Scalar (Needle m) ~ Scalar (Needle (VRep m)) )
+                  => n`Dimensional`GenericNeedle m where
 
 instance ∀ m . ( Semimanifold m, TensorSpace (Needle (VRep m))
                                , Scalar (Needle m) ~ Scalar (Needle (VRep m)) )
@@ -1467,8 +1523,21 @@ instance ( DimensionAware (f p), DimensionAware (g p)
     => DimensionAware (GenericTupleDual f g p) where
   type StaticDimension (GenericTupleDual f g p)
            = Maybe.ZipWithPlus (StaticDimension (f p)) (StaticDimension (g p))
-  staticDimensionSing = Maybe.zipWithPlusSing (staticDimensionSing @(f p))
-                                              (staticDimensionSing @(g p))
+  dimensionalityWitness = case ( dimensionalityWitness @(f p)
+                               , dimensionalityWitness @(g p) ) of
+    (IsStaticDimensional, IsStaticDimensional)
+        -> withKnownNat (dimensionalitySing @(f p) %+ dimensionalitySing @(g p))
+              IsStaticDimensional
+    (IsFlexibleDimensional, _) -> IsFlexibleDimensional
+    (_, IsFlexibleDimensional) -> IsFlexibleDimensional
+instance ∀ n f m g p nm .
+              ( n`Dimensional`f p, m`Dimensional`g p
+              , VectorSpace (DualVector (f p)), VectorSpace (DualVector (g p))
+              , Scalar (f p) ~ Scalar (g p)
+              , Scalar (f p) ~ Scalar (DualVector (f p))
+              , Scalar (g p) ~ Scalar (DualVector (g p))
+              , KnownNat nm, nm ~ (n+m) )
+                   => nm`Dimensional`GenericTupleDual f g p where
 
 instance ( LinearSpace (f p), LinearSpace (g p)
          , VectorSpace (DualVector (f p)), VectorSpace (DualVector (g p))
@@ -1658,8 +1727,14 @@ instance ∀ m . ( Semimanifold m, DimensionAware (DualVector (Needle (VRep m)))
                   => DimensionAware (GenericNeedle' m) where
   type StaticDimension (GenericNeedle' m)
          = StaticDimension (DualVector (Needle (VRep m)))
-  staticDimensionSing
-      = withSingI (staticDimensionSing @(DualVector (Needle (VRep m)))) sing
+  dimensionalityWitness = case dimensionalityWitness
+                                 @(DualVector (Needle (VRep m))) of
+    IsStaticDimensional -> IsStaticDimensional
+    IsFlexibleDimensional -> IsFlexibleDimensional
+instance ∀ n m . ( Semimanifold m, n`Dimensional`DualVector (Needle (VRep m))
+                 , KnownNat n
+                 , Scalar (Needle m) ~ Scalar (DualVector (Needle (VRep m))) )
+                  => n`Dimensional`GenericNeedle' m where
 
 instance ∀ m . ( Semimanifold m, TensorSpace (DualVector (Needle (VRep m)))
                , Scalar (Needle m) ~ Scalar (DualVector (Needle (VRep m))) )

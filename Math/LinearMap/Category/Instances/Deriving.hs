@@ -12,6 +12,7 @@
 {-# LANGUAGE UndecidableInstances       #-}
 {-# LANGUAGE TypeOperators              #-}
 {-# LANGUAGE TypeFamilies               #-}
+{-# LANGUAGE FunctionalDependencies     #-}
 {-# LANGUAGE AllowAmbiguousTypes        #-}
 {-# LANGUAGE TypeApplications           #-}
 {-# LANGUAGE DataKinds                  #-}
@@ -71,13 +72,16 @@ import Math.VectorSpace.ZeroDimensional
 import Data.VectorSpace.Free
 
 import GHC.Generics (Generic)
-import GHC.TypeLits (Nat)
+import GHC.TypeLits (Nat, KnownNat)
 
 #if MIN_VERSION_singletons(3,0,0)
-import Prelude.Singletons (SingI, sing, withSingI)
+import GHC.TypeLits.Singletons (withKnownNat)
+import Prelude.Singletons
 #else
-import Data.Singletons.Prelude (SingI, sing, withSingI)
+import Data.Singletons.TypeLits (withKnownNat)
+import Data.Singletons.Prelude
 #endif
+    (SingI, sing, withSingI, SMaybe(..))
 import qualified Math.VectorSpace.DimensionAware.Theorems.MaybeNat as Maybe
 
 import Language.Haskell.TH
@@ -127,9 +131,13 @@ makeLinearSpaceFromBasis :: Q Type -> DecsQ
 makeLinearSpaceFromBasis v
    = makeLinearSpaceFromBasis' def $ deQuantifyType v
 
-data LinearSpaceFromBasisDerivationConfig = LinearSpaceFromBasisDerivationConfig
+data LinearSpaceFromBasisDerivationConfig
+  = LinearSpaceFromBasisDerivationConfig
+      { _treatBasisAsFinite :: Bool
+      }
 instance Default LinearSpaceFromBasisDerivationConfig where
   def = LinearSpaceFromBasisDerivationConfig
+      { _treatBasisAsFinite = False }
 
 
 requireExtensions :: [Extension] -> Q ()
@@ -148,14 +156,15 @@ makeLinearSpaceFromBasis' :: LinearSpaceFromBasisDerivationConfig
                         Specificity
 #endif
                           ], Cxt, Type) -> DecsQ
-makeLinearSpaceFromBasis' _ cxtv = do
+makeLinearSpaceFromBasis' config cxtv = do
  (cxt,v) <- do
    (_, cxt', v') <- cxtv
    return (pure cxt', pure v')
  
- requireExtensions [ TypeFamilies, ScopedTypeVariables, TypeApplications ]
+ requireExtensions [ TypeFamilies, MultiParamTypeClasses
+                   , ScopedTypeVariables, TypeApplications ]
  
- sequence
+ sequence (
   [ InstanceD Nothing <$> cxt <*> [t|Semimanifold $v|] <*> [d|
          type instance Needle $v = $v
 #if !MIN_VERSION_manifolds_core(0,6,0)
@@ -176,6 +185,15 @@ makeLinearSpaceFromBasis' _ cxtv = do
          type instance Diff $v = $v
          $(varP '(.+^)) = (^+^)
          $(varP '(.-.)) = (^-^)
+       |]
+  , if _treatBasisAsFinite config
+     then InstanceD Nothing <$> cxt <*> [t|DimensionAware $v|] <*> [d|
+         type instance StaticDimension $v = Cardinality (Basis $v)
+         $(varP 'dimensionalityWitness) = IsStaticDimensional
+       |]
+     else InstanceD Nothing <$> cxt <*> [t|DimensionAware $v|] <*> [d|
+         type instance StaticDimension $v = 'Nothing
+         $(varP 'dimensionalityWitness) = IsFlexibleDimensional
        |]
   , InstanceD Nothing <$> cxt <*> [t|TensorSpace $v|] <*> [d|
          type instance TensorProduct $v w = Basis $v :->: w
@@ -259,7 +277,13 @@ makeLinearSpaceFromBasis' _ cxtv = do
          $(varP 'useTupleLinearSpaceComponents) = \_ -> usingNonTupleTypeAsTupleError
  
        |]
-  ]
+  ] ++ if _treatBasisAsFinite config then [do
+     dim <- pure . VarT <$> newName "n"
+     InstanceD Nothing <$> ((:)<$>[t|Cardinality (Basis $v) ~ 'Just $dim|]<*>cxt)
+                 <*> [t|Dimensional $dim $v|] <*> [d|
+       |]]
+    else []
+   )
 
 data FiniteDimensionalFromBasisDerivationConfig
          = FiniteDimensionalFromBasisDerivationConfig
@@ -279,7 +303,7 @@ makeFiniteDimensionalFromBasis' :: FiniteDimensionalFromBasisDerivationConfig
 #endif
                        ], Cxt, Type) -> DecsQ
 makeFiniteDimensionalFromBasis' _ cxtv = do
- generalInsts <- makeLinearSpaceFromBasis' def cxtv
+ generalInsts <- makeLinearSpaceFromBasis' def{_treatBasisAsFinite=True} cxtv
  (cxt,v) <- do
    (_, cxt', v') <- cxtv
    return (pure cxt', pure v')
@@ -422,7 +446,26 @@ instance AdditiveGroup v => PseudoAffine (DualVectorFromBasis v) where
   (.-~!) = (^-^)
   p.-~.q = pure (p^-^q)
 
+type family Cardinality b :: Maybe Nat
+
+type instance Cardinality () = 'Just 1
+type instance Cardinality (Either a b)
+         = Maybe.ZipWithPlus (Cardinality a) (Cardinality b)
+type instance Cardinality (a,b)
+         = Maybe.ZipWithTimes (Cardinality a) (Cardinality b)
+
+instance (HasBasis v, SingI (Cardinality (Basis v)))
+              => DimensionAware (DualVectorFromBasis v) where
+  type StaticDimension (DualVectorFromBasis v) = Cardinality (Basis v)
+  dimensionalityWitness = case sing @(Cardinality (Basis v)) of
+     SNothing -> IsFlexibleDimensional
+     SJust sd -> withKnownNat sd IsStaticDimensional
+instance ( HasBasis v, KnownNat n, Cardinality (Basis v) ~ 'Just n )
+              => n`Dimensional`DualVectorFromBasis v where
+  
+
 instance ∀ v . ( HasBasis v, Num' (Scalar v)
+               , SingI (Cardinality (Basis v))
                , Scalar (Scalar v) ~ Scalar v
                , HasTrie (Basis v)
                , Eq v )
@@ -462,6 +505,8 @@ instance ∀ v . ( HasBasis v, Num' (Scalar v)
 -- | Do not manually instantiate this class. It is used internally
 --   by 'makeLinearSpaceFromBasis'.
 class ( HasBasis v, Num' (Scalar v)
+      , StaticDimension v ~ (Cardinality (Basis v))
+      , SingI (StaticDimension v)
       , LinearSpace v, DualVector v ~ DualVectorFromBasis v)
     => BasisGeneratedSpace v where
   proveTensorProductIsTrie
@@ -638,6 +683,12 @@ class ( AbstractVectorSpace v, TensorSpace (VectorSpaceImplementation v)
       , Semimanifold v, Interior v ~ v
 #endif
       ) => AbstractTensorSpace v where
+  staticDimensionSameInAbstraction
+    :: ( StaticDimension (VectorSpaceImplementation v) ~ StaticDimension v
+            => ρ ) -> ρ
+  sameDimensionalInAbstraction
+    :: n`Dimensional`VectorSpaceImplementation v
+            => (n`Dimensional`v => ρ) -> ρ
   abstractTensorProductsCoercion
     :: Coercion (TensorProduct v w)
                 (TensorProduct (VectorSpaceImplementation v) w)
@@ -727,10 +778,18 @@ instance ∀ a c . ( AbstractLinearSpace a, VectorSpaceImplementation a ~ c
   (*^) = scalarsSameInAbstractionAndDuals @a (coerce ((*^) @(DualVector c)))
 
 instance ∀ a c . ( AbstractLinearSpace a, VectorSpaceImplementation a ~ c
-                 , TensorSpace (DualVector c), DimensionAware c )
+                 , DimensionAware c
+                 , TensorSpace (DualVector c) )
      => DimensionAware (AbstractDualVector a c) where
   type StaticDimension (AbstractDualVector a c) = StaticDimension c
-  staticDimensionSing = withSingI (staticDimensionSing @c) sing
+  dimensionalityWitness = case dimensionalityWitness @c of
+     IsStaticDimensional -> IsStaticDimensional
+     IsFlexibleDimensional -> IsFlexibleDimensional
+instance ∀ n a c . ( AbstractLinearSpace a
+                   , VectorSpaceImplementation a ~ c
+                   , n`Dimensional`c
+                   , TensorSpace (DualVector c) )
+     => n`Dimensional`AbstractDualVector a c where
 
 instance ∀ a c . ( AbstractLinearSpace a, VectorSpaceImplementation a ~ c
                  , TensorSpace (DualVector c) )
@@ -1033,6 +1092,17 @@ abstractVS_innerProd :: ∀ v .
        => v -> v -> Scalar v
 abstractVS_innerProd = scalarsSameInAbstraction @v
   ( coerce ((<.>) @(VectorSpaceImplementation v)) )
+
+abstractVS_dimensionalityWitness
+    :: ∀ v . ( AbstractTensorSpace v
+             , DimensionAware (VectorSpaceImplementation v) )
+      => DimensionalityWitness v
+abstractVS_dimensionalityWitness
+   = staticDimensionSameInAbstraction @v
+      ( case dimensionalityWitness @(VectorSpaceImplementation v) of
+           IsStaticDimensional
+             -> sameDimensionalInAbstraction @v IsStaticDimensional
+           IsFlexibleDimensional -> IsFlexibleDimensional )
 
 abstractVS_scalarsSameInAbstraction :: ∀ v ρ .
     ( AbstractVectorSpace v
@@ -1473,7 +1543,9 @@ abstractVS_symTensorDualBasisCandidates = scalarsSameInAbstraction @v
 copyNewtypeInstances :: Q Type -> [Name] -> DecsQ
 copyNewtypeInstances cxtv classes = do
 
- requireExtensions [ TypeFamilies, ScopedTypeVariables, TypeApplications ]
+ requireExtensions [ TypeFamilies, MultiParamTypeClasses
+                   , ScopedTypeVariables, TypeApplications
+                   , DataKinds ]
  
  (tvbs, cxt, (a,c)) <- do
    (tvbs', cxt', a') <- deQuantifyType cxtv
@@ -1592,7 +1664,14 @@ copyNewtypeInstances cxtv classes = do
      "DimensionAware" -> InstanceD Nothing <$> cxt <*>
                           [t|DimensionAware $a|] <*> [d|
          type instance StaticDimension $a = StaticDimension $c
+         $(varP 'dimensionalityWitness) = abstractVS_dimensionalityWitness
       |]
+     "Dimensional" -> do
+       dim <- pure . VarT <$> newName "n"
+       InstanceD Nothing <$> ((:)<$>[t|StaticDimension $c ~ 'Just $dim|]
+                          <*>((:)<$>[t|KnownNat $dim|]<*>cxt)) <*>
+                          [t|Dimensional $dim $a|] <*> [d|
+        |]
      "TensorSpace" -> InstanceD Nothing <$> cxt <*>
                           [t|TensorSpace $a|] <*> [d|
          type instance TensorProduct $a w = TensorProduct $c w
@@ -1615,6 +1694,10 @@ copyNewtypeInstances cxtv classes = do
       |]
      "AbstractTensorSpace" -> InstanceD Nothing <$> cxt <*>
                           [t|AbstractTensorSpace $a|] <*> [d|
+         $(varP 'staticDimensionSameInAbstraction)
+                  = \φ -> φ
+         $(varP 'sameDimensionalInAbstraction)
+                  = \φ -> φ
          $(varP 'abstractTensorProductsCoercion)
                   = Coercion
       |]
