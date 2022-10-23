@@ -24,12 +24,20 @@
 {-# LANGUAGE ScopedTypeVariables    #-}
 {-# LANGUAGE TypeOperators          #-}
 {-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE CPP                    #-}
 
 module Math.VectorSpace.DimensionAware where
 
 import Data.VectorSpace
 
 import Data.Singletons (SingI, sing, Sing)
+#if MIN_VERSION_singletons(3,0,0)
+import Prelude.Singletons (SNum(..))
+import GHC.TypeLits.Singletons (withKnownNat)
+#else
+import Data.Singletons.Prelude.Num (SNum(..))
+import Data.Singletons.TypeLits (withKnownNat)
+#endif
 
 import GHC.TypeLits
 
@@ -54,11 +62,6 @@ class VectorSpace v => DimensionAware v where
   type StaticDimension v :: Maybe Nat
   type StaticDimension v = 'Nothing
 
-  staticDimensionSing :: Sing (StaticDimension v)
-  default staticDimensionSing :: SingI (StaticDimension v)
-               => Sing (StaticDimension v)
-  staticDimensionSing = sing
-
   dimensionalityWitness :: DimensionalityWitness v
 
 
@@ -81,17 +84,24 @@ instance Integral n => DimensionAware (Ratio n) where
 instance ∀ u v . (DimensionAware u, DimensionAware v, Scalar u ~ Scalar v)
                    => DimensionAware (u,v) where
   type StaticDimension (u,v) = Maybe.ZipWithPlus (StaticDimension u) (StaticDimension v)
-  staticDimensionSing = Maybe.zipWithPlusSing (staticDimensionSing @u)
-                                              (staticDimensionSing @v)
   dimensionalityWitness = case (dimensionalityWitness @u, dimensionalityWitness @v) of
-    (IsStaticDimensional, IsStaticDimensional) -> IsStaticDimensional
+    (IsStaticDimensional, IsStaticDimensional)
+       -> withKnownNat (dimensionalitySing @u %+ dimensionalitySing @v)
+              IsStaticDimensional
     (IsFlexibleDimensional, _) -> IsFlexibleDimensional
     (_, IsFlexibleDimensional) -> IsFlexibleDimensional
 
 
-class (DimensionAware v, StaticDimension v ~ 'Just n)
+class (DimensionAware v, KnownNat n, StaticDimension v ~ 'Just n)
            => n`Dimensional`v | v -> n
 
+dimensionalitySing :: ∀ v n . n`Dimensional`v => Sing n
+dimensionalitySing = sing
+
+staticDimensionSing :: ∀ v . DimensionAware v => Sing (StaticDimension v)
+staticDimensionSing = case dimensionalityWitness @v of
+  IsStaticDimensional -> sing
+  IsFlexibleDimensional -> sing
   
 instance 1`Dimensional`Float   where
 instance 1`Dimensional`Double  where
@@ -102,6 +112,7 @@ instance Integral n => 1`Dimensional`Ratio n where
   
 instance ∀ n u m v nm . ( n`Dimensional`u, m`Dimensional`v
                         , Scalar u ~ Scalar v
+                        , KnownNat nm
                         , nm ~ (n+m) )
                    => nm`Dimensional`(u,v) where
 
