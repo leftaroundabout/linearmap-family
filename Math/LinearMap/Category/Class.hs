@@ -71,7 +71,8 @@ data ClosedScalarWitness s where
 data TrivialTensorWitness s w where
   TrivialTensorWitness :: w ~ TensorProduct s w => TrivialTensorWitness s w
 
-class (Num s, LinearSpace s, FreeVectorSpace s) => Num' s where
+class (Num s, LinearSpace s, FreeVectorSpace s, 1`Dimensional`s)
+          => Num' s where
   closedScalarWitness :: ClosedScalarWitness s
   default closedScalarWitness :: (Scalar s ~ s, DualVector s ~ s) => ClosedScalarWitness s
   closedScalarWitness = ClosedScalarWitness
