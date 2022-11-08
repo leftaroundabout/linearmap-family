@@ -682,10 +682,8 @@ class ( AbstractVectorSpace v, TensorSpace (VectorSpaceImplementation v)
 #if !MIN_VERSION_manifolds_core(0,6,0)
       , Semimanifold v, Interior v ~ v
 #endif
+      , StaticDimension v ~ StaticDimension (VectorSpaceImplementation v)
       ) => AbstractTensorSpace v where
-  staticDimensionSameInAbstraction
-    :: ( StaticDimension (VectorSpaceImplementation v) ~ StaticDimension v
-            => ρ ) -> ρ
   sameDimensionalInAbstraction
     :: n`Dimensional`VectorSpaceImplementation v
             => (n`Dimensional`v => ρ) -> ρ
@@ -778,7 +776,6 @@ instance ∀ a c . ( AbstractLinearSpace a, VectorSpaceImplementation a ~ c
   (*^) = scalarsSameInAbstractionAndDuals @a (coerce ((*^) @(DualVector c)))
 
 instance ∀ a c . ( AbstractLinearSpace a, VectorSpaceImplementation a ~ c
-                 , DimensionAware c
                  , TensorSpace (DualVector c) )
      => DimensionAware (AbstractDualVector a c) where
   type StaticDimension (AbstractDualVector a c) = StaticDimension c
@@ -1098,11 +1095,10 @@ abstractVS_dimensionalityWitness
              , DimensionAware (VectorSpaceImplementation v) )
       => DimensionalityWitness v
 abstractVS_dimensionalityWitness
-   = staticDimensionSameInAbstraction @v
-      ( case dimensionalityWitness @(VectorSpaceImplementation v) of
+   = case dimensionalityWitness @(VectorSpaceImplementation v) of
            IsStaticDimensional
              -> sameDimensionalInAbstraction @v IsStaticDimensional
-           IsFlexibleDimensional -> IsFlexibleDimensional )
+           IsFlexibleDimensional -> IsFlexibleDimensional
 
 abstractVS_scalarsSameInAbstraction :: ∀ v ρ .
     ( AbstractVectorSpace v
@@ -1694,8 +1690,6 @@ copyNewtypeInstances cxtv classes = do
       |]
      "AbstractTensorSpace" -> InstanceD Nothing <$> cxt <*>
                           [t|AbstractTensorSpace $a|] <*> [d|
-         $(varP 'staticDimensionSameInAbstraction)
-                  = \φ -> φ
          $(varP 'sameDimensionalInAbstraction)
                   = \φ -> φ
          $(varP 'abstractTensorProductsCoercion)

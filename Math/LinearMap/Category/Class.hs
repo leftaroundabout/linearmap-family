@@ -126,13 +126,15 @@ instance EnhancedCat Coercion VSCCoercion where
 instance EnhancedCat (->) VSCCoercion where
   arr VSCCoercion x = coerce x
   
-class (VectorSpace v, PseudoAffine v) => TensorSpace v where
+class (DimensionAware v, PseudoAffine v) => TensorSpace v where
+  
   -- | The internal representation of a 'Tensor' product.
   -- 
   -- For Euclidean spaces, this is generally constructed by replacing each @s@
   -- scalar field in the @v@ vector with an entire @w@ vector. I.e., you have
   -- then a “nested vector” or, if @v@ is a @DualVector@ / “row vector”, a matrix.
   type TensorProduct v w :: Type
+  
   scalarSpaceWitness :: ScalarSpaceWitness v
   linearManifoldWitness :: LinearManifoldWitness v
   zeroTensor :: (TensorSpace w, Scalar w ~ Scalar v)
@@ -192,7 +194,8 @@ v⊗w = (tensorProduct-+$>v)-+$>w
 data DualSpaceWitness v where
   DualSpaceWitness :: ( LinearSpace (Scalar v), DualVector (Scalar v) ~ Scalar v
                       , LinearSpace (DualVector v), Scalar (DualVector v) ~ Scalar v
-                      , DualVector (DualVector v) ~ v )
+                      , DualVector (DualVector v) ~ v
+                      , StaticDimension (DualVector v) ~ StaticDimension v )
                              => DualSpaceWitness v
   
 -- | The class of vector spaces @v@ for which @'LinearMap' s v w@ is well-implemented.
@@ -694,9 +697,7 @@ rassocTensor :: VSCCoercion (Tensor s (Tensor s u v) w) (Tensor s u (Tensor s v 
 rassocTensor = VSCCoercion
 
 
-instance ∀ s u v . ( LinearSpace u, TensorSpace v
-                   , DimensionAware u, DimensionAware v
-                   , Scalar u ~ s, Scalar v ~ s )
+instance ∀ s u v . ( LinearSpace u, TensorSpace v, Scalar u ~ s, Scalar v ~ s )
                        => DimensionAware (LinearMap s u v) where
   type StaticDimension (LinearMap s u v)
           = Maybe.ZipWithTimes (StaticDimension u) (StaticDimension v)
@@ -824,8 +825,9 @@ instance ∀ s u v . (LinearSpace u, LinearSpace v, Scalar u ~ s, Scalar v ~ s)
   dualSpaceWitness = case ( dualSpaceWitness :: DualSpaceWitness u
                           , dualSpaceWitness :: DualSpaceWitness v ) of
       (DualSpaceWitness, DualSpaceWitness) -> DualSpaceWitness
-  linearId = case dualSpaceWitness :: DualSpaceWitness u of
-     DualSpaceWitness -> fromTensor . lassocTensor . fromLinearMap . fmap asTensor
+  linearId = case (dualSpaceWitness @u, dualSpaceWitness @v) of
+     (DualSpaceWitness, DualSpaceWitness)
+          -> fromTensor . lassocTensor . fromLinearMap . fmap asTensor
                             . curryLinearMap . fmap fromTensor $ tensorId
   tensorId = uncurryLinearMap . coUncurryLinearMap . fmap curryLinearMap
                . coCurryLinearMap . fmap deferLinearMap $ id
@@ -855,9 +857,7 @@ instance ∀ s u v . (LinearSpace u, LinearSpace v, Scalar u ~ s, Scalar v ~ s)
   useTupleLinearSpaceComponents _ = usingNonTupleTypeAsTupleError
 
 
-instance ∀ s u v . ( TensorSpace u, TensorSpace v
-                   , DimensionAware u, DimensionAware v
-                   , Scalar u ~ s, Scalar v ~ s )
+instance ∀ s u v . (TensorSpace u, TensorSpace v, Scalar u ~ s, Scalar v ~ s)
                        => DimensionAware (Tensor s u v) where
   type StaticDimension (Tensor s u v)
           = Maybe.ZipWithTimes (StaticDimension u) (StaticDimension v)
@@ -1145,7 +1145,9 @@ instance (LinearSpace u, LinearSpace v, Scalar u ~ s, Scalar v ~ s)
   type DualVector (LinearFunction s u v) = LinearFunction s v u
   dualSpaceWitness = case ( dualSpaceWitness :: DualSpaceWitness u
                           , dualSpaceWitness :: DualSpaceWitness v ) of
-      (DualSpaceWitness, DualSpaceWitness) -> DualSpaceWitness
+      (DualSpaceWitness, DualSpaceWitness)
+        -> Maybe.zipWithTimesCommu (staticDimensionSing @u) (staticDimensionSing @v)
+                                   DualSpaceWitness
   linearId = symVSC exposeLinearFn $ id
   tensorId = uncurryLinearMap . symVSC exposeLinearFn
                $ LinearFunction $ \f -> sampleLinearFunction-+$>tensorProduct-+$>f

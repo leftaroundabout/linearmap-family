@@ -51,8 +51,7 @@ newtype H¹ℝ⁴ a = H¹ℝ⁴ { getH¹ℝ⁴ :: ((a,a),(a,a)) }
  deriving (Eq, Show)
 
 copyNewtypeInstances [t| ∀ a
-          . (RealFloat' a, DimensionAware a, FiniteDimensional a, SemiInner a)
-                 => H¹ℝ⁴ a |]
+          . (RealFloat' a, FiniteDimensional a, SemiInner a) => H¹ℝ⁴ a |]
    [ ''AdditiveGroup, ''AffineSpace, ''VectorSpace
    , ''Semimanifold, ''PseudoAffine
    , ''DimensionAware, ''Dimensional, ''TensorSpace, ''LinearSpace

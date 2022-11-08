@@ -485,6 +485,9 @@ instance (TensorSpace v, Scalar v ~ s) => Semimanifold (SymmetricTensor s v) whe
 instance (TensorSpace v, Scalar v ~ s) => PseudoAffine (SymmetricTensor s v) where
   (.-~!) = (^-^)
   p.-~.q = pure (p^-^q)
+instance (Num' s, TensorSpace v, Scalar v ~ s)
+            => DimensionAware (SymmetricTensor s v)
+  -- TODO proper triangular dimension
 instance (Num' s, TensorSpace v, Scalar v ~ s) => TensorSpace (SymmetricTensor s v) where
   type TensorProduct (SymmetricTensor s v) x = Tensor s v (Tensor s v x)
   wellDefinedVector (SymTensor t) = SymTensor <$> wellDefinedVector t
@@ -520,13 +523,13 @@ instance (Num' s, LinearSpace v, Scalar v ~ s) => LinearSpace (SymmetricTensor s
                           , dualSpaceWitness :: DualSpaceWitness v ) of 
           (ClosedScalarWitness, DualSpaceWitness) -> DualSpaceWitness
   linearId = case dualSpaceWitness :: DualSpaceWitness v of
-    DualSpaceWitness -> LinearMap $ rassocTensor . asTensor
-                          . fmap (unsafeFollowVSC SymTensor . asTensor) $ id
-  tensorId = LinearMap $ asTensor . fmap asTensor . curryLinearMap
-                           . fmap asTensor
-                           . curryLinearMap
-                           . fmap (unsafeFollowVSC $ \t -> Tensor $ rassocTensor $ t)
-                           $ id
+    DualSpaceWitness -> LinearMap undefined -- $ rassocTensor . asTensor
+                          -- . fmap (unsafeFollowVSC SymTensor . asTensor) $ id
+  tensorId = LinearMap undefined -- $ asTensor . fmap asTensor . curryLinearMap
+                         --  . fmap asTensor
+                         --  . curryLinearMap
+                         --  . fmap (unsafeFollowVSC $ \t -> Tensor $ rassocTensor $ t)
+                         --  $ id
   applyLinear = case dualSpaceWitness :: DualSpaceWitness v of
     DualSpaceWitness -> bilinearFunction $ \(LinearMap f) (SymTensor t)
                    -> (getLinearFunction applyLinear
@@ -562,7 +565,7 @@ squareVs vs = SymTensor $ tensorProducts [(v,v) | v<-vs]
 type v⊗〃+>w = LinearMap (Scalar v) (SymmetricTensor (Scalar v) v) w
 
 currySymBilin :: LinearSpace v => (v⊗〃+>w) -+> (v+>(v+>w))
-currySymBilin = LinearFunction . arr $ fmap fromTensor . fromTensor . VSCCoercion
+currySymBilin = undefined -- LinearFunction . arr $ fmap fromTensor . fromTensor . VSCCoercion
 
 
 
