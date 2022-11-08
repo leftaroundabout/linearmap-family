@@ -25,6 +25,7 @@
 {-# LANGUAGE RankNTypes           #-}
 {-# LANGUAGE EmptyCase            #-}
 {-# LANGUAGE AllowAmbiguousTypes  #-}
+{-# LANGUAGE InstanceSigs         #-}
 {-# LANGUAGE TypeApplications     #-}
 {-# LANGUAGE DataKinds            #-}
 {-# LANGUAGE DefaultSignatures    #-}
@@ -456,7 +457,12 @@ instance ∀ u v . ( SemiInner u, SemiInner v, Scalar u ~ Scalar v, Num' (Scalar
 instance ∀ s u v . ( SemiInner u, SemiInner v, Scalar u ~ s, Scalar v ~ s )
            => SemiInner (Tensor s u v) where
   dualBasisCandidates = tensorDualBasisCandidates
-  tensorDualBasisCandidates = map (second $ arr rassocTensor)
+  tensorDualBasisCandidates :: ∀ w
+              . (SemiInner w, Scalar w ~ s)
+             => [(Int, Tensor s (Tensor s u v) w)]
+             -> Forest (Int, LinearMap s (Tensor s u v) (DualVector w))
+  tensorDualBasisCandidates = case dualSpaceWitness @w of
+     DualSpaceWitness -> map (second $ arr rassocTensor)
                     >>> tensorDualBasisCandidates
                     >>> map (fmap . second $ arr uncurryLinearMap)
 
@@ -474,7 +480,12 @@ instance ∀ s u v . ( LinearSpace u, SemiInner (DualVector u), SemiInner v
                                  -> [(Int, Tensor s (DualVector u) v)])
                     >>> tensorDualBasisCandidates
                     >>> coerce
-  tensorDualBasisCandidates = map (second $ arr hasteLinearMap)
+  tensorDualBasisCandidates :: ∀ w
+              . (SemiInner w, Scalar w ~ s)
+             => [(Int, Tensor s (LinearMap s u v) w)]
+             -> Forest (Int, LinearMap s (LinearMap s u v) (DualVector w))
+  tensorDualBasisCandidates = case dualSpaceWitness @w of
+     DualSpaceWitness -> map (second $ arr hasteLinearMap)
                     >>> dualBasisCandidates
                     >>> map (fmap . second $ arr coUncurryLinearMap)
   
@@ -922,8 +933,9 @@ instance ∀ s v .
                                        oscld = map (sqrt 0.5*)<$>o
                                    in concat (sd₀ []) ++ d ++ concat oscld
                                        ++ mkSym nw (n-1) (zipWith (.) sds $ (:)<$>oscld) rest
-  recomposeContraLinMap f tenss
-           = LinearMap . arr (rassocTensor . asTensor) . rcCLM dualFinitenessWitness f
+  recomposeContraLinMap f tenss = case dualSpaceWitness @v of
+     DualSpaceWitness ->
+             LinearMap . arr (rassocTensor . asTensor) . rcCLM dualFinitenessWitness f
                                     $ fmap getSymmetricTensor tenss
    where rcCLM :: (Hask.Functor f, LinearSpace w, s~Scalar w)
            => DualFinitenessWitness v

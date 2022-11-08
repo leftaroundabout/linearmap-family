@@ -97,7 +97,7 @@ data LinearManifoldWitness v where
 --   (if any). Note that this does not mean they also need to have the same inner
 --   product / dual space.
 data VSCCoercion a b where
-  VSCCoercion :: Coercible a b
+  VSCCoercion :: (Coercible a b, StaticDimension a ~ StaticDimension b)
      => VSCCoercion a b
 
 getVSCCoercion :: VSCCoercion a b -> Coercion a b
@@ -112,10 +112,12 @@ firstVSC VSCCoercion = VSCCoercion
 secondVSC :: VSCCoercion a b -> VSCCoercion (c,a) (c,b)
 secondVSC VSCCoercion = VSCCoercion
 
-unsafeFollowVSC :: Coercible a b => c a b -> VSCCoercion a b
+unsafeFollowVSC :: (Coercible a b, StaticDimension a ~ StaticDimension b)
+      => c a b -> VSCCoercion a b
 unsafeFollowVSC _ = VSCCoercion
 
-unsafeFloutVSC :: Coercible a b => c b a -> VSCCoercion a b
+unsafeFloutVSC :: (Coercible a b, StaticDimension a ~ StaticDimension b)
+      => c b a -> VSCCoercion a b
 unsafeFloutVSC _ = VSCCoercion
 
 instance Category VSCCoercion where
@@ -371,10 +373,14 @@ newtype LinearMap s v w = LinearMap {getLinearMap :: TensorProduct (DualVector v
 --   linear mappings, but they also form a useful vector space on their own right.
 newtype Tensor s v w = Tensor {getTensorProduct :: TensorProduct v w}
 
-asTensor :: VSCCoercion (LinearMap s v w) (Tensor s (DualVector v) w)
-asTensor = VSCCoercion
-fromTensor :: VSCCoercion (Tensor s (DualVector v) w) (LinearMap s v w)
-fromTensor = VSCCoercion
+asTensor :: ∀ s v w . LinearSpace v
+     => VSCCoercion (LinearMap s v w) (Tensor s (DualVector v) w)
+asTensor = case dualSpaceWitness @v of
+  DualSpaceWitness -> VSCCoercion
+fromTensor :: ∀ s v w . LinearSpace v
+     => VSCCoercion (Tensor s (DualVector v) w) (LinearMap s v w)
+fromTensor = case dualSpaceWitness @v of
+  DualSpaceWitness -> VSCCoercion
 
 asLinearMap :: ∀ s v w . (LinearSpace v, Scalar v ~ s)
            => VSCCoercion (Tensor s v w) (LinearMap s (DualVector v) w)
@@ -386,11 +392,14 @@ fromLinearMap = case dualSpaceWitness :: DualSpaceWitness v of
                 DualSpaceWitness -> VSCCoercion
 
 
-pseudoFmapTensorLHS :: (TensorProduct v w ~ TensorProduct v' w)
+pseudoFmapTensorLHS :: ( TensorProduct v w ~ TensorProduct v' w
+                       , StaticDimension v ~ StaticDimension v' )
            => c v v' -> VSCCoercion (Tensor s v w) (Tensor s v' w)
 pseudoFmapTensorLHS _ = VSCCoercion
 
-pseudoPrecomposeLinmap :: (TensorProduct (DualVector v) w ~ TensorProduct (DualVector v') w)
+pseudoPrecomposeLinmap
+      :: ( TensorProduct (DualVector v) w ~ TensorProduct (DualVector v') w
+         , StaticDimension v ~ StaticDimension v' )
            => c v' v -> VSCCoercion (LinearMap s v w) (LinearMap s v' w)
 pseudoPrecomposeLinmap _ = VSCCoercion
 
@@ -669,32 +678,54 @@ lsndBlock = LinearFunction (zeroV⊕)
 
 
 -- | @((v'⊗w)+>x) -> ((v+>w)+>x)
-argFromTensor :: ∀ s v w x . (LinearSpace v, LinearSpace w, Scalar v ~ s, Scalar w ~ s)
+argFromTensor :: ∀ s v w x . ( LinearSpace v, LinearSpace w
+                             , TensorSpace x
+                             , Scalar v ~ s, Scalar w ~ s
+                             )
                  => VSCCoercion (LinearMap s (Tensor s (DualVector v) w) x)
                              (LinearMap s (LinearMap s v w) x)
 argFromTensor = case dualSpaceWitness :: DualSpaceWitness v of
      DualSpaceWitness -> curryLinearMap >>> fromLinearMap >>> coUncurryLinearMap
 
 -- | @((v+>w)+>x) -> ((v'⊗w)+>x)@
-argAsTensor :: ∀ s v w x . (LinearSpace v, LinearSpace w, Scalar v ~ s, Scalar w ~ s)
+argAsTensor :: ∀ s v w x . ( LinearSpace v, LinearSpace w
+                           , TensorSpace x
+                           , Scalar v ~ s, Scalar w ~ s
+                           )
                  => VSCCoercion (LinearMap s (LinearMap s v w) x)
                              (LinearMap s (Tensor s (DualVector v) w) x)
 argAsTensor = case dualSpaceWitness :: DualSpaceWitness v of
      DualSpaceWitness -> uncurryLinearMap <<< asLinearMap <<< coCurryLinearMap
 
+tensorDimensionAssoc :: ∀ u v w s r . (TensorSpace u, TensorSpace v, TensorSpace w)
+ => (( Maybe.ZipWithTimes (Maybe.ZipWithTimes (StaticDimension u) (StaticDimension v))
+                          (StaticDimension w)
+     ~ Maybe.ZipWithTimes (StaticDimension u)
+                          (Maybe.ZipWithTimes (StaticDimension v) (StaticDimension w))
+     ) => r) -> r
+tensorDimensionAssoc φ
+  = Maybe.zipWithTimesAssoc (staticDimensionSing @u)
+                            (staticDimensionSing @v)
+                            (staticDimensionSing @w) φ
+
 -- | @(u+>(v⊗w)) -> (u+>v)⊗w@
-deferLinearMap :: VSCCoercion (LinearMap s u (Tensor s v w)) (Tensor s (LinearMap s u v) w)
-deferLinearMap = VSCCoercion
+deferLinearMap :: ∀ s u v w . (TensorSpace u, TensorSpace v, TensorSpace w)
+    => VSCCoercion (LinearMap s u (Tensor s v w)) (Tensor s (LinearMap s u v) w)
+deferLinearMap
+  = tensorDimensionAssoc @u @v @w VSCCoercion
 
 -- | @(u+>v)⊗w -> u+>(v⊗w)@
-hasteLinearMap :: VSCCoercion (Tensor s (LinearMap s u v) w) (LinearMap s u (Tensor s v w))
-hasteLinearMap = VSCCoercion
+hasteLinearMap :: ∀ s u v w . (TensorSpace u, TensorSpace v, TensorSpace w)
+    => VSCCoercion (Tensor s (LinearMap s u v) w) (LinearMap s u (Tensor s v w))
+hasteLinearMap = tensorDimensionAssoc @u @v @w VSCCoercion
 
 
-lassocTensor :: VSCCoercion (Tensor s u (Tensor s v w)) (Tensor s (Tensor s u v) w)
-lassocTensor = VSCCoercion
-rassocTensor :: VSCCoercion (Tensor s (Tensor s u v) w) (Tensor s u (Tensor s v w))
-rassocTensor = VSCCoercion
+lassocTensor :: ∀ s u v w . (TensorSpace u, TensorSpace v, TensorSpace w)
+    => VSCCoercion (Tensor s u (Tensor s v w)) (Tensor s (Tensor s u v) w)
+lassocTensor = tensorDimensionAssoc @u @v @w VSCCoercion
+rassocTensor :: ∀ s u v w . (TensorSpace u, TensorSpace v, TensorSpace w)
+    => VSCCoercion (Tensor s (Tensor s u v) w) (Tensor s u (Tensor s v w))
+rassocTensor = tensorDimensionAssoc @u @v @w VSCCoercion
 
 
 instance ∀ s u v . ( LinearSpace u, TensorSpace v, Scalar u ~ s, Scalar v ~ s )
@@ -780,7 +811,8 @@ instance ∀ s u v . ( LinearSpace u, TensorSpace v, Scalar u ~ s, Scalar v ~ s 
 
 -- | @((u+>v)+>w) -> u⊗(v+>w)@
 coCurryLinearMap :: ∀ s u v w . ( LinearSpace u, Scalar u ~ s
-                                , LinearSpace v, Scalar v ~ s ) =>
+                                , LinearSpace v, Scalar v ~ s
+                                , TensorSpace w ) =>
               VSCCoercion (LinearMap s (LinearMap s u v) w) (Tensor s u (LinearMap s v w))
 coCurryLinearMap = case ( dualSpaceWitness :: DualSpaceWitness u
                         , dualSpaceWitness :: DualSpaceWitness v ) of
@@ -789,7 +821,8 @@ coCurryLinearMap = case ( dualSpaceWitness :: DualSpaceWitness u
 
 -- | @(u⊗(v+>w)) -> (u+>v)+>w@
 coUncurryLinearMap :: ∀ s u v w . ( LinearSpace u, Scalar u ~ s
-                                , LinearSpace v, Scalar v ~ s ) =>
+                                  , LinearSpace v, Scalar v ~ s
+                                  , TensorSpace w ) =>
               VSCCoercion (Tensor s u (LinearMap s v w)) (LinearMap s (LinearMap s u v) w)
 coUncurryLinearMap = case ( dualSpaceWitness :: DualSpaceWitness u
                           , dualSpaceWitness :: DualSpaceWitness v ) of
@@ -797,18 +830,24 @@ coUncurryLinearMap = case ( dualSpaceWitness :: DualSpaceWitness u
              -> fromTensor <<< lassocTensor <<< fmap fromLinearMap
 
 -- | @((u⊗v)+>w) -> (u+>(v+>w))@
-curryLinearMap :: ∀ u v w s . ( LinearSpace u, Scalar u ~ s )
+curryLinearMap :: ∀ u v w s . ( LinearSpace u, LinearSpace v, TensorSpace w
+                              , Scalar u ~ s )
            => VSCCoercion (LinearMap s (Tensor s u v) w) (LinearMap s u (LinearMap s v w))
-curryLinearMap = case dualSpaceWitness :: DualSpaceWitness u of
-           DualSpaceWitness -> (VSCCoercion :: VSCCoercion ((u⊗v)+>w)
+curryLinearMap = case (dualSpaceWitness @u, dualSpaceWitness @v) of
+    (DualSpaceWitness, DualSpaceWitness)
+        -> tensorDimensionAssoc @u @(DualVector v) @w
+                (VSCCoercion :: VSCCoercion ((u⊗v)+>w)
                                      ((DualVector u)⊗(Tensor s (DualVector v) w)) )
                                  >>> fmap fromTensor >>> fromTensor
 
 -- | @(u+>(v+>w)) -> ((u⊗v)+>w)@
-uncurryLinearMap :: ∀ u v w s . ( LinearSpace u, Scalar u ~ s )
+uncurryLinearMap :: ∀ u v w s . ( LinearSpace u, LinearSpace v, TensorSpace w
+                                , Scalar u ~ s )
            => VSCCoercion (LinearMap s u (LinearMap s v w)) (LinearMap s (Tensor s u v) w)
-uncurryLinearMap = case dualSpaceWitness :: DualSpaceWitness u of
-           DualSpaceWitness -> (VSCCoercion :: VSCCoercion 
+uncurryLinearMap = case (dualSpaceWitness @u, dualSpaceWitness @v) of
+    (DualSpaceWitness, DualSpaceWitness)
+         -> tensorDimensionAssoc @u @(DualVector v) @w
+               (VSCCoercion :: VSCCoercion 
                                      ((DualVector u)⊗(Tensor s (DualVector v) w))
                                      ((u⊗v)+>w) )
                                  <<< fmap asTensor <<< asTensor
@@ -1043,13 +1082,17 @@ sampleLinearFunctionFn :: ( LinearSpace u, LinearSpace v, TensorSpace w
 sampleLinearFunctionFn = LinearFunction $
                 \f -> sampleLinearFunction -+$> f . applyLinear
 
-fromLinearFn :: VSCCoercion (LinearFunction s (LinearFunction s u v) w)
-                         (Tensor s (LinearFunction s v u) w)
-fromLinearFn = VSCCoercion
+fromLinearFn :: ∀ s u v w . (DimensionAware u, DimensionAware v, DimensionAware w)
+     => VSCCoercion (LinearFunction s (LinearFunction s u v) w)
+                    (Tensor s (LinearFunction s v u) w)
+fromLinearFn
+ = Maybe.zipWithTimesCommu (staticDimensionSing @u) (staticDimensionSing @v) VSCCoercion
 
-asLinearFn :: VSCCoercion (Tensor s (LinearFunction s u v) w)
+asLinearFn :: ∀ s u v w . (DimensionAware u, DimensionAware v, DimensionAware w)
+     => VSCCoercion (Tensor s (LinearFunction s u v) w)
                        (LinearFunction s (LinearFunction s v u) w)
-asLinearFn = VSCCoercion
+asLinearFn
+ = Maybe.zipWithTimesCommu (staticDimensionSing @u) (staticDimensionSing @v) VSCCoercion
 
 
 instance ∀ s u v . ( LinearSpace u, LinearSpace v

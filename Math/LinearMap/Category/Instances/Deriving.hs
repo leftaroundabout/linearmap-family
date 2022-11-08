@@ -706,15 +706,18 @@ scalarsSameInAbstractionAndDuals φ
         DualSpaceWitness -> scalarsSameInAbstraction @v φ
 
 abstractDualVectorCoercion :: ∀ a
-   . VSCCoercion (AbstractDualVector a (VectorSpaceImplementation a))
+   . (LinearSpace (VectorSpaceImplementation a))
+    => VSCCoercion (AbstractDualVector a (VectorSpaceImplementation a))
               (DualVector (VectorSpaceImplementation a))
-abstractDualVectorCoercion = VSCCoercion
+abstractDualVectorCoercion = case dualSpaceWitness @(VectorSpaceImplementation a) of
+   DualSpaceWitness -> VSCCoercion
 
 abstractDualTensorsCoercion :: ∀ a c w
   . ( AbstractVectorSpace a, LinearSpace c
     , c ~ VectorSpaceImplementation a, TensorSpace w )
       => VSCCoercion (AbstractDualVector a c⊗w) (DualVector c⊗w)
-abstractDualTensorsCoercion = VSCCoercion
+abstractDualTensorsCoercion = case dualSpaceWitness @c of
+  DualSpaceWitness -> VSCCoercion
 
 abstractLinmapCoercion :: ∀ a c w
   . ( AbstractLinearSpace a, LinearSpace c
@@ -725,7 +728,7 @@ abstractLinmapCoercion = case ( dualSpaceWitness @c
    (DualSpaceWitness, Coercion) -> VSCCoercion
 
 coerceLinearMapCodomain :: ∀ v w x
-   . ( LinearSpace v, Coercible w x )
+   . ( LinearSpace v, Coercible w x, StaticDimension w ~ StaticDimension x )
          => (v+>w) -> (v+>x)
 coerceLinearMapCodomain = case dualSpaceWitness @v of
  DualSpaceWitness -> \(LinearMap m)
