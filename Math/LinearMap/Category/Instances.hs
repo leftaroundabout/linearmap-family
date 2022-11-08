@@ -63,11 +63,19 @@ import qualified Data.Vector.Unboxed as UArr
 
 import Math.LinearMap.Asserted
 import Math.VectorSpace.ZeroDimensional
+import qualified Math.VectorSpace.DimensionAware.Theorems.MaybeNat as Maybe
 
 import qualified Test.QuickCheck as QC
 
+import GHC.TypeNats (KnownNat)
 import qualified GHC.Exts as GHC
 import qualified GHC.Generics as GHC
+
+#if MIN_VERSION_singletons(3,0,0)
+import GHC.TypeLits.Singletons (withKnownNat)
+#else
+import Data.Singletons.TypeLits (withKnownNat)
+#endif
 
 
 #if MIN_VERSION_manifolds_core(0,6,0)
@@ -485,9 +493,18 @@ instance (TensorSpace v, Scalar v ~ s) => Semimanifold (SymmetricTensor s v) whe
 instance (TensorSpace v, Scalar v ~ s) => PseudoAffine (SymmetricTensor s v) where
   (.-~!) = (^-^)
   p.-~.q = pure (p^-^q)
-instance (Num' s, TensorSpace v, Scalar v ~ s)
-            => DimensionAware (SymmetricTensor s v)
-  -- TODO proper triangular dimension
+instance ∀ s v . (Num' s, TensorSpace v, Scalar v ~ s)
+            => DimensionAware (SymmetricTensor s v) where
+  type StaticDimension (SymmetricTensor s v) 
+          = Maybe.FmapTriangularNum (StaticDimension v)
+  dimensionalityWitness = case dimensionalityWitness @v of
+     IsFlexibleDimensional -> IsFlexibleDimensional
+     IsStaticDimensional
+        -> withKnownNat (Maybe.triangularNumSing (dimensionalitySing @v))
+              IsStaticDimensional
+instance ∀ s v n m . ( Num' s, n`Dimensional`v, TensorSpace v, Scalar v ~ s
+                     , KnownNat m, m ~ Maybe.TriangularNum n )
+                => m`Dimensional`(SymmetricTensor s v)
 instance (Num' s, TensorSpace v, Scalar v ~ s) => TensorSpace (SymmetricTensor s v) where
   type TensorProduct (SymmetricTensor s v) x = Tensor s v (Tensor s v x)
   wellDefinedVector (SymTensor t) = SymTensor <$> wellDefinedVector t
