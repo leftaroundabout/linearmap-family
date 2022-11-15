@@ -11,6 +11,7 @@
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE UndecidableInstances       #-}
 {-# LANGUAGE TypeOperators              #-}
+{-# LANGUAGE NoStarIsType               #-}
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE FunctionalDependencies     #-}
 {-# LANGUAGE AllowAmbiguousTypes        #-}
@@ -52,11 +53,12 @@ import qualified Data.Map as Map
 import Data.Tree (Forest)
 import Data.MemoTrie
 import Data.Hashable
+import Data.Void
 
 import Prelude ()
 import qualified Prelude as Hask
 
-import Control.Category.Constrained.Prelude
+import Control.Category.Constrained.Prelude hiding (type (+))
 import Control.Arrow.Constrained
 
 import Data.Coerce
@@ -72,7 +74,7 @@ import Math.VectorSpace.ZeroDimensional
 import Data.VectorSpace.Free
 
 import GHC.Generics (Generic)
-import GHC.TypeLits (Nat, KnownNat)
+import GHC.TypeLits (Nat, KnownNat, type (+), type (*))
 
 #if MIN_VERSION_singletons(3,0,0)
 import GHC.TypeLits.Singletons (withKnownNat)
@@ -81,7 +83,7 @@ import Prelude.Singletons
 import Data.Singletons.TypeLits (withKnownNat)
 import Data.Singletons.Prelude
 #endif
-    (SingI, sing, withSingI, SMaybe(..))
+    (SingI, sing, withSingI, SMaybe(..), SNum(..))
 import qualified Math.VectorSpace.DimensionAware.Theorems.MaybeNat as Maybe
 
 import Language.Haskell.TH
@@ -448,24 +450,63 @@ instance AdditiveGroup v => PseudoAffine (DualVectorFromBasis v) where
 
 type family Cardinality b :: Maybe Nat
 
+type instance Cardinality Void = 'Just 0
 type instance Cardinality () = 'Just 1
 type instance Cardinality (Either a b)
          = Maybe.ZipWithPlus (Cardinality a) (Cardinality b)
 type instance Cardinality (a,b)
          = Maybe.ZipWithTimes (Cardinality a) (Cardinality b)
 
-instance (HasBasis v, SingI (Cardinality (Basis v)))
+class (KnownNat n, KnownCardinality b, Cardinality b ~ 'Just n) => n#b where
+  enumBasis :: [b]
+
+instance 0#Void where enumBasis = []
+instance 1#() where enumBasis = [()]
+instance (n#a, m#b, KnownNat nm, nm~(n+m)) => nm # Either a b where
+  enumBasis = (Left<$>enumBasis)++(Right<$>enumBasis)
+instance (n#a, m#b, KnownNat nm, nm~(n*m)) => nm # (a,b) where
+  enumBasis = (,)<$>enumBasis<*>enumBasis
+
+type FiniteCardinality b = FromJust (Cardinality b)
+
+data CardinalityWitness b where
+  FiniteCardinality :: n#b => CardinalityWitness b
+  NonfiniteCardinality :: Cardinality b ~ 'Nothing => CardinalityWitness b
+
+class KnownCardinality b where
+  cardinalityWitness :: CardinalityWitness b
+
+instance KnownCardinality Void where cardinalityWitness = FiniteCardinality
+instance KnownCardinality () where cardinalityWitness = FiniteCardinality
+instance ∀ a b . (KnownCardinality a, KnownCardinality b)
+           => KnownCardinality (Either a b) where 
+  cardinalityWitness = case (cardinalityWitness @a, cardinalityWitness @b) of
+    (FiniteCardinality, FiniteCardinality)
+       -> withKnownNat (sing @(FiniteCardinality a)%+sing @(FiniteCardinality b))
+                       FiniteCardinality
+    (NonfiniteCardinality, _) -> NonfiniteCardinality
+    (_, NonfiniteCardinality) -> NonfiniteCardinality
+instance ∀ a b . (KnownCardinality a, KnownCardinality b)
+           => KnownCardinality (a,b) where 
+  cardinalityWitness = case (cardinalityWitness @a, cardinalityWitness @b) of
+    (FiniteCardinality, FiniteCardinality)
+       -> withKnownNat (sing @(FiniteCardinality a)%*sing @(FiniteCardinality b))
+                       FiniteCardinality
+    (NonfiniteCardinality, _) -> NonfiniteCardinality
+    (_, NonfiniteCardinality) -> NonfiniteCardinality
+
+instance (HasBasis v, KnownCardinality (Basis v))
               => DimensionAware (DualVectorFromBasis v) where
   type StaticDimension (DualVectorFromBasis v) = Cardinality (Basis v)
-  dimensionalityWitness = case sing @(Cardinality (Basis v)) of
-     SNothing -> IsFlexibleDimensional
-     SJust sd -> withKnownNat sd IsStaticDimensional
-instance ( HasBasis v, KnownNat n, Cardinality (Basis v) ~ 'Just n )
+  dimensionalityWitness = case cardinalityWitness @(Basis v) of
+     NonfiniteCardinality -> IsFlexibleDimensional
+     FiniteCardinality -> IsStaticDimensional
+instance ( HasBasis v, KnownNat n, n#Basis v )
               => n`Dimensional`DualVectorFromBasis v where
   
 
 instance ∀ v . ( HasBasis v, Num' (Scalar v)
-               , SingI (Cardinality (Basis v))
+               , KnownCardinality (Basis v)
                , Scalar (Scalar v) ~ Scalar v
                , HasTrie (Basis v)
                , Eq v )
@@ -505,6 +546,7 @@ instance ∀ v . ( HasBasis v, Num' (Scalar v)
 -- | Do not manually instantiate this class. It is used internally
 --   by 'makeLinearSpaceFromBasis'.
 class ( HasBasis v, Num' (Scalar v)
+      , KnownCardinality (Basis v)
       , StaticDimension v ~ (Cardinality (Basis v))
       , SingI (StaticDimension v)
       , LinearSpace v, DualVector v ~ DualVectorFromBasis v)
