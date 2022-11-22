@@ -40,6 +40,7 @@ import Data.Singletons.TypeLits (withKnownNat)
 #endif
 
 import GHC.TypeLits
+import Data.Proxy (Proxy(..))
 
 import Data.Ratio
 
@@ -98,6 +99,12 @@ class (DimensionAware v, KnownNat n, StaticDimension v ~ 'Just n)
 dimensionalitySing :: ∀ v n . n`Dimensional`v => Sing n
 dimensionalitySing = sing
 
+dimension :: ∀ v n a . (n`Dimensional`v, Integral a) => a
+dimension = withKnownNat (dimensionalitySing @v) (fromIntegral $ natVal @n Proxy)
+
+dimensionOf :: ∀ v n a . (n`Dimensional`v, Integral a) => v -> a
+dimensionOf _ = dimension @v
+
 staticDimensionSing :: ∀ v . DimensionAware v => Sing (StaticDimension v)
 staticDimensionSing = case dimensionalityWitness @v of
   IsStaticDimensional -> sing
@@ -120,4 +127,8 @@ type family FromJust (a :: Maybe k) :: k where
   FromJust ('Just v) = v
 
 type StaticallyKnownDimension v = FromJust (StaticDimension v)
+
+notStaticDimensionalContradiction :: ∀ v n r
+  . (n`Dimensional`v, StaticDimension v ~ 'Nothing) => r
+notStaticDimensionalContradiction = undefined
 
