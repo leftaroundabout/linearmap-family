@@ -64,6 +64,7 @@ import Control.Arrow.Constrained
 import Data.Coerce
 import Data.Type.Coercion
 import Data.Tagged
+import Data.Proxy
 import qualified Data.Kind as Kind
 import Data.Traversable (traverse)
 import Data.Default.Class
@@ -74,7 +75,7 @@ import Math.VectorSpace.ZeroDimensional
 import Data.VectorSpace.Free
 
 import GHC.Generics (Generic)
-import GHC.TypeLits (Nat, KnownNat, type (+), type (*))
+import GHC.TypeLits (Nat, KnownNat, natVal, type (+), type (*))
 
 #if MIN_VERSION_singletons(3,0,0)
 import GHC.TypeLits.Singletons (withKnownNat)
@@ -459,13 +460,22 @@ type instance Cardinality (a,b)
 
 class (KnownNat n, KnownCardinality b, Cardinality b ~ 'Just n) => n#b where
   enumBasis :: [b]
+  lookupBasisIndex :: b -> Int
 
-instance 0#Void where enumBasis = []
-instance 1#() where enumBasis = [()]
+instance 0#Void where
+  enumBasis = []
+  lookupBasisIndex = absurd
+instance 1#() where
+  enumBasis = [()]
+  lookupBasisIndex () = 0
 instance (n#a, m#b, KnownNat nm, nm~(n+m)) => nm # Either a b where
   enumBasis = (Left<$>enumBasis)++(Right<$>enumBasis)
+  lookupBasisIndex (Left bl) = lookupBasisIndex bl
+  lookupBasisIndex (Right br) = fromIntegral (natVal @n Proxy) + lookupBasisIndex br
 instance (n#a, m#b, KnownNat nm, nm~(n*m)) => nm # (a,b) where
   enumBasis = (,)<$>enumBasis<*>enumBasis
+  lookupBasisIndex (ba,bb) = fromIntegral (natVal @m Proxy) * lookupBasisIndex ba
+                               + lookupBasisIndex bb
 
 type FiniteCardinality b = FromJust (Cardinality b)
 
