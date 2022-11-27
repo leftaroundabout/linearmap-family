@@ -677,3 +677,23 @@ FreeArbitrarySpace(V1)
 FreeArbitrarySpace(V2)
 FreeArbitrarySpace(V3)
 FreeArbitrarySpace(V4)
+
+instance ( QC.Arbitrary (Tensor s u w), QC.Arbitrary (Tensor s v w)
+         , Scalar u ~ s, Scalar v ~ s, Scalar w ~ s )
+          => QC.Arbitrary (Tensor s (u,v) w) where
+  arbitrary = Tensor <$> QC.arbitrary
+  shrink (Tensor t) = Tensor <$> QC.shrink t
+
+instance ( LinearSpace u, LinearSpace v
+         , QC.Arbitrary (LinearMap s u w), QC.Arbitrary (LinearMap s v w)
+         , Scalar u ~ s, Scalar v ~ s, Scalar w ~ s )
+          => QC.Arbitrary (LinearMap s (u,v) w) where
+  arbitrary = case (dualSpaceWitness @u, dualSpaceWitness @v) of
+   (DualSpaceWitness, DualSpaceWitness) -> LinearMap <$> do
+     (,) <$> (arr fromLinearMap <$> QC.arbitrary)
+         <*> (arr fromLinearMap <$> QC.arbitrary)
+  shrink = case (dualSpaceWitness @u, dualSpaceWitness @v) of
+   (DualSpaceWitness, DualSpaceWitness) -> \(LinearMap (x,y)) -> LinearMap <$> do
+     (x',y') <- QC.shrink (asLinearMap $ x, asLinearMap $ y)
+     return (fromLinearMap $ x', fromLinearMap $ y')
+
