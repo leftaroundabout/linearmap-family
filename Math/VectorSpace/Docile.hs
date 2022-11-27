@@ -1309,10 +1309,23 @@ b .⊗ w = basisValue b ⊗ w
 
 class (FiniteDimensional v, HasBasis v) => TensorDecomposable v where
   tensorDecomposition :: v⊗w -> [(Basis v, w)]
+  tensorDecompose' :: v⊗w -> Basis v -> w
   showsPrecBasis :: Int -> Basis v -> ShowS
+
+instance ( TensorDecomposable u, TensorSpace v
+         , HasBasis u, HasBasis v
+         , Num' s, Scalar u ~ s, Scalar v ~ s
+         ) => HasBasis (Tensor s u v) where
+  type Basis (Tensor s u v) = (Basis u, Basis v)
+  basisValue (bu, bv) = basisValue bu ⊗ basisValue bv
+  decompose t = [ ((bu,bv),s)
+                | (bu,v) <- tensorDecomposition t
+                , (bv,s) <- decompose v ]
+  decompose' t (bu, bv) = decompose' (tensorDecompose' t bu) bv
 
 instance TensorDecomposable ℝ where
   tensorDecomposition (Tensor r) = [((), r)]
+  tensorDecompose' (Tensor r) () = r
   showsPrecBasis _ = shows
 instance ∀ x y . ( TensorDecomposable x, TensorDecomposable y
                  , Scalar x ~ Scalar y, Scalar (DualVector x) ~ Scalar (DualVector y) )
@@ -1320,6 +1333,10 @@ instance ∀ x y . ( TensorDecomposable x, TensorDecomposable y
   tensorDecomposition (Tensor (tx,ty))
                 = map (first Left) (tensorDecomposition tx)
                ++ map (first Right) (tensorDecomposition ty)
+  tensorDecompose' (Tensor (tx,ty)) (Left bx)
+                = tensorDecompose' tx bx
+  tensorDecompose' (Tensor (tx,ty)) (Right by)
+                = tensorDecompose' ty by
   showsPrecBasis p (Left bx)
       = showParen (p>9) $ ("Left "++) . showsPrecBasis @x 10 bx
   showsPrecBasis p (Right by)
@@ -1327,9 +1344,11 @@ instance ∀ x y . ( TensorDecomposable x, TensorDecomposable y
 
 instance TensorDecomposable (ZeroDim ℝ) where
   tensorDecomposition _ = []
+  tensorDecompose' _ = absurd
   showsPrecBasis _ = absurd
 instance TensorDecomposable (V0 ℝ) where
   tensorDecomposition _ = []
+  tensorDecompose' _ b = case b of {}
 #if MIN_VERSION_free_vector_spaces(0,2,0)
   showsPrecBasis = showsPrec
 #else
@@ -1338,35 +1357,61 @@ instance TensorDecomposable (V0 ℝ) where
 instance TensorDecomposable (V1 ℝ) where
 #if MIN_VERSION_free_vector_spaces(0,2,0)
   tensorDecomposition (Tensor (V1 w)) = [(e @0, w)]
+  tensorDecompose' (Tensor (V1 w)) _ = w
   showsPrecBasis = showsPrec
 #else
   tensorDecomposition (Tensor (V1 w)) = [(ex, w)]
+  tensorDecompose' (Tensor w) (Mat.E q) = w^.q
   showsPrecBasis _ (Mat.E q) = (V1"ex"^.q ++)
 #endif
 instance TensorDecomposable (V2 ℝ) where
 #if MIN_VERSION_free_vector_spaces(0,2,0)
   tensorDecomposition (Tensor (V2 x y)) = [ (e @0, x), (e @1, y) ]
+  tensorDecompose' (Tensor (V2 x y)) b = case getEuclideanBasisIndex b of
+    { 0 -> x; 1 -> y }
   showsPrecBasis = showsPrec
 #else
   tensorDecomposition (Tensor (V2 x y)) = [ (ex, x), (ey, y) ]
+  tensorDecompose' (Tensor w) (Mat.E q) = w^.q
   showsPrecBasis _ (Mat.E q) = (V2"ex""ey"^.q ++)
 #endif
 instance TensorDecomposable (V3 ℝ) where
 #if MIN_VERSION_free_vector_spaces(0,2,0)
   tensorDecomposition (Tensor (V3 x y z)) = [ (e @0, x), (e @1, y), (e @2, z) ]
+  tensorDecompose' (Tensor (V3 x y z)) b = case getEuclideanBasisIndex b of
+    { 0 -> x; 1 -> y; 2 -> z }
   showsPrecBasis = showsPrec
 #else
   tensorDecomposition (Tensor (V3 x y z)) = [ (ex, x), (ey, y), (ez, z) ]
+  tensorDecompose' (Tensor w) (Mat.E q) = w^.q
   showsPrecBasis _ (Mat.E q) = (V3"ex""ey""ez"^.q ++)
 #endif
 instance TensorDecomposable (V4 ℝ) where
 #if MIN_VERSION_free_vector_spaces(0,2,0)
   tensorDecomposition (Tensor (V4 x y z w)) = [(e @0,x), (e @1,y), (e @2,z), (e @3,w)]
+  tensorDecompose' (Tensor (V4 x y z w)) b = case getEuclideanBasisIndex b of
+    { 0 -> x; 1 -> y; 2 -> z; 3 -> w }
   showsPrecBasis = showsPrec
 #else
   tensorDecomposition (Tensor (V4 x y z w)) = [ (ex, x), (ey, y), (ez, z), (ew, w) ]
+  tensorDecompose' (Tensor w) (Mat.E q) = w^.q
   showsPrecBasis _ (Mat.E q) = (V4"ex""ey""ez""ew"^.q ++)
 #endif
+
+instance ∀ u v s
+     . ( TensorDecomposable u, TensorDecomposable v
+       , Fractional' s, Scalar u ~ s, Scalar v ~ s
+       , Scalar (DualVector u) ~ s, Scalar (DualVector v) ~ s )
+    => TensorDecomposable (Tensor s u v) where
+  tensorDecomposition :: ∀ w . (Tensor s u v)⊗w -> [((Basis u, Basis v), w)]
+  tensorDecomposition (Tensor t) = [ ((bu,bv),w)
+                                   | (bu,vw) <- tensorDecomposition @u (Tensor t)
+                                   , (bv,w) <- tensorDecomposition @v vw ]
+  tensorDecompose' :: ∀ w . (Tensor s u v)⊗w -> (Basis u, Basis v) -> w
+  tensorDecompose' (Tensor t) (bu,bv)
+     = tensorDecompose' @v (tensorDecompose' @u (Tensor t) bu) bv
+  showsPrecBasis :: Int -> (Basis u, Basis v) -> ShowS
+  showsPrecBasis = undefined
 
 tensorDecomposeShowsPrec :: ∀ u v s
   . ( TensorDecomposable u, FiniteDimensional v, Show v, Scalar u ~ s, Scalar v ~ s )
@@ -1402,6 +1447,12 @@ instance ( FiniteDimensional v, v ~ DualVector v, Show v
   showsPrec = case
       (dualSpaceWitness::DualSpaceWitness x, dualSpaceWitness::DualSpaceWitness y) of
       (DualSpaceWitness, DualSpaceWitness) -> tensorDecomposeShowsPrec
+
+instance ( TensorDecomposable u
+         , Scalar u ~ s )
+              => Show (Tensor s (Tensor s u v) w) where
+  showsPrec = case (dualSpaceWitness::DualSpaceWitness u) of
+      DualSpaceWitness -> undefined
 
 
 (^) :: Num a => a -> Int -> a
