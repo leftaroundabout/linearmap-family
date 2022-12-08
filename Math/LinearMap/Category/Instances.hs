@@ -697,3 +697,31 @@ instance ( LinearSpace u, LinearSpace v
      (x',y') <- QC.shrink (asLinearMap $ x, asLinearMap $ y)
      return (fromLinearMap $ x', fromLinearMap $ y')
 
+instance ( TensorSpace u, TensorSpace v, TensorSpace w
+         , QC.Arbitrary (u⊗(v⊗w))
+         , Scalar u ~ s, Scalar v ~ s, Scalar w ~ s )
+          => QC.Arbitrary (Tensor s (Tensor s u v) w) where
+  arbitrary = arr lassocTensor <$> QC.arbitrary
+  shrink (Tensor t) = arr lassocTensor <$> QC.shrink (Tensor t)
+
+instance ( LinearSpace u, LinearSpace v, TensorSpace w
+         , QC.Arbitrary (u+>(v+>w))
+         , Scalar u ~ s, Scalar v ~ s, Scalar w ~ s )
+          => QC.Arbitrary (LinearMap s (Tensor s u v) w) where
+  arbitrary = arr uncurryLinearMap <$> QC.arbitrary
+  shrink f = arr uncurryLinearMap <$> QC.shrink (curryLinearMap $ f)
+
+instance ( LinearSpace u, TensorSpace v, TensorSpace w
+         , QC.Arbitrary (u+>(v⊗w))
+         , Scalar u ~ s, Scalar v ~ s, Scalar w ~ s )
+          => QC.Arbitrary (Tensor s (LinearMap s u v) w) where
+  arbitrary = arr deferLinearMap <$> QC.arbitrary
+  shrink (Tensor t) = arr deferLinearMap <$> QC.shrink (LinearMap t)
+
+instance ( LinearSpace u, LinearSpace v, TensorSpace w
+         , QC.Arbitrary (u⊗(v+>w))
+         , Scalar u ~ s, Scalar v ~ s, Scalar w ~ s )
+          => QC.Arbitrary (LinearMap s (LinearMap s u v) w) where
+  arbitrary = arr coUncurryLinearMap <$> QC.arbitrary
+  shrink f = arr coUncurryLinearMap <$> QC.shrink (coCurryLinearMap $ f)
+
