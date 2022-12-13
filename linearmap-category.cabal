@@ -51,12 +51,12 @@ library
                        Math.VectorSpace.MiscUtil.MultiConstraints
                        Math.LinearMap.Category.Derivatives
                        Math.VectorSpace.DimensionAware.Theorems.MaybeNat
+                       Math.VectorSpace.DimensionAware
   other-modules:       Math.LinearMap.Category.Class
                        Math.LinearMap.Asserted
                        Math.LinearMap.Category.TensorQuot
                        Math.LinearMap.Category.Instances
                        Math.VectorSpace.Docile
-                       Math.VectorSpace.DimensionAware
   other-extensions:    FlexibleInstances, UndecidableInstances, FunctionalDependencies, TypeOperators, TypeFamilies
   build-depends:       base >=4.8 && <5,
                        vector-space >=0.11 && <0.18, MemoTrie,
