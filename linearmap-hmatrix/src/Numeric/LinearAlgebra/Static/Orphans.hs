@@ -1,4 +1,9 @@
-{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeFamilies           #-}
+{-# LANGUAGE CPP                    #-}
+{-# LANGUAGE DataKinds              #-}
+{-# LANGUAGE TypeOperators          #-}
+{-# LANGUAGE FlexibleInstances      #-}
+{-# LANGUAGE FunctionalDependencies #-}
 
 {-# OPTIONS_GHC -Wno-orphans #-}
 
@@ -20,9 +25,12 @@ import Data.VectorSpace.Free
 
 -- linearmap-category
 import Math.LinearMap.Category
+import Math.VectorSpace.DimensionAware
 
 -- tagged
+#if !MIN_VERSION_manifolds_core(0,6,0)
 import Data.Tagged (Tagged(..))
+#endif
 
 --------------------------------------------------
 -- * @vector-space@ instances
@@ -56,26 +64,36 @@ instance KnownNat n => FreeVectorSpace (R n) where
 --------------------------------------------------
 -- * @linearmap-category@ and @manifolds-core@
 
+instance KnownNat n => DimensionAware (R n) where
+  type StaticDimension (R n) = 'Just n
+  dimensionalityWitness = IsStaticDimensional
+
+instance KnownNat n => n`Dimensional`R n where
+
 instance KnownNat n => Semimanifold (R n) where
   type Needle (R n) = R n
+#if !MIN_VERSION_manifolds_core(0,6,0)
   type Interior (R n) = R n
   toInterior = pure
   fromInterior = id
   translateP = Tagged (^+^)
+#endif
+  (.+~^) = (^+^)
 
 instance KnownNat n => PseudoAffine (R n) where
+  (.-~!) = (-)
   v .-~. w = Just (v - w)
 
-instance KnownNat n => TensorSpace (R n) where -- TODO: many errors
-  type TensorProduct (R n) w = [w]
-  scalarSpaceWitness = undefined
-  linearManifoldWitness = undefined
-  zeroTensor = undefined
-  toFlatTensor = undefined
-  fromFlatTensor = undefined
-  tensorProduct = undefined
-  transposeTensor = undefined
-  fmapTensor = undefined
-  fzipTensorWith = undefined
-  coerceFmapTensorProduct = undefined
-  wellDefinedTensor = undefined
+-- instance KnownNat n => TensorSpace (R n) where -- TODO: many errors
+--   type TensorProduct (R n) w = [w]
+--   scalarSpaceWitness = undefined
+--   linearManifoldWitness = undefined
+--   zeroTensor = undefined
+--   toFlatTensor = undefined
+--   fromFlatTensor = undefined
+--   tensorProduct = undefined
+--   transposeTensor = undefined
+--   fmapTensor = undefined
+--   fzipTensorWith = undefined
+--   coerceFmapTensorProduct = undefined
+--   wellDefinedTensor = undefined

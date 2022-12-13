@@ -23,6 +23,7 @@ library
     , free-vector-spaces
     , hmatrix
     , linearmap-category
+    , manifolds-core
     , tagged
     , vector
     , vector-space
