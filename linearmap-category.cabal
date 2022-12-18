@@ -61,7 +61,8 @@ library
   build-depends:       base >=4.8 && <5,
                        vector-space >=0.11 && <0.18, MemoTrie,
                        constrained-categories >=0.3 && <0.5,
-                       containers, vector,
+                       containers,
+                       vector >=0.12 && <0.14,
                        tagged,
                        free-vector-spaces >= 0.1.4 && < 0.3,
                        linear, lens, transformers,
@@ -92,7 +93,7 @@ test-suite tasty
   build-depends:   base, linearmap-category, vector-space
                    , QuickCheck
                    , manifolds-core
-                   , linear
+                   , linear, vector
                    , constrained-categories
                    , tasty, tasty-quickcheck
   ghc-options: -threaded "-with-rtsopts -N8 -M2G"

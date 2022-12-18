@@ -19,6 +19,7 @@
 {-# LANGUAGE TypeApplications           #-}
 {-# LANGUAGE Rank2Types                 #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
+{-# LANGUAGE InstanceSigs               #-}
 {-# LANGUAGE PatternSynonyms            #-}
 {-# LANGUAGE ViewPatterns               #-}
 {-# LANGUAGE UnicodeSyntax              #-}
@@ -45,22 +46,29 @@ import Control.Arrow.Constrained
 import Data.Coerce
 import Data.Type.Coercion
 import Data.Tagged
+import Data.Proxy(Proxy(..))
+
+import qualified Data.Vector.Generic as GArr
 
 import Math.Manifold.Core.PseudoAffine
 import Math.LinearMap.Asserted
 import Math.VectorSpace.ZeroDimensional
 import Data.VectorSpace.Free
 
+import Control.Monad.ST (ST)
+
 import Data.Singletons (sing, withSingI)
 #if MIN_VERSION_singletons(3,0,0)
 import Prelude.Singletons (SNum(..))
-import GHC.TypeLits.Singletons (withKnownNat)
+import Data.Maybe.Singletons (SMaybe(..))
+import GHC.TypeLits.Singletons (withKnownNat, SNat(..))
 #else
 import Data.Singletons.Prelude.Num (SNum(..))
-import Data.Singletons.TypeLits (withKnownNat)
+import Data.Singletons.Prelude.Maybe (SMaybe(..))
+import Data.Singletons.TypeLits (withKnownNat, SNat(..))
 #endif
 import Data.Kind (Type)
-import GHC.TypeLits (Nat, type (+), type (*), KnownNat)
+import GHC.TypeLits (Nat, type (+), type (*), KnownNat, natVal)
 import qualified GHC.Generics as Gnrx
 import GHC.Generics (Generic, (:*:)((:*:)))
 
@@ -175,6 +183,16 @@ class (DimensionAware v, PseudoAffine v) => TensorSpace v where
   fzipTensorWith :: ( TensorSpace u, TensorSpace w, TensorSpace x
                     , Scalar u ~ Scalar v, Scalar w ~ Scalar v, Scalar x ~ Scalar v )
            => Bilinear ((w,x) -+> u) (v⊗w, v⊗x) (v⊗u)
+  tensorUnsafeFromArrayWithOffset :: ∀ w α n m
+          . ( n`Dimensional`v
+            , TensorSpace w, m`Dimensional`w, Scalar w ~ Scalar v
+            , GArr.Vector α (Scalar v) )
+           => Int -> α (Scalar v) -> (v⊗w)
+  tensorUnsafeWriteArrayWithOffset :: ∀ w α σ n m
+          . ( n`Dimensional`v
+            , TensorSpace w, m`Dimensional`w, Scalar w ~ Scalar v
+            , GArr.Vector α (Scalar v) )
+           => GArr.Mutable α σ (Scalar v) -> Int -> (v⊗w) -> ST σ ()
   coerceFmapTensorProduct :: Hask.Functor p
        => p v -> VSCCoercion a b -> Coercion (TensorProduct v a) (TensorProduct v b)
   -- | “Sanity-check” a vector. This typically amounts to detecting any NaN components,
@@ -304,6 +322,8 @@ instance DimensionAware (ZeroDim s) where
   type StaticDimension (ZeroDim s) = 'Just 0
   dimensionalityWitness = IsStaticDimensional
 instance 0`Dimensional`ZeroDim s where
+  unsafeFromArrayWithOffset _ _ = Origin
+  unsafeWriteArrayWithOffset _ _ _ = return ()
 
 instance Num' s => TensorSpace (ZeroDim s) where
   type TensorProduct (ZeroDim s) v = ZeroDim s
@@ -324,6 +344,8 @@ instance Num' s => TensorSpace (ZeroDim s) where
   transposeTensor = const0
   fmapTensor = biConst0
   fzipTensorWith = biConst0
+  tensorUnsafeFromArrayWithOffset _ _ = Tensor Origin
+  tensorUnsafeWriteArrayWithOffset _ _ (Tensor Origin) = return ()
   coerceFmapTensorProduct _ VSCCoercion = Coercion
   wellDefinedVector Origin = Just Origin
   wellDefinedTensor (Tensor Origin) = Just (Tensor Origin)
@@ -598,6 +620,38 @@ instance ∀ u v . ( TensorSpace u, TensorSpace v, Scalar u ~ Scalar v )
                $ \f (Tensor (uw, vw), Tensor (ux, vx))
                       -> Tensor ( (fzipTensorWith-+$>f)-+$>(uw,ux)
                                 , (fzipTensorWith-+$>f)-+$>(vw,vx) )
+  tensorUnsafeFromArrayWithOffset :: ∀ nm w o α
+          . ( nm`Dimensional`(u,v)
+            , TensorSpace w, o`Dimensional`w, Scalar w ~ Scalar v
+            , GArr.Vector α (Scalar u) )
+           => Int -> α (Scalar u) -> ((u,v)⊗w)
+  tensorUnsafeFromArrayWithOffset
+     = case ( staticDimensionSing @u, dimensionalityWitness @u
+            , staticDimensionSing @v, dimensionalityWitness @v ) of
+        ( SJust sn, IsStaticDimensional
+         ,SJust sm, IsStaticDimensional )
+          -> let sno = sn %* sing @o
+                 smo = sm %* sing @o
+             in withKnownNat sno (withKnownNat smo (
+                 \i arr -> Tensor ( unsafeFromArrayWithOffset i arr
+                                  , unsafeFromArrayWithOffset
+                                        (i + fromIntegral (natVal sno)) arr )))
+  tensorUnsafeWriteArrayWithOffset :: ∀ nm w o α σ
+          . ( nm`Dimensional`(u,v)
+            , TensorSpace w, o`Dimensional`w, Scalar w ~ Scalar v
+            , GArr.Vector α (Scalar u) )
+           => GArr.Mutable α σ (Scalar u) -> Int -> ((u,v)⊗w) -> ST σ ()
+  tensorUnsafeWriteArrayWithOffset
+     = case ( staticDimensionSing @u, dimensionalityWitness @u
+            , staticDimensionSing @v, dimensionalityWitness @v ) of
+        ( SJust sn, IsStaticDimensional
+         ,SJust sm, IsStaticDimensional )
+          -> let sno = sn %* sing @o
+                 smo = sm %* sing @o
+             in withKnownNat sno (withKnownNat smo (
+                 \arr i (Tensor (x,y)) -> do
+                   unsafeWriteArrayWithOffset arr i x
+                   unsafeWriteArrayWithOffset arr (i + fromIntegral (natVal sno)) y ))
   coerceFmapTensorProduct p cab = case
              ( coerceFmapTensorProduct (fst<$>p) cab
              , coerceFmapTensorProduct (snd<$>p) cab ) of
@@ -743,6 +797,14 @@ instance ∀ s n u m v nm . ( n`Dimensional`u, m`Dimensional`v
                           , KnownNat nm
                           , nm ~ (n*m) )
                    => nm`Dimensional`(LinearMap s u v) where
+  unsafeFromArrayWithOffset i arr = case dualSpaceWitness @u of
+    DualSpaceWitness -> case dimensionalityWitness @(DualVector u) of
+      IsStaticDimensional
+       -> fromTensor $ unsafeFromArrayWithOffset i arr
+  unsafeWriteArrayWithOffset arr i lm = case dualSpaceWitness @u of
+    DualSpaceWitness -> case dimensionalityWitness @(DualVector u) of
+      IsStaticDimensional
+       -> unsafeWriteArrayWithOffset arr i (asTensor $ lm)
 
 instance ∀ s u v . ( LinearSpace u, TensorSpace v, Scalar u ~ s, Scalar v ~ s )
                        => TensorSpace (LinearMap s u v) where
@@ -797,6 +859,34 @@ instance ∀ s u v . ( LinearSpace u, TensorSpace v, Scalar u ~ s, Scalar v ~ s 
      ScalarSpaceWitness -> LinearFunction $ \f
                 -> arr deferLinearMap <<< fzipWith (fzipWith f)
                      <<< arr hasteLinearMap *** arr hasteLinearMap
+  tensorUnsafeFromArrayWithOffset :: ∀ nm w o α
+          . ( nm`Dimensional`LinearMap s u v
+            , TensorSpace w, o`Dimensional`w, Scalar w ~ s
+            , GArr.Vector α s )
+           => Int -> α s -> (LinearMap s u v⊗w)
+  tensorUnsafeFromArrayWithOffset
+     = case ( dimensionalityWitness @u, staticDimensionSing @u
+            , dimensionalityWitness @v, staticDimensionSing @v ) of
+        ( IsStaticDimensional, SJust sn
+         ,IsStaticDimensional, SJust sm )
+           -> withKnownNat (sm%*sing @o) (
+              withKnownNat (sn%*(sm%*sing @o)) (
+               \i -> arr (deferLinearMap @s @u @v @w)
+                                . unsafeFromArrayWithOffset i))
+  tensorUnsafeWriteArrayWithOffset :: ∀ nm w o α σ
+          . ( nm`Dimensional`LinearMap s u v
+            , TensorSpace w, o`Dimensional`w, Scalar w ~ s
+            , GArr.Vector α s )
+           => GArr.Mutable α σ s -> Int -> (LinearMap s u v⊗w) -> ST σ ()
+  tensorUnsafeWriteArrayWithOffset
+     = case ( dimensionalityWitness @u, staticDimensionSing @u
+            , dimensionalityWitness @v, staticDimensionSing @v ) of
+        ( IsStaticDimensional, SJust sn
+         ,IsStaticDimensional, SJust sm )
+           -> withKnownNat (sm%*sing @o) (
+              withKnownNat (sn%*(sm%*sing @o)) (
+               \ar i -> unsafeWriteArrayWithOffset ar i
+                       . arr (hasteLinearMap @s @u @v @w) ))
   coerceFmapTensorProduct = cftlp dualSpaceWitness
    where cftlp :: ∀ a b p . DualSpaceWitness u -> p (LinearMap s u v) -> VSCCoercion a b
                    -> Coercion (TensorProduct (DualVector u) (Tensor s v a))
@@ -910,6 +1000,8 @@ instance ∀ s n u m v nm . ( n`Dimensional`u, m`Dimensional`v
                           , TensorSpace u, TensorSpace v, Scalar u ~ s, Scalar v ~ s
                           , KnownNat nm, nm ~ (n*m) )
                    => nm`Dimensional`(Tensor s u v) where
+  unsafeFromArrayWithOffset = tensorUnsafeFromArrayWithOffset
+  unsafeWriteArrayWithOffset = tensorUnsafeWriteArrayWithOffset
 
 instance ∀ s u v . (TensorSpace u, TensorSpace v, Scalar u ~ s, Scalar v ~ s)
                        => TensorSpace (Tensor s u v) where
@@ -956,6 +1048,34 @@ instance ∀ s u v . (TensorSpace u, TensorSpace v, Scalar u ~ s, Scalar v ~ s)
     ScalarSpaceWitness -> LinearFunction $ \f
                 -> arr lassocTensor <<< fzipWith (fzipWith f)
                      <<< arr rassocTensor *** arr rassocTensor
+  tensorUnsafeFromArrayWithOffset :: ∀ nm w o α
+          . ( nm`Dimensional`Tensor s u v
+            , TensorSpace w, o`Dimensional`w, Scalar w ~ s
+            , GArr.Vector α s )
+           => Int -> α s -> (Tensor s u v⊗w)
+  tensorUnsafeFromArrayWithOffset
+     = case ( dimensionalityWitness @u, staticDimensionSing @u
+            , dimensionalityWitness @v, staticDimensionSing @v ) of
+        ( IsStaticDimensional, SJust sn
+         ,IsStaticDimensional, SJust sm )
+           -> withKnownNat (sm%*sing @o) (
+              withKnownNat (sn%*(sm%*sing @o)) (
+               \i -> arr (lassocTensor @s @u @v @w)
+                                . unsafeFromArrayWithOffset i))
+  tensorUnsafeWriteArrayWithOffset :: ∀ nm w o α σ
+          . ( nm`Dimensional`Tensor s u v
+            , TensorSpace w, o`Dimensional`w, Scalar w ~ s
+            , GArr.Vector α s )
+           => GArr.Mutable α σ s -> Int -> (Tensor s u v⊗w) -> ST σ ()
+  tensorUnsafeWriteArrayWithOffset
+     = case ( dimensionalityWitness @u, staticDimensionSing @u
+            , dimensionalityWitness @v, staticDimensionSing @v ) of
+        ( IsStaticDimensional, SJust sn
+         ,IsStaticDimensional, SJust sm )
+           -> withKnownNat (sm%*sing @o) (
+              withKnownNat (sn%*(sm%*sing @o)) (
+               \ar i -> unsafeWriteArrayWithOffset ar i
+                         . arr (rassocTensor @s @u @v @w) ))
   coerceFmapTensorProduct = cftlp
    where cftlp :: ∀ a b p . p (Tensor s u v) -> VSCCoercion a b
                    -> Coercion (TensorProduct u (Tensor s v a))
@@ -1111,6 +1231,10 @@ instance ∀ s n u m v nm . ( n`Dimensional`u, m`Dimensional`v
                           , LinearSpace u, LinearSpace v, Scalar u ~ s, Scalar v ~ s
                           , KnownNat nm, nm ~ (n*m) )
                    => nm`Dimensional`(LinearFunction s u v) where
+  unsafeFromArrayWithOffset i ar
+     = applyLinear-+$>(unsafeFromArrayWithOffset i ar :: LinearMap s u v)
+  unsafeWriteArrayWithOffset ar i
+     = unsafeWriteArrayWithOffset ar i . (sampleLinearFunction-+$>)
 
 
 instance ∀ s u v . (LinearSpace u, LinearSpace v, Scalar u ~ s, Scalar v ~ s)
@@ -1169,6 +1293,37 @@ instance ∀ s u v . (LinearSpace u, LinearSpace v, Scalar u ~ s, Scalar v ~ s)
   fzipTensorWith = case scalarSpaceWitness :: ScalarSpaceWitness u of
      ScalarSpaceWitness -> bilinearFunction $ \f (g,h)
                     -> fromLinearFn $ f . ((asLinearFn$g)&&&(asLinearFn$h))
+  tensorUnsafeFromArrayWithOffset :: ∀ nm w o α
+          . ( nm`Dimensional`LinearFunction s u v
+            , TensorSpace w, o`Dimensional`w, Scalar w ~ s
+            , GArr.Vector α s )
+           => Int -> α s -> (LinearFunction s u v⊗w)
+  tensorUnsafeFromArrayWithOffset
+     = case ( dimensionalityWitness @u, staticDimensionSing @u
+            , dimensionalityWitness @v, staticDimensionSing @v ) of
+        ( IsStaticDimensional, SJust sn
+         ,IsStaticDimensional, SJust sm )
+           -> withKnownNat (sm%*sn) (
+              withKnownNat ((sm%*sn)%*sing @o) (
+               \i -> arr (fromLinearFn @s @v @u @w)
+                       . (applyLinear-+$>)
+                       . unsafeFromArrayWithOffset i ))
+  tensorUnsafeWriteArrayWithOffset :: ∀ nm w o α σ
+          . ( nm`Dimensional`LinearFunction s u v
+            , TensorSpace w, o`Dimensional`w, Scalar w ~ s
+            , GArr.Vector α s )
+           => GArr.Mutable α σ s -> Int -> (LinearFunction s u v⊗w) -> ST σ ()
+  tensorUnsafeWriteArrayWithOffset
+     = case ( dimensionalityWitness @u, staticDimensionSing @u
+            , dimensionalityWitness @v, staticDimensionSing @v ) of
+        ( IsStaticDimensional, SJust sn
+         ,IsStaticDimensional, SJust sm )
+           -> withKnownNat (sm%*sn) (
+              withKnownNat ((sm%*sn)%*sing @o) (
+               \ar i -> unsafeWriteArrayWithOffset ar i
+                       . (sampleLinearFunction-+$>)
+                       . arr (asLinearFn @s @u @v @w)
+                       ))
   coerceFmapTensorProduct _ VSCCoercion = Coercion
   wellDefinedVector = arr sampleLinearFunction >>> wellDefinedVector
                        >>> fmap (arr applyLinear)
@@ -1269,6 +1424,10 @@ instance ∀ v s . DimensionAware v => DimensionAware (Gnrx.Rec0 v s) where
     IsStaticDimensional -> IsStaticDimensional
     IsFlexibleDimensional -> IsFlexibleDimensional
 instance ∀ n v s . n`Dimensional`v => n`Dimensional`(Gnrx.Rec0 v s) where
+  unsafeFromArrayWithOffset i ar
+     = coerce (unsafeFromArrayWithOffset @n @v i ar)
+  unsafeWriteArrayWithOffset i ar
+     = coerce (unsafeWriteArrayWithOffset @n @v i ar)
 
 instance ∀ v s . TensorSpace v => TensorSpace (Gnrx.Rec0 v s) where
   type TensorProduct (Gnrx.Rec0 v s) w = TensorProduct v w
@@ -1307,6 +1466,21 @@ instance ∀ v s . TensorSpace v => TensorSpace (Gnrx.Rec0 v s) where
                         $ (fzipTensorWith-+$>f)
                          -+$>( pseudoFmapTensorLHS Gnrx.unK1 $ wt
                              , pseudoFmapTensorLHS Gnrx.unK1 $ xt )
+  tensorUnsafeFromArrayWithOffset
+   :: ∀ w m a . ( TensorSpace w, m`Dimensional`w, Scalar w ~ Scalar v
+                , GArr.Vector a (Scalar v) )
+           => Int -> a (Scalar v) -> (Gnrx.Rec0 v s⊗w)
+  tensorUnsafeFromArrayWithOffset = case dimensionalityWitness @v of
+    IsFlexibleDimensional -> error "This is impossible, since this can only be evaluated if `v` is static-dimensional."
+    IsStaticDimensional -> \i ar
+       -> coerce (tensorUnsafeFromArrayWithOffset @v @w i ar)
+  tensorUnsafeWriteArrayWithOffset
+   :: ∀ w m α σ . ( TensorSpace w, m`Dimensional`w, Scalar w ~ Scalar v
+                , GArr.Vector α (Scalar v) )
+           => GArr.Mutable α σ (Scalar v) -> Int -> (Gnrx.Rec0 v s⊗w) -> ST σ ()
+  tensorUnsafeWriteArrayWithOffset = case dimensionalityWitness @v of
+    IsFlexibleDimensional -> error "This is impossible, since this can only be evaluated if `v` is static-dimensional."
+    IsStaticDimensional -> \ar -> coerce (tensorUnsafeWriteArrayWithOffset @v @w ar)
   coerceFmapTensorProduct = cmtp
    where cmtp :: ∀ p a b . Hask.Functor p
              => p (Gnrx.Rec0 v s) -> VSCCoercion a b
@@ -1321,6 +1495,10 @@ instance ∀ i c f p . DimensionAware (f p) => DimensionAware (Gnrx.M1 i c f p) 
     IsStaticDimensional -> IsStaticDimensional
     IsFlexibleDimensional -> IsFlexibleDimensional
 instance ∀ n i c f p . n`Dimensional`f p => n`Dimensional`Gnrx.M1 i c f p where
+  unsafeFromArrayWithOffset i ar
+     = coerce (unsafeFromArrayWithOffset @n @(f p) i ar)
+  unsafeWriteArrayWithOffset i ar
+     = coerce (unsafeWriteArrayWithOffset @n @(f p) i ar)
 
 instance ∀ i c f p . TensorSpace (f p) => TensorSpace (Gnrx.M1 i c f p) where
   type TensorProduct (Gnrx.M1 i c f p) w = TensorProduct (f p) w
@@ -1359,6 +1537,22 @@ instance ∀ i c f p . TensorSpace (f p) => TensorSpace (Gnrx.M1 i c f p) where
                         $ (fzipTensorWith-+$>f)
                          -+$>( pseudoFmapTensorLHS Gnrx.unM1 $ wt
                              , pseudoFmapTensorLHS Gnrx.unM1 $ xt )
+  tensorUnsafeFromArrayWithOffset
+   :: ∀ w m a . ( TensorSpace w, m`Dimensional`w, Scalar w ~ Scalar (f p)
+                , GArr.Vector a (Scalar (f p)) )
+           => Int -> a (Scalar (f p)) -> (Gnrx.M1 i c f p⊗w)
+  tensorUnsafeFromArrayWithOffset = case dimensionalityWitness @(f p) of
+    IsFlexibleDimensional -> error "This is impossible, since this can only be evaluated if `f p` is static-dimensional."
+    IsStaticDimensional -> \i ar
+       -> coerce (tensorUnsafeFromArrayWithOffset @(f p) @w i ar)
+  tensorUnsafeWriteArrayWithOffset
+   :: ∀ w m α σ . ( TensorSpace w, m`Dimensional`w, Scalar w ~ Scalar (f p)
+                  , GArr.Vector α (Scalar (f p)) )
+           => GArr.Mutable α σ (Scalar (f p)) -> Int -> (Gnrx.M1 i c f p⊗w) -> ST σ ()
+  tensorUnsafeWriteArrayWithOffset = case dimensionalityWitness @(f p) of
+    IsFlexibleDimensional -> error "This is impossible, since this can only be evaluated if `f p` is static-dimensional."
+    IsStaticDimensional -> \ar ->
+       coerce (tensorUnsafeWriteArrayWithOffset @(f p) @w ar)
   coerceFmapTensorProduct = cmtp
    where cmtp :: ∀ ぴ a b . Hask.Functor ぴ
              => ぴ (Gnrx.M1 i c f p) -> VSCCoercion a b
@@ -1383,6 +1577,12 @@ instance ∀ n f m g p nm . ( n`Dimensional`(f p), m`Dimensional`(g p)
                           , Scalar (f p) ~ Scalar (g p)
                           , KnownNat nm, nm ~ (n+m) )
                    => nm`Dimensional`((f:*:g) p) where
+  unsafeFromArrayWithOffset i ar
+      = unsafeFromArrayWithOffset i ar
+        :*: unsafeFromArrayWithOffset (i + fromIntegral (natVal @n Proxy)) ar
+  unsafeWriteArrayWithOffset ar i (x:*:y) = do
+      unsafeWriteArrayWithOffset ar i x
+      unsafeWriteArrayWithOffset ar (i + fromIntegral (natVal @n Proxy)) y
 
 instance ∀ f g p . ( TensorSpace (f p), TensorSpace (g p), Scalar (f p) ~ Scalar (g p) )
                        => TensorSpace ((f:*:g) p) where
@@ -1415,6 +1615,30 @@ instance ∀ f g p . ( TensorSpace (f p), TensorSpace (g p), Scalar (f p) ~ Scal
                $ \f (Tensor (uw, vw), Tensor (ux, vx))
                       -> Tensor ( (fzipTensorWith-+$>f)-+$>(uw,ux)
                                 , (fzipTensorWith-+$>f)-+$>(vw,vx) )
+  tensorUnsafeFromArrayWithOffset
+   :: ∀ w m α . ( TensorSpace w, m`Dimensional`w, Scalar w ~ Scalar (f p)
+                , GArr.Vector α (Scalar (f p)) )
+           => Int -> α (Scalar (f p)) -> ((f:*:g) p⊗w)
+  tensorUnsafeFromArrayWithOffset
+   = case (dimensionalityWitness @(f p), dimensionalityWitness @(g p)) of
+    (IsFlexibleDimensional, _) -> error "This is impossible, since this can only be evaluated if `f p` is static-dimensional."
+    (_, IsFlexibleDimensional) -> error "This is impossible, since this can only be evaluated if `g p` is static-dimensional."
+    (IsStaticDimensional, IsStaticDimensional)
+     -> withKnownNat (dimensionalitySing @(f p) %+ dimensionalitySing @(g p))
+      (\i ar
+       -> coerce (tensorUnsafeFromArrayWithOffset @(f p, g p) @w i ar) )
+  tensorUnsafeWriteArrayWithOffset
+   :: ∀ w m α σ . ( TensorSpace w, m`Dimensional`w, Scalar w ~ Scalar (f p)
+                , GArr.Vector α (Scalar (f p)) )
+           => GArr.Mutable α σ (Scalar (f p)) -> Int -> ((f:*:g) p⊗w) -> ST σ ()
+  tensorUnsafeWriteArrayWithOffset
+   = case (dimensionalityWitness @(f p), dimensionalityWitness @(g p)) of
+    (IsFlexibleDimensional, _) -> error "This is impossible, since this can only be evaluated if `f p` is static-dimensional."
+    (_, IsFlexibleDimensional) -> error "This is impossible, since this can only be evaluated if `g p` is static-dimensional."
+    (IsStaticDimensional, IsStaticDimensional)
+     -> withKnownNat (dimensionalitySing @(f p) %+ dimensionalitySing @(g p))
+      (\ar
+       -> coerce (tensorUnsafeWriteArrayWithOffset @(f p, g p) @w ar) )
   coerceFmapTensorProduct p cab = case
              ( coerceFmapTensorProduct ((\(u:*:_)->u)<$>p) cab
              , coerceFmapTensorProduct ((\(_:*:v)->v)<$>p) cab ) of
@@ -1435,6 +1659,10 @@ instance ∀ n m . ( Semimanifold m, n`Dimensional`Needle (VRep m)
                  , KnownNat n
                  , Scalar (Needle m) ~ Scalar (Needle (VRep m)) )
                   => n`Dimensional`GenericNeedle m where
+  unsafeFromArrayWithOffset i ar
+     = coerce (unsafeFromArrayWithOffset @n @(Needle (VRep m)) i ar)
+  unsafeWriteArrayWithOffset ar i
+     = coerce (unsafeWriteArrayWithOffset @n @(Needle (VRep m)) ar i)
 
 instance ∀ m . ( Semimanifold m, TensorSpace (Needle (VRep m))
                                , Scalar (Needle m) ~ Scalar (Needle (VRep m)) )
@@ -1488,6 +1716,28 @@ instance ∀ m . ( Semimanifold m, TensorSpace (Needle (VRep m))
                         $ (fzipTensorWith-+$>f)
                          -+$>( pseudoFmapTensorLHS getGenericNeedle $ wt
                              , pseudoFmapTensorLHS getGenericNeedle $ xt )
+  tensorUnsafeFromArrayWithOffset
+   :: ∀ w nn α . ( TensorSpace w, nn`Dimensional`w
+                , Scalar w ~ (Scalar (Needle (VRep m)))
+                , GArr.Vector α (Scalar (Needle (VRep m))) )
+           => Int -> α (Scalar (Needle (VRep m)))
+                -> (GenericNeedle m⊗w)
+  tensorUnsafeFromArrayWithOffset
+   = case dimensionalityWitness @(Needle (VRep m)) of
+    IsFlexibleDimensional -> error "This is impossible, since this can only be evaluated if `Needle (VRep m)` is static-dimensional."
+    IsStaticDimensional -> \i ar
+       -> coerce (tensorUnsafeFromArrayWithOffset @(Needle (VRep m)) @w i ar)
+  tensorUnsafeWriteArrayWithOffset
+   :: ∀ w nn α σ . ( TensorSpace w, nn`Dimensional`w
+                , Scalar w ~ (Scalar (Needle (VRep m)))
+                , GArr.Vector α (Scalar (Needle (VRep m))) )
+           => GArr.Mutable α σ (Scalar (Needle (VRep m)))
+                -> Int -> (GenericNeedle m⊗w) -> ST σ ()
+  tensorUnsafeWriteArrayWithOffset
+   = case dimensionalityWitness @(Needle (VRep m)) of
+    IsFlexibleDimensional -> error "This is impossible, since this can only be evaluated if `Needle (VRep m)` is static-dimensional."
+    IsStaticDimensional -> \ar
+       -> coerce (tensorUnsafeWriteArrayWithOffset @(Needle (VRep m)) @w ar)
   coerceFmapTensorProduct = cmtp
    where cmtp :: ∀ p a b . Hask.Functor p
              => p (GenericNeedle m) -> VSCCoercion a b
@@ -1584,6 +1834,10 @@ instance ∀ n f m g p nm .
               , Scalar (g p) ~ Scalar (DualVector (g p))
               , KnownNat nm, nm ~ (n+m) )
                    => nm`Dimensional`GenericTupleDual f g p where
+  unsafeFromArrayWithOffset i ar
+     = coerce (unsafeFromArrayWithOffset @nm @(GenericTupleDual f g p) i ar)
+  unsafeWriteArrayWithOffset i ar
+     = coerce (unsafeWriteArrayWithOffset @nm @(GenericTupleDual f g p) i ar)
 
 instance ( LinearSpace (f p), LinearSpace (g p)
          , VectorSpace (DualVector (f p)), VectorSpace (DualVector (g p))
@@ -1666,6 +1920,43 @@ instance ( LinearSpace (f p), LinearSpace (g p)
                                                                      , asTensor $ fx )
                            , fromTensor $ (fzipTensorWith-+$>f) -+$> ( asTensor $ gw
                                                                      , asTensor $ gx ) )
+  tensorUnsafeFromArrayWithOffset
+   :: ∀ w m α . ( TensorSpace w, m`Dimensional`w, Scalar w ~ Scalar (f p)
+                , GArr.Vector α (Scalar (f p)) )
+           => Int -> α (Scalar (f p)) -> (GenericTupleDual f g p⊗w)
+  tensorUnsafeFromArrayWithOffset
+   = case ( dualSpaceWitness @(f p), dualSpaceWitness @(g p) ) of
+    (DualSpaceWitness, DualSpaceWitness) -> case
+          ( dimensionalityWitness @(DualVector (f p))
+          , dimensionalityWitness @(DualVector (g p)) ) of
+     (IsFlexibleDimensional, _)
+       -> error "This is impossible, since this can only be evaluated if `f p` is static-dimensional."
+     (_, IsFlexibleDimensional) -> error "This is impossible, since this can only be evaluated if `g p` is static-dimensional."
+     (IsStaticDimensional, IsStaticDimensional)
+      -> withKnownNat (dimensionalitySing @(DualVector (f p))
+                        %+ dimensionalitySing @(DualVector (g p)))
+       (\i ar
+        -> coerce (tensorUnsafeFromArrayWithOffset
+                    @(DualVector (f p), DualVector (g p)) @w i ar) )
+  tensorUnsafeWriteArrayWithOffset
+   :: ∀ w m α σ . ( TensorSpace w, m`Dimensional`w, Scalar w ~ Scalar (f p)
+                , GArr.Vector α (Scalar (f p)) )
+           => GArr.Mutable α σ (Scalar (f p)) -> Int -> (GenericTupleDual f g p⊗w)
+                 -> ST σ ()
+  tensorUnsafeWriteArrayWithOffset
+   = case ( dualSpaceWitness @(f p), dualSpaceWitness @(g p) ) of
+    (DualSpaceWitness, DualSpaceWitness) -> case
+          ( dimensionalityWitness @(DualVector (f p))
+          , dimensionalityWitness @(DualVector (g p)) ) of
+     (IsFlexibleDimensional, _)
+       -> error "This is impossible, since this can only be evaluated if `f p` is static-dimensional."
+     (_, IsFlexibleDimensional) -> error "This is impossible, since this can only be evaluated if `g p` is static-dimensional."
+     (IsStaticDimensional, IsStaticDimensional)
+      -> withKnownNat (dimensionalitySing @(DualVector (f p))
+                        %+ dimensionalitySing @(DualVector (g p)))
+       (\ar
+        -> coerce (tensorUnsafeWriteArrayWithOffset
+                    @(DualVector (f p), DualVector (g p)) @w ar) )
   coerceFmapTensorProduct p cab = case ( dualSpaceWitness :: DualSpaceWitness (f p)
                                        , dualSpaceWitness :: DualSpaceWitness (g p) ) of
        (DualSpaceWitness, DualSpaceWitness) -> case
@@ -1781,6 +2072,10 @@ instance ∀ n m . ( Semimanifold m, n`Dimensional`DualVector (Needle (VRep m))
                  , KnownNat n
                  , Scalar (Needle m) ~ Scalar (DualVector (Needle (VRep m))) )
                   => n`Dimensional`GenericNeedle' m where
+  unsafeFromArrayWithOffset i ar
+      = coerce (unsafeFromArrayWithOffset @n @(DualVector (Needle (VRep m))) i ar)
+  unsafeWriteArrayWithOffset ar
+      = coerce (unsafeWriteArrayWithOffset @n @(DualVector (Needle (VRep m))) ar)
 
 instance ∀ m . ( Semimanifold m, TensorSpace (DualVector (Needle (VRep m)))
                , Scalar (Needle m) ~ Scalar (DualVector (Needle (VRep m))) )
@@ -1836,6 +2131,30 @@ instance ∀ m . ( Semimanifold m, TensorSpace (DualVector (Needle (VRep m)))
                         $ (fzipTensorWith-+$>f)
                          -+$>( pseudoFmapTensorLHS getGenericNeedle' $ wt
                              , pseudoFmapTensorLHS getGenericNeedle' $ xt )
+  tensorUnsafeFromArrayWithOffset
+   :: ∀ w nn α . ( TensorSpace w, nn`Dimensional`w
+                , Scalar w ~ (Scalar (DualVector (Needle (VRep m))))
+                , GArr.Vector α (Scalar (DualVector (Needle (VRep m)))) )
+           => Int -> α (Scalar (DualVector (Needle (VRep m))))
+                -> (GenericNeedle' m⊗w)
+  tensorUnsafeFromArrayWithOffset
+   = case dimensionalityWitness @(DualVector (Needle (VRep m))) of
+    IsFlexibleDimensional -> error "This is impossible, since this can only be evaluated if `Needle (VRep m)` is static-dimensional."
+    IsStaticDimensional -> \i ar
+       -> coerce (tensorUnsafeFromArrayWithOffset
+                   @(DualVector (Needle (VRep m))) @w i ar)
+  tensorUnsafeWriteArrayWithOffset
+   :: ∀ w nn α σ . ( TensorSpace w, nn`Dimensional`w
+                , Scalar w ~ (Scalar (DualVector (Needle (VRep m))))
+                , GArr.Vector α (Scalar (DualVector (Needle (VRep m)))) )
+           => GArr.Mutable α σ (Scalar (DualVector (Needle (VRep m))))
+                -> Int -> (GenericNeedle' m⊗w) -> ST σ ()
+  tensorUnsafeWriteArrayWithOffset
+   = case dimensionalityWitness @(DualVector (Needle (VRep m))) of
+    IsFlexibleDimensional -> error "This is impossible, since this can only be evaluated if `Needle (VRep m)` is static-dimensional."
+    IsStaticDimensional -> \ar
+       -> coerce (tensorUnsafeWriteArrayWithOffset
+                   @(DualVector (Needle (VRep m))) @w ar)
   coerceFmapTensorProduct = cmtp
    where cmtp :: ∀ p a b . Hask.Functor p
              => p (GenericNeedle' m) -> VSCCoercion a b

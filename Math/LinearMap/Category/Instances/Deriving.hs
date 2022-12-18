@@ -19,6 +19,7 @@
 {-# LANGUAGE DataKinds                  #-}
 {-# LANGUAGE Rank2Types                 #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
+{-# LANGUAGE InstanceSigs               #-}
 {-# LANGUAGE UnicodeSyntax              #-}
 {-# LANGUAGE StandaloneDeriving         #-}
 {-# LANGUAGE DeriveGeneric              #-}
@@ -60,6 +61,7 @@ import qualified Prelude as Hask
 
 import Control.Category.Constrained.Prelude hiding (type (+))
 import Control.Arrow.Constrained
+import Control.Monad.ST (ST)
 
 import Data.Coerce
 import Data.Type.Coercion
@@ -68,6 +70,9 @@ import Data.Proxy
 import qualified Data.Kind as Kind
 import Data.Traversable (traverse)
 import Data.Default.Class
+
+import qualified Data.Vector.Generic as GArr
+import qualified Data.Vector.Generic.Mutable as GMArr
 
 import Math.Manifold.Core.PseudoAffine
 import Math.LinearMap.Asserted
@@ -228,6 +233,16 @@ makeLinearSpaceFromBasis' config cxtv = do
          $(varP 'fzipTensorWith) = bilinearFunction
            $ \(LinearFunction f) (Tensor tv, Tensor tw)
                 -> Tensor $ liftA2 (curry f) tv tw
+         $(varP 'tensorUnsafeFromArrayWithOffset)
+             = \i ar -> Tensor . trie
+                 $ \bv -> let w = unsafeFromArrayWithOffset
+                                   (i + dimensionOf w * lookupBasisIndex bv)
+                                   ar
+                          in w
+         $(varP 'tensorUnsafeWriteArrayWithOffset)
+             = \ar i (Tensor t) -> forM_ (zip [0..] enumBasis) $ \(j,bv) -> do
+                  let w = untrie t bv
+                  unsafeWriteArrayWithOffset ar (i + dimensionOf w * j) w
          $(varP 'coerceFmapTensorProduct) = \_ VSCCoercion
            -> error "Cannot yet coerce tensors defined from a `HasBasis` instance. This would require `RoleAnnotations` on `:->:`. Cf. https://gitlab.haskell.org/ghc/ghc/-/issues/8177"
        |]
@@ -282,8 +297,15 @@ makeLinearSpaceFromBasis' config cxtv = do
        |]
   ] ++ if _treatBasisAsFinite config then [do
      dim <- pure . VarT <$> newName "n"
-     InstanceD Nothing <$> ((:)<$>[t|Cardinality (Basis $v) ~ 'Just $dim|]<*>cxt)
+     InstanceD Nothing <$> ((:)<$>[t|($dim)#(Basis $v)|]<*>cxt)
                  <*> [t|Dimensional $dim $v|] <*> [d|
+         $(varP 'unsafeFromArrayWithOffset)
+             = \i ar -> recompose
+                         [ (b, ar GArr.! (i+j))
+                         | (j, b) <- zip [0..] enumBasis ]
+         $(varP 'unsafeWriteArrayWithOffset)
+             = \ar i v -> forM_ (zip [0..] enumBasis) $ \(j,b) ->
+                  GMArr.unsafeWrite ar (i+j) $ decompose' v b
        |]]
     else []
    )
@@ -513,6 +535,12 @@ instance (HasBasis v, KnownCardinality (Basis v))
      FiniteCardinality -> IsStaticDimensional
 instance ( HasBasis v, KnownNat n, n#Basis v )
               => n`Dimensional`DualVectorFromBasis v where
+  unsafeFromArrayWithOffset i ar
+     = recompose [ (b, ar GArr.! (i+j))
+                 | (j, b) <- zip [0..] enumBasis ]
+  unsafeWriteArrayWithOffset ar i v
+     = forM_ (zip [0..] enumBasis) $ \(j,b) -> do
+         GMArr.unsafeWrite ar (i+j) $ decompose' v b
   
 
 instance ∀ v . ( HasBasis v, Num' (Scalar v)
@@ -549,6 +577,24 @@ instance ∀ v . ( HasBasis v, Num' (Scalar v)
   fzipTensorWith = bilinearFunction
     $ \(LinearFunction f) (Tensor tv, Tensor tw)
          -> Tensor $ liftA2 (curry f) tv tw
+  tensorUnsafeFromArrayWithOffset :: ∀ w m α
+        . (m`Dimensional`w, Scalar w ~ Scalar v, GArr.Vector α (Scalar v))
+       => Int -> α (Scalar v)
+            -> Tensor (Scalar v) (DualVectorFromBasis v) w
+  tensorUnsafeFromArrayWithOffset i ar
+      = case cardinalityWitness @(Basis v) of
+         FiniteCardinality -> Tensor . trie
+           $ lookupBasisIndex >>> \j
+               -> unsafeFromArrayWithOffset (i + j * dimension @w) ar
+  tensorUnsafeWriteArrayWithOffset :: ∀ w m α σ
+        . (m`Dimensional`w, Scalar w ~ Scalar v, GArr.Vector α (Scalar v))
+       => GArr.Mutable α σ (Scalar v) -> Int
+            -> Tensor (Scalar v) (DualVectorFromBasis v) w -> ST σ ()
+  tensorUnsafeWriteArrayWithOffset ar i
+      = case cardinalityWitness @(Basis v) of
+         FiniteCardinality -> \(Tensor t)
+          -> forM_ (zip [0..] enumBasis) $ \(j, bv) ->
+              unsafeWriteArrayWithOffset ar (i + j * dimension @w) $ untrie t bv
   coerceFmapTensorProduct _ VSCCoercion
     = error "Cannot yet coerce tensors defined from a `HasBasis` instance. This would require `RoleAnnotations` on `:->:`. Cf. https://gitlab.haskell.org/ghc/ghc/-/issues/8177"
 
@@ -842,6 +888,16 @@ instance ∀ n a c . ( AbstractLinearSpace a
                    , n`Dimensional`c
                    , TensorSpace (DualVector c) )
      => n`Dimensional`AbstractDualVector a c where
+  unsafeFromArrayWithOffset i
+     = scalarsSameInAbstraction @a (
+           case (dualSpaceWitness @c, dimensionalityWitness @(DualVector c)) of
+         (DualSpaceWitness, IsStaticDimensional)
+            -> AbstractDualVector_ . unsafeFromArrayWithOffset i )
+  unsafeWriteArrayWithOffset ar i
+     = scalarsSameInAbstraction @a (
+           case (dualSpaceWitness @c, dimensionalityWitness @(DualVector c)) of
+         (DualSpaceWitness, IsStaticDimensional)
+            -> \(AbstractDualVector_ v) -> unsafeWriteArrayWithOffset ar i v )
 
 instance ∀ a c . ( AbstractLinearSpace a, VectorSpaceImplementation a ~ c
                  , TensorSpace (DualVector c) )
@@ -926,6 +982,23 @@ instance ∀ a c . ( AbstractLinearSpace a, VectorSpaceImplementation a ~ c
                        (AbstractDualVector a c ⊗ u) 
          ft = scalarsSameInAbstractionAndDuals @a
                  (coerce $ fzipTensorWith @(DualVector c) @u @w @x)
+  tensorUnsafeFromArrayWithOffset :: ∀ w m α
+          . ( m`Dimensional`w, TensorSpace w, Scalar w ~ Scalar a
+            , GArr.Vector α (Scalar a) )
+          => Int -> α (Scalar a) -> Tensor (Scalar a) (AbstractDualVector a c) w
+  tensorUnsafeFromArrayWithOffset i
+      = case dimensionalityWitness @(DualVector c) of
+         IsStaticDimensional -> scalarsSameInAbstractionAndDuals @a
+          (coerce . tensorUnsafeFromArrayWithOffset @(DualVector c) @w i)
+  tensorUnsafeWriteArrayWithOffset :: ∀ w m α σ
+          . ( m`Dimensional`w, TensorSpace w, Scalar w ~ Scalar a
+            , GArr.Vector α (Scalar a) )
+          => GArr.Mutable α σ (Scalar a) -> Int
+            -> Tensor (Scalar a) (AbstractDualVector a c) w -> ST σ ()
+  tensorUnsafeWriteArrayWithOffset ar
+      = case dimensionalityWitness @(DualVector c) of
+         IsStaticDimensional -> scalarsSameInAbstractionAndDuals @a
+          (coerce (tensorUnsafeWriteArrayWithOffset @(DualVector c) @w ar))
   coerceFmapTensorProduct _ = coerceFmapTensorProduct ([]::[DualVector c])
 
 witnessAbstractDualVectorTensorSpacyness
@@ -1301,6 +1374,40 @@ abstractVS_fzipTensorsWith = scalarsSameInAbstraction @v
            (Coercion, Coercion, Coercion)
               -> coerce (fzipTensorWith @(VectorSpaceImplementation v) @u @w @x)
         )
+
+abstractVS_unsafeFromArrayWithOffset :: ∀ v n α
+         . ( AbstractTensorSpace v, n`Dimensional`VectorSpaceImplementation v
+           , GArr.Vector α (Scalar v) )
+                   => Int -> α (Scalar v) -> v
+abstractVS_unsafeFromArrayWithOffset = scalarsSameInAbstraction @v
+    (\i -> coerce
+       . unsafeFromArrayWithOffset @n @(VectorSpaceImplementation v) i )
+
+abstractVS_unsafeWriteArrayWithOffset :: ∀ v n α σ
+         . ( AbstractTensorSpace v, n`Dimensional`VectorSpaceImplementation v
+           , GArr.Vector α (Scalar v) )
+                   => GArr.Mutable α σ (Scalar v) -> Int -> v -> ST σ ()
+abstractVS_unsafeWriteArrayWithOffset = scalarsSameInAbstraction @v
+    (\ar -> coerce (unsafeWriteArrayWithOffset @n @(VectorSpaceImplementation v) ar))
+
+abstractVS_tensorUnsafeFromArrayWithOffset :: ∀ v w n m α
+         . ( AbstractTensorSpace v, n`Dimensional`VectorSpaceImplementation v
+           , TensorSpace w, m`Dimensional`w, Scalar w ~ Scalar v
+           , GArr.Vector α (Scalar v) )
+                   => Int -> α (Scalar v) -> (v⊗w)
+abstractVS_tensorUnsafeFromArrayWithOffset = scalarsSameInAbstraction @v
+    (\i -> arr (symVSC abstractTensorsCoercion)
+       . tensorUnsafeFromArrayWithOffset @(VectorSpaceImplementation v) i )
+
+abstractVS_tensorUnsafeWriteArrayWithOffset :: ∀ v w n m α σ
+         . ( AbstractTensorSpace v, n`Dimensional`VectorSpaceImplementation v
+           , TensorSpace w, m`Dimensional`w, Scalar w ~ Scalar v
+           , GArr.Vector α (Scalar v) )
+                   => GArr.Mutable α σ (Scalar v) -> Int -> (v⊗w) -> ST σ ()
+abstractVS_tensorUnsafeWriteArrayWithOffset = scalarsSameInAbstraction @v
+    (\ar i -> 
+       tensorUnsafeWriteArrayWithOffset @(VectorSpaceImplementation v) ar i
+        . arr abstractTensorsCoercion )
 
 abstractVS_coerceFmapTensorProduct :: ∀ v u w p .
          ( AbstractTensorSpace v
@@ -1722,6 +1829,8 @@ copyNewtypeInstances cxtv classes = do
        InstanceD Nothing <$> ((:)<$>[t|StaticDimension $c ~ 'Just $dim|]
                           <*>((:)<$>[t|KnownNat $dim|]<*>cxt)) <*>
                           [t|Dimensional $dim $a|] <*> [d|
+         $(varP 'unsafeFromArrayWithOffset) = abstractVS_unsafeFromArrayWithOffset
+         $(varP 'unsafeWriteArrayWithOffset) = abstractVS_unsafeWriteArrayWithOffset
         |]
      "TensorSpace" -> InstanceD Nothing <$> cxt <*>
                           [t|TensorSpace $a|] <*> [d|
@@ -1741,6 +1850,10 @@ copyNewtypeInstances cxtv classes = do
          $(varP 'transposeTensor) = abstractVS_transposeTensor
          $(varP 'fmapTensor) = abstractVS_fmapTensor
          $(varP 'fzipTensorWith) = abstractVS_fzipTensorsWith
+         $(varP 'tensorUnsafeFromArrayWithOffset)
+                       = abstractVS_tensorUnsafeFromArrayWithOffset
+         $(varP 'tensorUnsafeWriteArrayWithOffset)
+                       = abstractVS_tensorUnsafeWriteArrayWithOffset
          $(varP 'coerceFmapTensorProduct) = abstractVS_coerceFmapTensorProduct
       |]
      "AbstractTensorSpace" -> InstanceD Nothing <$> cxt <*>

@@ -27,15 +27,20 @@ import Control.Category.Constrained.Prelude
 import Control.Arrow.Constrained
 
 import Data.AffineSpace
+import Linear.V3
 import Linear.V4
 import Data.Basis
+import Data.Coerce
 import Math.LinearMap.Category
+import Math.VectorSpace.DimensionAware (toArray, fromArray, unsafeFromArray)
 import Math.Manifold.Core.Types
 import Math.Manifold.Core.PseudoAffine
 
 import Test.Tasty
 import Test.Tasty.QuickCheck
 import qualified Test.QuickCheck as QC
+
+import qualified Data.Vector.Unboxed as UArr
 
 
 newtype ℝ⁴ = ℝ⁴ { getℝ⁴ :: V4 ℝ }
@@ -62,6 +67,14 @@ derivative₄ (H¹ℝ⁴ ((w,x),(y,z))) = ℝ⁴ (V4 z w x y) ^-^ ℝ⁴ (V4 x y
 
 instance InnerSpace (H¹ℝ⁴ ℝ) where
   H¹ℝ⁴ v <.> H¹ℝ⁴ w = v<.>w + derivative₄ (H¹ℝ⁴ v)<.>derivative₄ (H¹ℝ⁴ w)
+
+instance Arbitrary ℝ⁴ where
+  arbitrary = ℝ⁴ <$> do
+      V4 <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
+
+instance Arbitrary w => Arbitrary (Tensor ℝ ℝ⁴ w) where
+  arbitrary = Tensor <$> do
+      V4 <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
 
 
 newtype ℝ⁵ a = ℝ⁵ { getℝ⁵ :: [ℝ] }
@@ -154,6 +167,68 @@ main = do
      . QC.expectFailure
      $ \v -> (riesz-+$>AbstractDualVector v) ≈≈≈ (H¹ℝ⁴ v :: H¹ℝ⁴ Double)
     ]
+   , testGroup "Reading from arrays"
+    [ testProperty "Scalars"
+     $ \x -> fromArray (uar [x :: ℝ]) === Just x
+    , testProperty "Pairs"
+     $ \x y -> fromArray (uar [x,y :: ℝ]) === Just (x,y)
+    , testProperty "Nested pairs"
+     $ \x y ξ υ -> fromArray (uar [x,y,ξ,υ :: ℝ]) === Just ((x,y),(ξ,υ))
+    , testProperty "ℝ³"
+     $ \x y z -> fromArray (uar [x,y,z :: ℝ]) === Just (V3 x y z)
+    , testProperty "Tensors: (ℝ,ℝ)⊗ℝ³"
+     $ \x y z ξ υ ζ -> fromArray (uar [x,y,z
+                                      ,ξ,υ,ζ :: ℝ])
+                          === Just (coerce ( V3 x y z
+                                           , V3 ξ υ ζ ) :: (ℝ,ℝ)⊗V3 ℝ)
+    , testProperty "Tensors: ℝ³⊗(ℝ,ℝ)"
+     $ \x y z ξ υ ζ -> fromArray (uar [x,ξ
+                                      ,y,υ
+                                      ,z,ζ :: ℝ])
+                          === Just (coerce (V3 (x,ξ)
+                                               (y,υ)
+                                               (z,ζ)) :: V3 ℝ⊗(ℝ,ℝ))
+    , testProperty "Tensors: (ℝ,ℝ)⊗(ℝ,ℝ)⊗(ℝ,ℝ)"
+     $ \a b c d e f g h -> fromArray (uar [a,b,c,d,e,f,g,h :: ℝ])
+                          == Just (coerce (((a,b),(c,d)),((e,f),(g,h)))
+                                         :: (ℝ,ℝ)⊗(ℝ,ℝ)⊗(ℝ,ℝ))
+    , testProperty "Linear functions: (ℝ,ℝ)-+>ℝ³"
+     $ \xx xy yx yy zx zy x y
+          -> (unsafeFromArray (uar [xx,yx,zx
+                                   ,xy,yy,zy])
+               -+$> (unsafeFromArray (uar [x,y]) :: (ℝ,ℝ)))
+               === (unsafeFromArray
+                      (uar [ xx*x + xy*y
+                           , yx*x + yy*y
+                           , zx*x + zy*y ]) :: V3 ℝ)
+    , testProperty "Linear functions: ℝ³-+>(ℝ,ℝ)"
+     $ \xx xy xz yx yy yz x y z
+          -> (unsafeFromArray (uar [xx,yx
+                                   ,xy,yy
+                                   ,xz,yz])
+               -+$> (unsafeFromArray (uar [x,y,z]) :: V3 ℝ))
+               === (unsafeFromArray
+                      (uar [ xx*x + xy*y + xz*z
+                           , yx*x + yy*y + yz*z ]) :: (ℝ,ℝ))
+                              -- N.B. this test is sensitive to the computation
+                              -- order, e.g. it fails with xy*y + xx*x + xz*z due to
+                              -- floating-point non-associativity and the exact ===.
+    ]
+   , testGroup "Array conversion"
+    $ let arrayRoundTrip :: ∀ v n . (n`Dimensional`v, Scalar v ~ ℝ, Eq v, Show v)
+                      => v -> QC.Property
+          arrayRoundTrip v = fromArray (toArray v :: UArr.Vector ℝ) === Just v
+      in [ testProperty "ℝ" $ arrayRoundTrip @ℝ
+         , testProperty "(ℝ,ℝ)" $ arrayRoundTrip @(ℝ,ℝ)
+         , testProperty "ℝ³" $ arrayRoundTrip @(V3 ℝ)
+         , testProperty "ℝ⁴ (newtype-derived)" $ arrayRoundTrip @ℝ⁴
+         , testProperty "ℝ⁵ (basis-derived)" $ arrayRoundTrip @(ℝ⁵ Int)
+         , testProperty "ℝ³⊗(ℝ,ℝ)" $ arrayRoundTrip @(V3 ℝ⊗(ℝ,ℝ))
+         , testProperty "(ℝ,ℝ)⊗ℝ³" $ arrayRoundTrip @((ℝ,ℝ)⊗V3 ℝ)
+         , testProperty "ℝ³⊗ℝ³⊗ℝ³" $ arrayRoundTrip @(V3 ℝ⊗V3 ℝ⊗V3 ℝ)
+         , testProperty "ℝ³+>ℝ³" $ arrayRoundTrip @(V3 ℝ+>V3 ℝ)
+         , testProperty "ℝ³⊗ℝ⁴⊗ℝ⁵" $ arrayRoundTrip @(V3 ℝ⊗ℝ⁴⊗ℝ⁵ Int)
+         ]
    ]
 
 
@@ -162,3 +237,9 @@ main = do
 v≈≈≈w
  | magnitudeSq (v^-^w) < (magnitudeSq v + magnitudeSq w)*1e-8   = QC.property True
  | otherwise                                                    = v===w
+
+uar :: UArr.Unbox a => [a] -> UArr.Vector a
+uar = UArr.fromList
+
+instance QC.Arbitrary s => QC.Arbitrary (V3 s) where
+  arbitrary = V3 <$> QC.arbitrary <*> QC.arbitrary <*> QC.arbitrary
