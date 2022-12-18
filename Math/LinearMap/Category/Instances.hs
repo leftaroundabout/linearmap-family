@@ -45,6 +45,7 @@ import Control.Arrow.Constrained
 import Data.Coerce
 import Data.Type.Coercion
 import Data.Tagged
+import Data.Proxy
 
 import Data.Foldable (foldl')
 
@@ -57,9 +58,11 @@ import qualified Linear.Metric as Mat
 import Linear ( V0(V0), V1(V1), V2(V2), V3(V3), V4(V4)
               , _x, _y, _z, _w )
 import Control.Lens ((^.))
+import Control.Monad.ST (ST)
 
 import qualified Data.Vector as Arr
 import qualified Data.Vector.Unboxed as UArr
+import qualified Data.Vector.Generic as GArr
 
 import Math.LinearMap.Asserted
 import Math.VectorSpace.ZeroDimensional
@@ -67,10 +70,11 @@ import qualified Math.VectorSpace.DimensionAware.Theorems.MaybeNat as Maybe
 
 import qualified Test.QuickCheck as QC
 
-import GHC.TypeNats (KnownNat)
+import GHC.TypeNats (KnownNat, natVal)
 import qualified GHC.Exts as GHC
 import qualified GHC.Generics as GHC
 
+import Data.Singletons (SingI, sing, Sing)
 #if MIN_VERSION_singletons(3,0,0)
 import GHC.TypeLits.Singletons (withKnownNat)
 #else
@@ -127,6 +131,10 @@ instance TensorSpace (S) where { \
   fmapTensor = bilinearFunction $ \f (Tensor t) -> Tensor (f-+$>t); \
   fzipTensorWith = bilinearFunction \
                    $ \(LinearFunction f) -> follow Tensor <<< f <<< flout Tensor *** flout Tensor; \
+  tensorUnsafeFromArrayWithOffset i ar \
+    = Tensor (unsafeFromArrayWithOffset i ar); \
+  tensorUnsafeWriteArrayWithOffset ar i (Tensor v) \
+    = unsafeWriteArrayWithOffset ar i v; \
   coerceFmapTensorProduct _ VSCCoercion = Coercion; \
   wellDefinedTensor (Tensor w) = Tensor <$> wellDefinedVector w }; \
 instance LinearSpace (S) where { \
@@ -153,6 +161,30 @@ LinearScalarSpace(ℝ)
 LinearScalarSpace(Float)
 LinearScalarSpace(Rational)
 
+{-# INLINE tensorUnsafeFromArrayWithOffsetViaList #-}
+tensorUnsafeFromArrayWithOffsetViaList
+          :: ∀ v w n m α . ( n`Dimensional`v
+                           , m`Dimensional`w
+                           , Scalar v ~ Scalar w
+                           , GArr.Vector α (Scalar v) )
+   => ([w] -> TensorProduct v w) -> Int -> α (Scalar v) -> (v⊗w)
+tensorUnsafeFromArrayWithOffsetViaList l2v i ar
+   = Tensor $ l2v [ unsafeFromArrayWithOffset
+                      (i + j * fromIntegral (natVal @m Proxy)) ar
+                  | j <- [0 .. fromIntegral (natVal @n Proxy) - 1] ]
+
+{-# INLINE tensorUnsafeWriteArrayWithOffsetViaList #-}
+tensorUnsafeWriteArrayWithOffsetViaList
+        :: ∀ v w n m α σ . ( n`Dimensional`v
+                           , m`Dimensional`w
+                           , Scalar v ~ Scalar w
+                           , GArr.Vector α (Scalar v) )
+   => (TensorProduct v w -> [w]) -> GArr.Mutable α σ (Scalar v)
+          -> Int -> (v⊗w) -> ST σ ()
+tensorUnsafeWriteArrayWithOffsetViaList v2l ar i (Tensor t)
+   = forM_ (zip [0..] $ v2l t) $ \(j, v)
+       -> unsafeWriteArrayWithOffset ar
+                      (i + j * fromIntegral (natVal @m Proxy)) v
 
 #if MIN_VERSION_manifolds_core(0,6,0)
 #define FreeLinSpaceInteriorDecls
@@ -161,7 +193,10 @@ LinearScalarSpace(Rational)
   toInterior = pure; fromInterior = id; translateP = Tagged (^+^);
 #endif
 
-#define FreeLinearSpace(V, d, LV, tp, tenspl, tenid, dspan, contraction, contraaction)  \
+#define FreeLinearSpace( V, d, LV, tp \
+                       , tenspl, tenid, dspan \
+                       , contraction, contraaction \
+                       , frls, tols )  \
 instance Num s => Semimanifold (V s) where {  \
   type Needle (V s) = V s;                      \
   FreeLinSpaceInteriorDecls                      \
@@ -172,6 +207,10 @@ instance ∀ s . (Num' s, Eq s) => DimensionAware (V s) where {                 
   type StaticDimension (V s) = 'Just (d);       \
   dimensionalityWitness = IsStaticDimensional };                               \
 instance ∀ s . (Num' s, Eq s) => (d)`Dimensional`V (s) where {                     \
+  unsafeFromArrayWithOffset \
+     = unsafeFromArrayWithOffsetViaList (frls); \
+  unsafeWriteArrayWithOffset \
+     = unsafeWriteArrayWithOffsetViaList (tols) \
    };                               \
 instance ∀ s . (Num' s, Eq s) => TensorSpace (V s) where {                     \
   type TensorProduct (V s) w = V w;                               \
@@ -195,6 +234,10 @@ instance ∀ s . (Num' s, Eq s) => TensorSpace (V s) where {                    
   fzipTensorWith = bilinearFunction $ \
           \(LinearFunction f) (Tensor vw, Tensor vx) \
                   -> Tensor $ liftA2 (curry f) vw vx; \
+  tensorUnsafeFromArrayWithOffset \
+     = tensorUnsafeFromArrayWithOffsetViaList (frls); \
+  tensorUnsafeWriteArrayWithOffset \
+     = tensorUnsafeWriteArrayWithOffsetViaList (tols); \
   coerceFmapTensorProduct _ VSCCoercion = Coercion; \
   wellDefinedTensor = getTensorProduct >>> Hask.traverse wellDefinedVector \
                        >>> fmap Tensor };                  \
@@ -235,7 +278,10 @@ FreeLinearSpace( V0, 0
                , V0
                , LinearMap V0
                , \V0 -> zeroV
-               , \V0 _ -> 0 )
+               , \V0 _ -> 0
+               , \[] -> V0
+               , \V0 -> []
+               )
 FreeLinearSpace( V1, 1
                , LinearMap
                , \(Tensor (V1 w₀)) -> w₀⊗V1 1
@@ -243,7 +289,10 @@ FreeLinearSpace( V1, 1
                , V1 V1
                , LinearMap . V1 . blockVectSpan $ V1 1
                , \(V1 (V1 w)) -> w
-               , \(V1 x) f -> (f$x)^._x )
+               , \(V1 x) f -> (f$x)^._x
+               , \[x] -> V1 x
+               , \(V1 x) -> [x]
+               )
 FreeLinearSpace( V2, 2
                , LinearMap
                , \(Tensor (V2 w₀ w₁)) -> w₀⊗V2 1 0
@@ -255,7 +304,10 @@ FreeLinearSpace( V2, 2
                                 (blockVectSpan $ V2 0 1)
                , \(V2 (V2 w₀ _)
                       (V2 _ w₁)) -> w₀^+^w₁
-               , \(V2 x y) f -> (f$x)^._x + (f$y)^._y )
+               , \(V2 x y) f -> (f$x)^._x + (f$y)^._y
+               , \(x:y:[]) -> V2 x y
+               , \(V2 x y) -> (x:y:[])
+               )
 FreeLinearSpace( V3, 3
                , LinearMap
                , \(Tensor (V3 w₀ w₁ w₂)) -> w₀⊗V3 1 0 0
@@ -273,7 +325,10 @@ FreeLinearSpace( V3, 3
                , \(V3 (V3 w₀ _ _)
                       (V3 _ w₁ _)
                       (V3 _ _ w₂)) -> w₀^+^w₁^+^w₂
-               , \(V3 x y z) f -> (f$x)^._x + (f$y)^._y + (f$z)^._z )
+               , \(V3 x y z) f -> (f$x)^._x + (f$y)^._y + (f$z)^._z
+               , \(x:y:z:[]) -> V3 x y z
+               , \(V3 x y z) -> x:y:z:[]
+               )
 FreeLinearSpace( V4, 4
                , LinearMap
                , \(Tensor (V4 w₀ w₁ w₂ w₃)) -> w₀⊗V4 1 0 0 0
@@ -296,7 +351,10 @@ FreeLinearSpace( V4, 4
                       (V4 _ w₁ _ _)
                       (V4 _ _ w₂ _)
                       (V4 _ _ _ w₃)) -> w₀^+^w₁^+^w₂^+^w₃
-               , \(V4 x y z w) f -> (f$x)^._x + (f$y)^._y + (f$z)^._z + (f$w)^._w )
+               , \(V4 x y z w) f -> (f$x)^._x + (f$y)^._y + (f$z)^._z + (f$w)^._w
+               , \(x:y:z:w:[]) -> V4 x y z w
+               , \(V4 x y z w) -> x:y:z:w:[]
+               )
 
 
 
@@ -352,6 +410,10 @@ instance (Num' n, UArr.Unbox n) => TensorSpace (FinSuppSeq n) where
   fmapTensor = bilinearFunction $ \f (Tensor a) -> Tensor $ map (f$) a
   fzipTensorWith = bilinearFunction $ \f (Tensor a, Tensor b)
                      -> Tensor $ zipWith (curry $ arr f) a b
+  tensorUnsafeFromArrayWithOffset
+      = notStaticDimensionalContradiction @(FinSuppSeq n)
+  tensorUnsafeWriteArrayWithOffset
+      = notStaticDimensionalContradiction @(FinSuppSeq n)
   coerceFmapTensorProduct _ VSCCoercion = Coercion
   wellDefinedTensor (Tensor a) = Tensor <$> Hask.traverse wellDefinedVector a
   
@@ -395,6 +457,10 @@ instance (Num' n, UArr.Unbox n) => TensorSpace (Sequence n) where
   fmapTensor = bilinearFunction $ \f (Tensor a) -> Tensor $ map (f$) a
   fzipTensorWith = bilinearFunction $ \f (Tensor a, Tensor b)
                      -> Tensor $ zipWith (curry $ arr f) a b
+  tensorUnsafeFromArrayWithOffset
+      = notStaticDimensionalContradiction @(Sequence n)
+  tensorUnsafeWriteArrayWithOffset
+      = notStaticDimensionalContradiction @(Sequence n)
   coerceFmapTensorProduct _ VSCCoercion = Coercion
 
 instance (Num' n, UArr.Unbox n) => LinearSpace (Sequence n) where

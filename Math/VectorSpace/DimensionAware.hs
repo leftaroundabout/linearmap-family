@@ -39,6 +39,12 @@ import Data.Singletons.Prelude.Num (SNum(..))
 import Data.Singletons.TypeLits (withKnownNat)
 #endif
 
+import qualified Data.Vector.Generic as GArr
+import qualified Data.Vector.Generic.Mutable as GMArr
+import Control.Monad.ST (ST)
+
+import Control.Monad
+
 import GHC.TypeLits
 import Data.Proxy (Proxy(..))
 
@@ -94,27 +100,107 @@ instance ∀ u v . (DimensionAware u, DimensionAware v, Scalar u ~ Scalar v)
 
 
 class (DimensionAware v, KnownNat n, StaticDimension v ~ 'Just n)
-           => n`Dimensional`v | v -> n
+           => n`Dimensional`v | v -> n where
+  -- | Read basis expansion from an array, starting at the specified offset.
+  --   The array must have at least length @n + offset@, else the behaviour is undefined.
+  unsafeFromArrayWithOffset :: GArr.Vector α (Scalar v) => Int -> α (Scalar v) -> v
+  unsafeWriteArrayWithOffset :: GArr.Vector α (Scalar v)
+          => GArr.Mutable α σ (Scalar v) -> Int -> v -> ST σ ()
 
+{-# INLINE dimensionalitySing #-}
 dimensionalitySing :: ∀ v n . n`Dimensional`v => Sing n
 dimensionalitySing = sing
 
+{-# INLINE dimension #-}
 dimension :: ∀ v n a . (n`Dimensional`v, Integral a) => a
 dimension = withKnownNat (dimensionalitySing @v) (fromIntegral $ natVal @n Proxy)
 
+-- | Convenience function. The result does never depend on the runtime input, only
+--   on its type.
 dimensionOf :: ∀ v n a . (n`Dimensional`v, Integral a) => v -> a
 dimensionOf _ = dimension @v
 
+{-# INLINE unsafeFromArray #-}
+-- | Read basis expansion from an array. The array must have length @n@, else the
+--   behaviour is undefined.
+unsafeFromArray :: ∀ v n α . (n`Dimensional`v, GArr.Vector α (Scalar v))
+         => α (Scalar v) -> v
+unsafeFromArray = unsafeFromArrayWithOffset 0
+
+-- | Read basis expansion from an array, if the size equals the dimension.
+fromArray :: ∀ v n α . (n`Dimensional`v, GArr.Vector α (Scalar v))
+         => α (Scalar v) -> Maybe v
+fromArray ar
+ | GArr.length ar == dimension @v  = Just $ unsafeFromArray ar
+ | otherwise                       = Nothing
+
+{-# INLINE toArray #-}
+-- | Write out basis expansion to an array, whose length will always be @n@.
+toArray :: ∀ v n α . (n`Dimensional`v, GArr.Vector α (Scalar v))
+         => v -> α (Scalar v)
+toArray v = GArr.create (do
+   ar <- GMArr.new $ dimension @v
+   unsafeWriteArrayWithOffset ar 0 v
+   return ar
+  )
+
+{-# INLINE staticDimensionSing #-}
 staticDimensionSing :: ∀ v . DimensionAware v => Sing (StaticDimension v)
 staticDimensionSing = case dimensionalityWitness @v of
   IsStaticDimensional -> sing
   IsFlexibleDimensional -> sing
+
+{-# INLINE scalarUnsafeFromArrayWithOffset #-}
+scalarUnsafeFromArrayWithOffset :: (v ~ Scalar v, GArr.Vector α v)
+          => Int -> α v -> v
+scalarUnsafeFromArrayWithOffset i = (`GArr.unsafeIndex`i)
+
+{-# INLINE scalarUnsafeWriteArrayWithOffset #-}
+scalarUnsafeWriteArrayWithOffset :: (v ~ Scalar v, GArr.Vector α v)
+          => GArr.Mutable α σ v -> Int -> v -> ST σ ()
+scalarUnsafeWriteArrayWithOffset ar i = GMArr.unsafeWrite ar i
+
+{-# INLINE unsafeFromArrayWithOffsetViaList #-}
+unsafeFromArrayWithOffsetViaList
+          :: ∀ v n α . (n`Dimensional`v, GArr.Vector α (Scalar v))
+   => ([Scalar v] -> v) -> Int -> α (Scalar v) -> v
+unsafeFromArrayWithOffsetViaList l2v i
+   = l2v . GArr.toList . GArr.unsafeSlice i (fromIntegral $ natVal @n Proxy)
+  
+{-# INLINE unsafeWriteArrayWithOffsetViaList #-}
+unsafeWriteArrayWithOffsetViaList
+          :: ∀ v n α σ . (n`Dimensional`v, GArr.Vector α (Scalar v))
+   => (v -> [Scalar v]) -> GArr.Mutable α σ (Scalar v)
+         -> Int -> v -> ST σ ()
+unsafeWriteArrayWithOffsetViaList v2l ar i
+   = GMArr.unsafeCopy (GMArr.unsafeSlice i (fromIntegral $ natVal @n Proxy) ar)
+      <=< GArr.unsafeThaw @(ST σ) @α . GArr.fromList . v2l
   
 instance 1`Dimensional`Float   where
+  {-# INLINE unsafeFromArrayWithOffset #-}
+  unsafeFromArrayWithOffset = scalarUnsafeFromArrayWithOffset
+  {-# INLINE unsafeWriteArrayWithOffset #-}
+  unsafeWriteArrayWithOffset = scalarUnsafeWriteArrayWithOffset
 instance 1`Dimensional`Double  where
+  {-# INLINE unsafeFromArrayWithOffset #-}
+  unsafeFromArrayWithOffset = scalarUnsafeFromArrayWithOffset
+  {-# INLINE unsafeWriteArrayWithOffset #-}
+  unsafeWriteArrayWithOffset = scalarUnsafeWriteArrayWithOffset
 instance 1`Dimensional`Int     where
+  {-# INLINE unsafeFromArrayWithOffset #-}
+  unsafeFromArrayWithOffset = scalarUnsafeFromArrayWithOffset
+  {-# INLINE unsafeWriteArrayWithOffset #-}
+  unsafeWriteArrayWithOffset = scalarUnsafeWriteArrayWithOffset
 instance 1`Dimensional`Integer where
+  {-# INLINE unsafeFromArrayWithOffset #-}
+  unsafeFromArrayWithOffset = scalarUnsafeFromArrayWithOffset
+  {-# INLINE unsafeWriteArrayWithOffset #-}
+  unsafeWriteArrayWithOffset = scalarUnsafeWriteArrayWithOffset
 instance Integral n => 1`Dimensional`Ratio n where
+  {-# INLINE unsafeFromArrayWithOffset #-}
+  unsafeFromArrayWithOffset = scalarUnsafeFromArrayWithOffset
+  {-# INLINE unsafeWriteArrayWithOffset #-}
+  unsafeWriteArrayWithOffset = scalarUnsafeWriteArrayWithOffset
 
   
 instance ∀ n u m v nm . ( n`Dimensional`u, m`Dimensional`v
@@ -122,6 +208,14 @@ instance ∀ n u m v nm . ( n`Dimensional`u, m`Dimensional`v
                         , KnownNat nm
                         , nm ~ (n+m) )
                    => nm`Dimensional`(u,v) where
+  {-# INLINE unsafeFromArrayWithOffset #-}
+  unsafeFromArrayWithOffset i arr
+      = ( unsafeFromArrayWithOffset i arr
+        , unsafeFromArrayWithOffset (i + fromIntegral (natVal @n Proxy)) arr )
+  {-# INLINE unsafeWriteArrayWithOffset #-}
+  unsafeWriteArrayWithOffset arr i (x,y) = do
+      unsafeWriteArrayWithOffset arr i x
+      unsafeWriteArrayWithOffset arr (i + fromIntegral (natVal @n Proxy)) y
 
 type family FromJust (a :: Maybe k) :: k where
   FromJust ('Just v) = v
