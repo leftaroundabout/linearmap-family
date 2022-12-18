@@ -1,19 +1,26 @@
 {-# LANGUAGE TypeFamilies           #-}
+{-# LANGUAGE TypeApplications       #-}
 {-# LANGUAGE CPP                    #-}
 {-# LANGUAGE DataKinds              #-}
 {-# LANGUAGE TypeOperators          #-}
 {-# LANGUAGE FlexibleInstances      #-}
 {-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE ScopedTypeVariables    #-}
 
 {-# OPTIONS_GHC -Wno-orphans #-}
 
 module Numeric.LinearAlgebra.Static.Orphans where
 
 -- base
-import GHC.TypeLits (KnownNat)
+import GHC.TypeLits (KnownNat, natVal)
+import Data.Proxy (Proxy(..))
 
 -- hmatrix
 import Numeric.LinearAlgebra.Static
+
+-- vector
+import qualified Data.Vector.Generic as VG
+import qualified Data.Vector.Generic.Mutable as VGM
 
 -- vector-space
 import Data.AdditiveGroup
@@ -69,6 +76,13 @@ instance KnownNat n => DimensionAware (R n) where
   dimensionalityWitness = IsStaticDimensional
 
 instance KnownNat n => n`Dimensional`R n where
+  unsafeFromArrayWithOffset i ar
+      = case create . VG.convert $ VG.unsafeSlice i (fromIntegral $ natVal @n Proxy) ar of
+         Just v -> v
+         Nothing -> error "Incorrect array slice or HMatrix wrapping."
+  unsafeWriteArrayWithOffset ar i v
+     = VG.unsafeCopy (VGM.unsafeSlice i (fromIntegral $ natVal @n Proxy) ar)
+                   . VG.convert $ extract v
 
 instance KnownNat n => Semimanifold (R n) where
   type Needle (R n) = R n
