@@ -104,38 +104,43 @@ data LinearManifoldWitness v where
 --   vector spaces, under the requirement that they internally use the same basis
 --   (if any). Note that this does not mean they also need to have the same inner
 --   product / dual space.
-data VSCCoercion a b where
+data VSCCoercion s a b where
   VSCCoercion :: (Coercible a b, StaticDimension a ~ StaticDimension b)
-     => VSCCoercion a b
+     => VSCCoercion s a b
 
-getVSCCoercion :: VSCCoercion a b -> Coercion a b
+getVSCCoercion :: VSCCoercion s a b -> Coercion a b
 getVSCCoercion VSCCoercion = Coercion
 
-symVSC :: VSCCoercion a b -> VSCCoercion b a
+symVSC :: VSCCoercion s a b -> VSCCoercion s b a
 symVSC VSCCoercion = VSCCoercion
 
-firstVSC :: VSCCoercion a b -> VSCCoercion (a,c) (b,c)
+firstVSC :: VSCCoercion s a b -> VSCCoercion s (a,c) (b,c)
 firstVSC VSCCoercion = VSCCoercion
 
-secondVSC :: VSCCoercion a b -> VSCCoercion (c,a) (c,b)
+secondVSC :: VSCCoercion s a b -> VSCCoercion s (c,a) (c,b)
 secondVSC VSCCoercion = VSCCoercion
 
 unsafeFollowVSC :: (Coercible a b, StaticDimension a ~ StaticDimension b)
-      => c a b -> VSCCoercion a b
+      => c a b -> VSCCoercion s a b
 unsafeFollowVSC _ = VSCCoercion
 
 unsafeFloutVSC :: (Coercible a b, StaticDimension a ~ StaticDimension b)
-      => c b a -> VSCCoercion a b
+      => c b a -> VSCCoercion s a b
 unsafeFloutVSC _ = VSCCoercion
 
-instance Category VSCCoercion where
+instance Category (VSCCoercion s) where
+  type Object (VSCCoercion s) v = (TensorSpace v, Scalar v ~ s)
   id = VSCCoercion
   VSCCoercion . VSCCoercion = VSCCoercion
-instance EnhancedCat Coercion VSCCoercion where
+instance EnhancedCat Coercion (VSCCoercion s) where
   arr = getVSCCoercion
-instance EnhancedCat (->) VSCCoercion where
+instance EnhancedCat (->) (VSCCoercion s) where
   arr VSCCoercion x = coerce x
-  
+
+infixr 0 -+$=>
+(-+$=>) :: VSCCoercion s a b -> a -> b
+VSCCoercion -+$=> x = coerce x
+
 class (DimensionAware v, PseudoAffine v) => TensorSpace v where
   
   -- | The internal representation of a 'Tensor' product.
@@ -193,8 +198,11 @@ class (DimensionAware v, PseudoAffine v) => TensorSpace v where
             , TensorSpace w, m`Dimensional`w, Scalar w ~ Scalar v
             , GArr.Vector α (Scalar v) )
            => GArr.Mutable α σ (Scalar v) -> Int -> (v⊗w) -> ST σ ()
-  coerceFmapTensorProduct :: Hask.Functor p
-       => p v -> VSCCoercion a b -> Coercion (TensorProduct v a) (TensorProduct v b)
+  coerceFmapTensorProduct :: ( Hask.Functor p
+                             , TensorSpace a, Scalar a ~ Scalar v
+                             , TensorSpace b, Scalar b ~ Scalar v )
+       => p v -> VSCCoercion (Scalar v) a b
+              -> Coercion (TensorProduct v a) (TensorProduct v b)
   -- | “Sanity-check” a vector. This typically amounts to detecting any NaN components,
   --   which should trigger a @Nothing@ result. Otherwise, the result should be @Just@
   --   the input, but may also be optimised / memoised if applicable (i.e. for
@@ -253,7 +261,7 @@ class (TensorSpace v, Num (Scalar v)) => LinearSpace v where
                         , dualSpaceWitness :: DualSpaceWitness v ) of
     (ScalarSpaceWitness,DualSpaceWitness) -> arr asTensor >>> fromFlatTensor
   
-  coerceDoubleDual :: VSCCoercion v (DualVector (DualVector v))
+  coerceDoubleDual :: VSCCoercion (Scalar s) v (DualVector (DualVector v))
   coerceDoubleDual = case dualSpaceWitness :: DualSpaceWitness v of
     DualSpaceWitness -> VSCCoercion
   
@@ -396,33 +404,33 @@ newtype LinearMap s v w = LinearMap {getLinearMap :: TensorProduct (DualVector v
 newtype Tensor s v w = Tensor {getTensorProduct :: TensorProduct v w}
 
 asTensor :: ∀ s v w . LinearSpace v
-     => VSCCoercion (LinearMap s v w) (Tensor s (DualVector v) w)
+     => VSCCoercion s (LinearMap s v w) (Tensor s (DualVector v) w)
 asTensor = case dualSpaceWitness @v of
   DualSpaceWitness -> VSCCoercion
 fromTensor :: ∀ s v w . LinearSpace v
-     => VSCCoercion (Tensor s (DualVector v) w) (LinearMap s v w)
+     => VSCCoercion s (Tensor s (DualVector v) w) (LinearMap s v w)
 fromTensor = case dualSpaceWitness @v of
   DualSpaceWitness -> VSCCoercion
 
 asLinearMap :: ∀ s v w . (LinearSpace v, Scalar v ~ s)
-           => VSCCoercion (Tensor s v w) (LinearMap s (DualVector v) w)
+           => VSCCoercion s (Tensor s v w) (LinearMap s (DualVector v) w)
 asLinearMap = case dualSpaceWitness :: DualSpaceWitness v of
                 DualSpaceWitness -> VSCCoercion
 fromLinearMap :: ∀ s v w . (LinearSpace v, Scalar v ~ s)
-           => VSCCoercion (LinearMap s (DualVector v) w) (Tensor s v w)
+           => VSCCoercion s (LinearMap s (DualVector v) w) (Tensor s v w)
 fromLinearMap = case dualSpaceWitness :: DualSpaceWitness v of
                 DualSpaceWitness -> VSCCoercion
 
 
 pseudoFmapTensorLHS :: ( TensorProduct v w ~ TensorProduct v' w
                        , StaticDimension v ~ StaticDimension v' )
-           => c v v' -> VSCCoercion (Tensor s v w) (Tensor s v' w)
+           => c v v' -> VSCCoercion s (Tensor s v w) (Tensor s v' w)
 pseudoFmapTensorLHS _ = VSCCoercion
 
 pseudoPrecomposeLinmap
       :: ( TensorProduct (DualVector v) w ~ TensorProduct (DualVector v') w
          , StaticDimension v ~ StaticDimension v' )
-           => c v' v -> VSCCoercion (LinearMap s v w) (LinearMap s v' w)
+           => c v' v -> VSCCoercion s (LinearMap s v w) (LinearMap s v' w)
 pseudoPrecomposeLinmap _ = VSCCoercion
 
 envTensorLHSCoercion :: ( TensorProduct v w ~ TensorProduct v' w
@@ -707,12 +715,13 @@ instance ∀ u v . ( LinearSpace u, LinearSpace v, Scalar u ~ Scalar v )
               -> bilinearFunction $ \f (LinearMap (fu, fv))
                     -> ((composeLinear-+$>f)-+$>asLinearMap $ fu)
                        ⊕ ((composeLinear-+$>f)-+$>asLinearMap $ fv)
-  applyTensorFunctional = case ( dualSpaceWitness :: DualSpaceWitness u
-                               , dualSpaceWitness :: DualSpaceWitness v ) of
+  applyTensorFunctional = case ( dualSpaceWitness @u, dualSpaceWitness @v ) of
      (DualSpaceWitness, DualSpaceWitness) -> bilinearFunction $
                   \(LinearMap (fu,fv)) (Tensor (tu,tv))
-                           -> ((applyTensorFunctional-+$>asLinearMap$fu)-+$>tu)
-                            + ((applyTensorFunctional-+$>asLinearMap$fv)-+$>tv)
+                           -> ((applyTensorFunctional
+                                  -+$>getVSCCoercion asLinearMap$fu)-+$>tu)
+                            + ((applyTensorFunctional
+                                  -+$>getVSCCoercion asLinearMap$fv)-+$>tv)
   applyTensorLinMap = case ( dualSpaceWitness :: DualSpaceWitness u
                            , dualSpaceWitness :: DualSpaceWitness v ) of
      (DualSpaceWitness, DualSpaceWitness) -> bilinearFunction`id`
@@ -720,6 +729,8 @@ instance ∀ u v . ( LinearSpace u, LinearSpace v, Scalar u ~ Scalar v )
                    in ( (applyTensorLinMap-+$>uncurryLinearMap.asLinearMap $ fu)-+$>tu )
                    ^+^ ( (applyTensorLinMap-+$>uncurryLinearMap.asLinearMap $ fv)-+$>tv )
   useTupleLinearSpaceComponents r = r
+  coerceDoubleDual = case ( dualSpaceWitness @u, dualSpaceWitness @v ) of
+     (DualSpaceWitness, DualSpaceWitness) -> VSCCoercion  
 
 lfstBlock :: ( LSpace u, LSpace v, LSpace w
              , Scalar u ~ Scalar v, Scalar v ~ Scalar w )
@@ -733,20 +744,20 @@ lsndBlock = LinearFunction (zeroV⊕)
 
 -- | @((v'⊗w)+>x) -> ((v+>w)+>x)
 argFromTensor :: ∀ s v w x . ( LinearSpace v, LinearSpace w
-                             , TensorSpace x
                              , Scalar v ~ s, Scalar w ~ s
+                             , TensorSpace x, Scalar x ~ s
                              )
-                 => VSCCoercion (LinearMap s (Tensor s (DualVector v) w) x)
+                 => VSCCoercion s (LinearMap s (Tensor s (DualVector v) w) x)
                              (LinearMap s (LinearMap s v w) x)
 argFromTensor = case dualSpaceWitness :: DualSpaceWitness v of
      DualSpaceWitness -> curryLinearMap >>> fromLinearMap >>> coUncurryLinearMap
 
 -- | @((v+>w)+>x) -> ((v'⊗w)+>x)@
 argAsTensor :: ∀ s v w x . ( LinearSpace v, LinearSpace w
-                           , TensorSpace x
                            , Scalar v ~ s, Scalar w ~ s
+                           , TensorSpace x, Scalar x ~ s
                            )
-                 => VSCCoercion (LinearMap s (LinearMap s v w) x)
+                 => VSCCoercion s (LinearMap s (LinearMap s v w) x)
                              (LinearMap s (Tensor s (DualVector v) w) x)
 argAsTensor = case dualSpaceWitness :: DualSpaceWitness v of
      DualSpaceWitness -> uncurryLinearMap <<< asLinearMap <<< coCurryLinearMap
@@ -764,21 +775,21 @@ tensorDimensionAssoc φ
 
 -- | @(u+>(v⊗w)) -> (u+>v)⊗w@
 deferLinearMap :: ∀ s u v w . (TensorSpace u, TensorSpace v, TensorSpace w)
-    => VSCCoercion (LinearMap s u (Tensor s v w)) (Tensor s (LinearMap s u v) w)
+    => VSCCoercion s (LinearMap s u (Tensor s v w)) (Tensor s (LinearMap s u v) w)
 deferLinearMap
   = tensorDimensionAssoc @u @v @w VSCCoercion
 
 -- | @(u+>v)⊗w -> u+>(v⊗w)@
 hasteLinearMap :: ∀ s u v w . (TensorSpace u, TensorSpace v, TensorSpace w)
-    => VSCCoercion (Tensor s (LinearMap s u v) w) (LinearMap s u (Tensor s v w))
+    => VSCCoercion s (Tensor s (LinearMap s u v) w) (LinearMap s u (Tensor s v w))
 hasteLinearMap = tensorDimensionAssoc @u @v @w VSCCoercion
 
 
 lassocTensor :: ∀ s u v w . (TensorSpace u, TensorSpace v, TensorSpace w)
-    => VSCCoercion (Tensor s u (Tensor s v w)) (Tensor s (Tensor s u v) w)
+    => VSCCoercion s (Tensor s u (Tensor s v w)) (Tensor s (Tensor s u v) w)
 lassocTensor = tensorDimensionAssoc @u @v @w VSCCoercion
 rassocTensor :: ∀ s u v w . (TensorSpace u, TensorSpace v, TensorSpace w)
-    => VSCCoercion (Tensor s (Tensor s u v) w) (Tensor s u (Tensor s v w))
+    => VSCCoercion s (Tensor s (Tensor s u v) w) (Tensor s u (Tensor s v w))
 rassocTensor = tensorDimensionAssoc @u @v @w VSCCoercion
 
 
@@ -888,12 +899,14 @@ instance ∀ s u v . ( LinearSpace u, TensorSpace v, Scalar u ~ s, Scalar v ~ s 
                \ar i -> unsafeWriteArrayWithOffset ar i
                        . arr (hasteLinearMap @s @u @v @w) ))
   coerceFmapTensorProduct = cftlp dualSpaceWitness
-   where cftlp :: ∀ a b p . DualSpaceWitness u -> p (LinearMap s u v) -> VSCCoercion a b
+   where cftlp :: ∀ a b p . ( TensorSpace a, Scalar a ~ s
+                            , TensorSpace b, Scalar b ~ s )
+                   => DualSpaceWitness u -> p (LinearMap s u v) -> VSCCoercion s a b
                    -> Coercion (TensorProduct (DualVector u) (Tensor s v a))
                                (TensorProduct (DualVector u) (Tensor s v b))
          cftlp DualSpaceWitness _ c
                    = coerceFmapTensorProduct ([]::[DualVector u])
-                                             (fmap c :: VSCCoercion (v⊗a) (v⊗b))
+                                             (fmap c :: VSCCoercion s (v⊗a) (v⊗b))
   wellDefinedVector = case dualSpaceWitness :: DualSpaceWitness u of
       DualSpaceWitness -> arr asTensor >>> wellDefinedTensor >>> arr (fmap (getVSCCoercion fromTensor))
   wellDefinedTensor
@@ -902,8 +915,8 @@ instance ∀ s u v . ( LinearSpace u, TensorSpace v, Scalar u ~ s, Scalar v ~ s 
 -- | @((u+>v)+>w) -> u⊗(v+>w)@
 coCurryLinearMap :: ∀ s u v w . ( LinearSpace u, Scalar u ~ s
                                 , LinearSpace v, Scalar v ~ s
-                                , TensorSpace w ) =>
-              VSCCoercion (LinearMap s (LinearMap s u v) w) (Tensor s u (LinearMap s v w))
+                                , TensorSpace w, Scalar w ~ s ) =>
+              VSCCoercion s (LinearMap s (LinearMap s u v) w) (Tensor s u (LinearMap s v w))
 coCurryLinearMap = case ( dualSpaceWitness :: DualSpaceWitness u
                         , dualSpaceWitness :: DualSpaceWitness v ) of
      (DualSpaceWitness, DualSpaceWitness)
@@ -912,8 +925,8 @@ coCurryLinearMap = case ( dualSpaceWitness :: DualSpaceWitness u
 -- | @(u⊗(v+>w)) -> (u+>v)+>w@
 coUncurryLinearMap :: ∀ s u v w . ( LinearSpace u, Scalar u ~ s
                                   , LinearSpace v, Scalar v ~ s
-                                  , TensorSpace w ) =>
-              VSCCoercion (Tensor s u (LinearMap s v w)) (LinearMap s (LinearMap s u v) w)
+                                  , TensorSpace w, Scalar w ~ s ) =>
+              VSCCoercion s (Tensor s u (LinearMap s v w)) (LinearMap s (LinearMap s u v) w)
 coUncurryLinearMap = case ( dualSpaceWitness :: DualSpaceWitness u
                           , dualSpaceWitness :: DualSpaceWitness v ) of
      (DualSpaceWitness, DualSpaceWitness)
@@ -921,23 +934,23 @@ coUncurryLinearMap = case ( dualSpaceWitness :: DualSpaceWitness u
 
 -- | @((u⊗v)+>w) -> (u+>(v+>w))@
 curryLinearMap :: ∀ u v w s . ( LinearSpace u, LinearSpace v, TensorSpace w
-                              , Scalar u ~ s )
-           => VSCCoercion (LinearMap s (Tensor s u v) w) (LinearMap s u (LinearMap s v w))
+                              , Scalar u ~ s , Scalar v ~ s , Scalar w ~ s  )
+           => VSCCoercion s (LinearMap s (Tensor s u v) w) (LinearMap s u (LinearMap s v w))
 curryLinearMap = case (dualSpaceWitness @u, dualSpaceWitness @v) of
     (DualSpaceWitness, DualSpaceWitness)
         -> tensorDimensionAssoc @u @(DualVector v) @w
-                (VSCCoercion :: VSCCoercion ((u⊗v)+>w)
+                (VSCCoercion :: VSCCoercion s ((u⊗v)+>w)
                                      ((DualVector u)⊗(Tensor s (DualVector v) w)) )
                                  >>> fmap fromTensor >>> fromTensor
 
 -- | @(u+>(v+>w)) -> ((u⊗v)+>w)@
 uncurryLinearMap :: ∀ u v w s . ( LinearSpace u, LinearSpace v, TensorSpace w
-                                , Scalar u ~ s )
-           => VSCCoercion (LinearMap s u (LinearMap s v w)) (LinearMap s (Tensor s u v) w)
+                                , Scalar u ~ s , Scalar v ~ s , Scalar w ~ s  )
+           => VSCCoercion s (LinearMap s u (LinearMap s v w)) (LinearMap s (Tensor s u v) w)
 uncurryLinearMap = case (dualSpaceWitness @u, dualSpaceWitness @v) of
     (DualSpaceWitness, DualSpaceWitness)
          -> tensorDimensionAssoc @u @(DualVector v) @w
-               (VSCCoercion :: VSCCoercion 
+               (VSCCoercion :: VSCCoercion s
                                      ((DualVector u)⊗(Tensor s (DualVector v) w))
                                      ((u⊗v)+>w) )
                                  <<< fmap asTensor <<< asTensor
@@ -1076,12 +1089,13 @@ instance ∀ s u v . (TensorSpace u, TensorSpace v, Scalar u ~ s, Scalar v ~ s)
               withKnownNat (sn%*(sm%*sing @o)) (
                \ar i -> unsafeWriteArrayWithOffset ar i
                          . arr (rassocTensor @s @u @v @w) ))
-  coerceFmapTensorProduct = cftlp
-   where cftlp :: ∀ a b p . p (Tensor s u v) -> VSCCoercion a b
+  coerceFmapTensorProduct :: ∀ a b p . ( TensorSpace a, Scalar a ~ s
+                                       , TensorSpace b, Scalar b ~ s )
+                   => p (Tensor s u v) -> VSCCoercion s a b
                    -> Coercion (TensorProduct u (Tensor s v a))
                                (TensorProduct u (Tensor s v b))
-         cftlp _ c = coerceFmapTensorProduct ([]::[u])
-                                             (fmap c :: VSCCoercion (v⊗a) (v⊗b))
+  coerceFmapTensorProduct _ c = coerceFmapTensorProduct ([]::[u])
+                                             (fmap c :: VSCCoercion s (v⊗a) (v⊗b))
   wellDefinedVector = wellDefinedTensor
   wellDefinedTensor = arr (getVSCCoercion rassocTensor)
                        >>> wellDefinedTensor >>> arr (fmap (getVSCCoercion lassocTensor))
@@ -1151,23 +1165,22 @@ instance (Num' s, LinearSpace v, Scalar v ~ s)
   fzipWith = case dualSpaceWitness :: DualSpaceWitness v of
     DualSpaceWitness -> \f -> arr asTensor *** arr asTensor >>> fzipWith f >>> arr fromTensor
 
-instance (TensorSpace v, Scalar v ~ s)
-            => Functor (Tensor s v) VSCCoercion VSCCoercion where
-  fmap = crcFmap
-   where crcFmap :: ∀ s v a b . (TensorSpace v, Scalar v ~ s)
-              => VSCCoercion a b -> VSCCoercion (Tensor s v a) (Tensor s v b)
-         crcFmap f@VSCCoercion = case coerceFmapTensorProduct ([]::[v]) f of
+instance ∀ v s . (TensorSpace v, Scalar v ~ s)
+            => Functor (Tensor s v) (VSCCoercion s) (VSCCoercion s) where
+  fmap :: ∀ a b . ( TensorSpace a, Scalar a ~ s
+                  , TensorSpace b, Scalar b ~ s )
+              => VSCCoercion s a b -> VSCCoercion s (Tensor s v a) (Tensor s v b)
+  fmap f@VSCCoercion = case coerceFmapTensorProduct @v [] f of
                        Coercion -> VSCCoercion
 
-instance (LinearSpace v, Scalar v ~ s)
-            => Functor (LinearMap s v) VSCCoercion VSCCoercion where
-  fmap = crcFmap dualSpaceWitness
-   where crcFmap :: ∀ s v a b . (LinearSpace v, Scalar v ~ s)
-              => DualSpaceWitness v -> VSCCoercion a b
-                            -> VSCCoercion (LinearMap s v a) (LinearMap s v b)
-         crcFmap DualSpaceWitness f@VSCCoercion
-             = case coerceFmapTensorProduct ([]::[DualVector v]) f of
-                Coercion -> VSCCoercion
+instance ∀ v s . (LinearSpace v, Scalar v ~ s)
+            => Functor (LinearMap s v) (VSCCoercion s) (VSCCoercion s) where
+  fmap :: ∀ a b . ( TensorSpace a, Scalar a ~ s
+                  , TensorSpace b, Scalar b ~ s )
+    => VSCCoercion s a b -> VSCCoercion s (LinearMap s v a) (LinearMap s v b)
+  fmap f@VSCCoercion = case dualSpaceWitness @v of
+        DualSpaceWitness -> case coerceFmapTensorProduct @(DualVector v) [] f of
+         Coercion -> VSCCoercion
 
 instance Category (LinearFunction s) where
   type Object (LinearFunction s) v = (TensorSpace v, Scalar v ~ s)
@@ -1188,7 +1201,7 @@ instance Num' s => PreArrow (LinearFunction s) where
   terminal = const0
 instance EnhancedCat (->) (LinearFunction s) where
   arr = getLinearFunction
-instance EnhancedCat (LinearFunction s) VSCCoercion where
+instance EnhancedCat (LinearFunction s) (VSCCoercion s) where
   arr VSCCoercion = LinearFunction coerce
 
 instance (LinearSpace w, Num' s, Scalar w ~ s)
@@ -1203,13 +1216,13 @@ sampleLinearFunctionFn = LinearFunction $
                 \f -> sampleLinearFunction -+$> f . applyLinear
 
 fromLinearFn :: ∀ s u v w . (DimensionAware u, DimensionAware v, DimensionAware w)
-     => VSCCoercion (LinearFunction s (LinearFunction s u v) w)
-                    (Tensor s (LinearFunction s v u) w)
+     => VSCCoercion s (LinearFunction s (LinearFunction s u v) w)
+                      (Tensor s (LinearFunction s v u) w)
 fromLinearFn
  = Maybe.zipWithTimesCommu (staticDimensionSing @u) (staticDimensionSing @v) VSCCoercion
 
 asLinearFn :: ∀ s u v w . (DimensionAware u, DimensionAware v, DimensionAware w)
-     => VSCCoercion (Tensor s (LinearFunction s u v) w)
+     => VSCCoercion s (Tensor s (LinearFunction s u v) w)
                        (LinearFunction s (LinearFunction s v u) w)
 asLinearFn
  = Maybe.zipWithTimesCommu (staticDimensionSing @u) (staticDimensionSing @v) VSCCoercion
@@ -1258,7 +1271,7 @@ instance ∀ s u v . (LinearSpace u, LinearSpace v, Scalar u ~ s, Scalar v ~ s)
 #if !MIN_VERSION_manifolds_core(0,6,0)
              BoundarylessWitness
 #endif
-  zeroTensor = fromLinearFn $ const0
+  zeroTensor = fromLinearFn -+$=> const0
   toFlatTensor = case scalarSpaceWitness :: ScalarSpaceWitness u of
      ScalarSpaceWitness -> fmap (getVSCCoercion fromLinearFn) $ applyDualVector
   fromFlatTensor = case ( scalarSpaceWitness :: ScalarSpaceWitness u
@@ -1269,8 +1282,8 @@ instance ∀ s u v . (LinearSpace u, LinearSpace v, Scalar u ~ s, Scalar v ~ s)
                                  -+$> coCurryLinearMap
                                   $ sampleLinearFunction-+$> f . applyLinear
                            in applyLinear $ fromTensor $ t
-  addTensors t s = fromLinearFn $ (asLinearFn$t)^+^(asLinearFn$s)
-  subtractTensors t s = fromLinearFn $ (asLinearFn$t)^-^(asLinearFn$s)
+  addTensors t s = fromLinearFn -+$=> (asLinearFn-+$=>t)^+^(asLinearFn-+$=>s)
+  subtractTensors t s = fromLinearFn -+$=> (asLinearFn-+$=>t)^-^(asLinearFn-+$=>s)
   scaleTensor = bilinearFunction $ \μ (Tensor f) -> Tensor $ μ *^ f
   negateTensor = LinearFunction $ \(Tensor f) -> Tensor $ negateV f
   tensorProduct = case scalarSpaceWitness :: ScalarSpaceWitness u of
@@ -1282,17 +1295,18 @@ instance ∀ s u v . (LinearSpace u, LinearSpace v, Scalar u ~ s, Scalar v ~ s)
                         -> Tensor s (LinearFunction s u v) w
                            -+> Tensor s w (LinearFunction s u v)
          tt ScalarSpaceWitness DualSpaceWitness
-           = LinearFunction $ arr asLinearFn >>> \f
+           = LinearFunction $ (asLinearFn-+$=>) >>> \f
                -> (fmapTensor-+$>applyLinear)
                           -+$> fmap fromTensor . rassocTensor
                            $ transposeTensor . fmap transposeTensor
                           -+$> fmap asTensor . coCurryLinearMap
                             $ sampleLinearFunctionFn -+$> f
-  fmapTensor = bilinearFunction $ \f -> arr asLinearFn
-                 >>> \g -> fromLinearFn $ f . g
+  fmapTensor = bilinearFunction $ \f -> (asLinearFn-+$=>)
+                 >>> \g -> fromLinearFn -+$=> f . g
   fzipTensorWith = case scalarSpaceWitness :: ScalarSpaceWitness u of
      ScalarSpaceWitness -> bilinearFunction $ \f (g,h)
-                    -> fromLinearFn $ f . ((asLinearFn$g)&&&(asLinearFn$h))
+                    -> fromLinearFn -+$=>
+                          f . ((asLinearFn-+$=>g)&&&(asLinearFn-+$=>h))
   tensorUnsafeFromArrayWithOffset :: ∀ nm w o α
           . ( nm`Dimensional`LinearFunction s u v
             , TensorSpace w, o`Dimensional`w, Scalar w ~ s
@@ -1305,7 +1319,7 @@ instance ∀ s u v . (LinearSpace u, LinearSpace v, Scalar u ~ s, Scalar v ~ s)
          ,IsStaticDimensional, SJust sm )
            -> withKnownNat (sm%*sn) (
               withKnownNat ((sm%*sn)%*sing @o) (
-               \i -> arr (fromLinearFn @s @v @u @w)
+               \i -> (fromLinearFn @s @v @u @w -+$=>)
                        . (applyLinear-+$>)
                        . unsafeFromArrayWithOffset i ))
   tensorUnsafeWriteArrayWithOffset :: ∀ nm w o α σ
@@ -1322,20 +1336,20 @@ instance ∀ s u v . (LinearSpace u, LinearSpace v, Scalar u ~ s, Scalar v ~ s)
               withKnownNat ((sm%*sn)%*sing @o) (
                \ar i -> unsafeWriteArrayWithOffset ar i
                        . (sampleLinearFunction-+$>)
-                       . arr (asLinearFn @s @u @v @w)
+                       . (asLinearFn @s @u @v @w -+$=>)
                        ))
   coerceFmapTensorProduct _ VSCCoercion = Coercion
   wellDefinedVector = arr sampleLinearFunction >>> wellDefinedVector
                        >>> fmap (arr applyLinear)
-  wellDefinedTensor = arr asLinearFn >>> (. applyLinear)
+  wellDefinedTensor = (asLinearFn-+$=>) >>> (. applyLinear)
                        >>> getLinearFunction sampleLinearFunction
                        >>> wellDefinedVector
-                       >>> fmap (arr fromLinearFn <<< \m
+                       >>> fmap ((fromLinearFn-+$=>) <<< \m
                                    -> sampleLinearFunction
                                       >>> getLinearFunction applyLinear m)
 
-exposeLinearFn :: VSCCoercion (LinearMap s (LinearFunction s u v) w)
-                           (LinearFunction s (LinearFunction s u v) w)
+exposeLinearFn :: VSCCoercion s (LinearMap s (LinearFunction s u v) w)
+                                (LinearFunction s (LinearFunction s u v) w)
 exposeLinearFn = VSCCoercion
 
 instance (LinearSpace u, LinearSpace v, Scalar u ~ s, Scalar v ~ s)
@@ -1350,11 +1364,11 @@ instance (LinearSpace u, LinearSpace v, Scalar u ~ s, Scalar v ~ s)
   tensorId = uncurryLinearMap . symVSC exposeLinearFn
                $ LinearFunction $ \f -> sampleLinearFunction-+$>tensorProduct-+$>f
   coerceDoubleDual = VSCCoercion
-  sampleLinearFunction = LinearFunction . arr $ symVSC exposeLinearFn
+  sampleLinearFunction = LinearFunction . (-+$=>) $ symVSC exposeLinearFn
   applyDualVector = case scalarSpaceWitness :: ScalarSpaceWitness u of
        ScalarSpaceWitness -> bilinearFunction $
                       \f g -> trace . sampleLinearFunction -+$> f . g
-  applyLinear = bilinearFunction $ \f g -> (exposeLinearFn $ f) -+$> g
+  applyLinear = bilinearFunction $ \f g -> (exposeLinearFn -+$=> f) -+$> g
   applyTensorFunctional = atf scalarSpaceWitness dualSpaceWitness
    where atf :: ∀ w . (LinearSpace w, Scalar w ~ s)
                 => ScalarSpaceWitness u -> DualSpaceWitness w
@@ -1362,28 +1376,29 @@ instance (LinearSpace u, LinearSpace v, Scalar u ~ s, Scalar v ~ s)
                     (LinearMap s (LinearFunction s u v) (DualVector w))
                     (LinearFunction s (Tensor s (LinearFunction s u v) w) s)
          atf ScalarSpaceWitness DualSpaceWitness = bilinearFunction $ \f g
-                  -> trace -+$> fromTensor $ transposeTensor
+                  -> trace -+$> fromTensor -+$=> transposeTensor
                       -+$> fmap ((exposeLinearFn $ f) . applyLinear)
                           -+$> ( transposeTensor
                               -+$> deferLinearMap
-                               $ fmap transposeTensor
+                              -+$=> fmap transposeTensor
                               -+$> hasteLinearMap
-                               $ transposeTensor
+                              -+$=> transposeTensor
                               -+$> coCurryLinearMap
-                               $ sampleLinearFunctionFn
-                              -+$> asLinearFn $ g )
+                              -+$=> sampleLinearFunctionFn
+                              -+$> asLinearFn -+$=> g )
   applyTensorLinMap = case scalarSpaceWitness :: ScalarSpaceWitness u of
          ScalarSpaceWitness -> bilinearFunction $ \f g
                  -> contractMapTensor . transposeTensor
-                   -+$> fmap ((asLinearFn $ g) . applyLinear)
+                   -+$> fmap ((asLinearFn-+$=>g) . applyLinear)
                     -+$> ( transposeTensor
                       -+$> deferLinearMap
-                       $ fmap transposeTensor
+                      -+$=> fmap transposeTensor
                       -+$> hasteLinearMap
-                       $ transposeTensor
+                      -+$=> transposeTensor
                       -+$> coCurryLinearMap
-                       $ sampleLinearFunctionFn
-                      -+$> exposeLinearFn . curryLinearMap $ f )
+                      -+$=> sampleLinearFunctionFn
+                      -+$> exposeLinearFn
+                      -+$=> curryLinearMap -+$=> f )
   useTupleLinearSpaceComponents _ = usingNonTupleTypeAsTupleError
 
 
@@ -1438,9 +1453,9 @@ instance ∀ v s . TensorSpace v => TensorSpace (Gnrx.Rec0 v s) where
   linearManifoldWitness = genericTensorspaceError
   zeroTensor = pseudoFmapTensorLHS Gnrx.K1 $ zeroTensor
   toFlatTensor = LinearFunction $ Gnrx.unK1 >>> getLinearFunction toFlatTensor
-                   >>> arr (pseudoFmapTensorLHS Gnrx.K1)
+                   >>> (pseudoFmapTensorLHS Gnrx.K1-+$=>)
   fromFlatTensor = LinearFunction $ Gnrx.K1 <<< getLinearFunction fromFlatTensor
-                   <<< arr (pseudoFmapTensorLHS Gnrx.unK1)
+                   <<< (pseudoFmapTensorLHS Gnrx.unK1-+$=>)
   addTensors (Tensor s) (Tensor t)
        = pseudoFmapTensorLHS Gnrx.K1 $ addTensors (Tensor s) (Tensor t)
   subtractTensors (Tensor s) (Tensor t)
@@ -1455,10 +1470,10 @@ instance ∀ v s . TensorSpace v => TensorSpace (Gnrx.Rec0 v s) where
    where tT :: ∀ w . (TensorSpace w, Scalar w ~ Scalar v)
                 => (Gnrx.Rec0 v s ⊗ w) -+> (w ⊗ Gnrx.Rec0 v s)
          tT = LinearFunction
-           $ arr (Coercion . coerceFmapTensorProduct ([]::[w])
-                                    (VSCCoercion :: VSCCoercion v (Gnrx.Rec0 v s))
+           $ arr (Coercion . coerceFmapTensorProduct @w []
+                               (VSCCoercion :: VSCCoercion (Scalar v) v (Gnrx.Rec0 v s))
                            . Coercion)
-              . getLinearFunction transposeTensor . arr (pseudoFmapTensorLHS Gnrx.unK1)
+              . getLinearFunction transposeTensor . (pseudoFmapTensorLHS Gnrx.unK1-+$=>)
   fmapTensor = LinearFunction $
          \f -> envTensorLHSCoercion Gnrx.K1 (fmapTensor-+$>f)
   fzipTensorWith = bilinearFunction $
@@ -1482,11 +1497,13 @@ instance ∀ v s . TensorSpace v => TensorSpace (Gnrx.Rec0 v s) where
     IsFlexibleDimensional -> error "This is impossible, since this can only be evaluated if `v` is static-dimensional."
     IsStaticDimensional -> \ar -> coerce (tensorUnsafeWriteArrayWithOffset @v @w ar)
   coerceFmapTensorProduct = cmtp
-   where cmtp :: ∀ p a b . Hask.Functor p
-             => p (Gnrx.Rec0 v s) -> VSCCoercion a b
+   where cmtp :: ∀ p a b . ( Hask.Functor p
+                           , TensorSpace a, Scalar a ~ Scalar v
+                           , TensorSpace b, Scalar b ~ Scalar v )
+             => p (Gnrx.Rec0 v s) -> VSCCoercion (Scalar v) a b
                -> Coercion (TensorProduct (Gnrx.Rec0 v s) a)
                            (TensorProduct (Gnrx.Rec0 v s) b)
-         cmtp p crc = case coerceFmapTensorProduct ([]::[v]) crc of
+         cmtp p crc = case coerceFmapTensorProduct @v [] crc of
                   Coercion -> Coercion
 
 instance ∀ i c f p . DimensionAware (f p) => DimensionAware (Gnrx.M1 i c f p) where
@@ -1509,9 +1526,9 @@ instance ∀ i c f p . TensorSpace (f p) => TensorSpace (Gnrx.M1 i c f p) where
   linearManifoldWitness = genericTensorspaceError
   zeroTensor = pseudoFmapTensorLHS Gnrx.M1 $ zeroTensor
   toFlatTensor = LinearFunction $ Gnrx.unM1 >>> getLinearFunction toFlatTensor
-                   >>> arr (pseudoFmapTensorLHS Gnrx.M1)
+                   >>> (pseudoFmapTensorLHS Gnrx.M1-+$=>)
   fromFlatTensor = LinearFunction $ Gnrx.M1 <<< getLinearFunction fromFlatTensor
-                   <<< arr (pseudoFmapTensorLHS Gnrx.unM1)
+                   <<< (pseudoFmapTensorLHS Gnrx.unM1-+$=>)
   addTensors (Tensor s) (Tensor t)
        = pseudoFmapTensorLHS Gnrx.M1 $ addTensors (Tensor s) (Tensor t)
   subtractTensors (Tensor s) (Tensor t)
@@ -1527,9 +1544,9 @@ instance ∀ i c f p . TensorSpace (f p) => TensorSpace (Gnrx.M1 i c f p) where
                 => (Gnrx.M1 i c f p ⊗ w) -+> (w ⊗ Gnrx.M1 i c f p)
          tT = LinearFunction
            $ arr (Coercion . coerceFmapTensorProduct ([]::[w])
-                                (VSCCoercion :: VSCCoercion (f p) (Gnrx.M1 i c f p))
+                                (VSCCoercion :: VSCCoercion s (f p) (Gnrx.M1 i c f p))
                            . Coercion)
-              . getLinearFunction transposeTensor . arr (pseudoFmapTensorLHS Gnrx.unM1)
+              . getLinearFunction transposeTensor . (pseudoFmapTensorLHS Gnrx.unM1-+$=>)
   fmapTensor = LinearFunction $
          \f -> envTensorLHSCoercion Gnrx.M1 (fmapTensor-+$>f)
   fzipTensorWith = bilinearFunction $
@@ -1553,12 +1570,13 @@ instance ∀ i c f p . TensorSpace (f p) => TensorSpace (Gnrx.M1 i c f p) where
     IsFlexibleDimensional -> error "This is impossible, since this can only be evaluated if `f p` is static-dimensional."
     IsStaticDimensional -> \ar ->
        coerce (tensorUnsafeWriteArrayWithOffset @(f p) @w ar)
-  coerceFmapTensorProduct = cmtp
-   where cmtp :: ∀ ぴ a b . Hask.Functor ぴ
-             => ぴ (Gnrx.M1 i c f p) -> VSCCoercion a b
+  coerceFmapTensorProduct :: ∀ ぴ a b
+         . (Hask.Functor ぴ, TensorSpace a, Scalar a ~ Scalar (f p)
+                           , TensorSpace b, Scalar b ~ Scalar (f p) ) 
+             => ぴ (Gnrx.M1 i c f p) -> VSCCoercion (Scalar (f p)) a b
                -> Coercion (TensorProduct (Gnrx.M1 i c f p) a)
                            (TensorProduct (Gnrx.M1 i c f p) b)
-         cmtp p crc = case coerceFmapTensorProduct ([]::[f p]) crc of
+  coerceFmapTensorProduct p crc = case coerceFmapTensorProduct ([]::[f p]) crc of
                   Coercion -> Coercion
 
 instance ∀ f g p . ( DimensionAware (f p), DimensionAware (g p)
@@ -1670,7 +1688,8 @@ instance ∀ m . ( Semimanifold m, TensorSpace (Needle (VRep m))
   type TensorProduct (GenericNeedle m) w = TensorProduct (Needle (VRep m)) w
   wellDefinedVector = fmap GenericNeedle . wellDefinedVector . getGenericNeedle
   wellDefinedTensor = arr (fmap . getVSCCoercion $ pseudoFmapTensorLHS GenericNeedle)
-                         . wellDefinedTensor . arr (pseudoFmapTensorLHS getGenericNeedle)
+                         . wellDefinedTensor
+                         . (pseudoFmapTensorLHS getGenericNeedle-+$=>)
   scalarSpaceWitness = case scalarSpaceWitness
                                :: ScalarSpaceWitness (Needle (VRep m)) of
           ScalarSpaceWitness -> ScalarSpaceWitness
@@ -1685,10 +1704,10 @@ instance ∀ m . ( Semimanifold m, TensorSpace (Needle (VRep m))
                   BoundarylessWitness
 #endif
   zeroTensor = pseudoFmapTensorLHS GenericNeedle $ zeroTensor
-  toFlatTensor = LinearFunction $ arr (pseudoFmapTensorLHS GenericNeedle)
+  toFlatTensor = LinearFunction $ (pseudoFmapTensorLHS GenericNeedle-+$=>)
                              . getLinearFunction toFlatTensor
                              . getGenericNeedle
-  fromFlatTensor = LinearFunction $ arr (pseudoFmapTensorLHS getGenericNeedle)
+  fromFlatTensor = LinearFunction $ (pseudoFmapTensorLHS getGenericNeedle-+$=>)
                              >>> getLinearFunction fromFlatTensor
                              >>> GenericNeedle
   addTensors (Tensor s) (Tensor t)
@@ -1706,9 +1725,12 @@ instance ∀ m . ( Semimanifold m, TensorSpace (Needle (VRep m))
                 => (GenericNeedle m ⊗ w) -+> (w ⊗ GenericNeedle m)
          tT = LinearFunction
            $ arr (Coercion . coerceFmapTensorProduct ([]::[w])
-                              (VSCCoercion :: VSCCoercion (Needle (VRep m))
-                                                    (GenericNeedle m)) . Coercion)
-              . getLinearFunction transposeTensor . arr (pseudoFmapTensorLHS getGenericNeedle)
+                              (VSCCoercion :: VSCCoercion (Scalar (Needle m))
+                                                          (Needle (VRep m))
+                                                          (GenericNeedle m))
+                           . Coercion)
+              . getLinearFunction transposeTensor
+              . (pseudoFmapTensorLHS getGenericNeedle-+$=>)
   fmapTensor = LinearFunction $
          \f -> envTensorLHSCoercion GenericNeedle (fmapTensor-+$>f)
   fzipTensorWith = bilinearFunction $
@@ -1739,14 +1761,16 @@ instance ∀ m . ( Semimanifold m, TensorSpace (Needle (VRep m))
     IsStaticDimensional -> \ar
        -> coerce (tensorUnsafeWriteArrayWithOffset @(Needle (VRep m)) @w ar)
   coerceFmapTensorProduct = cmtp
-   where cmtp :: ∀ p a b . Hask.Functor p
-             => p (GenericNeedle m) -> VSCCoercion a b
+   where cmtp :: ∀ p a b . ( Hask.Functor p
+                           , TensorSpace a, Scalar a ~ Scalar (Needle (VRep m))
+                           , TensorSpace b, Scalar b ~ Scalar (Needle (VRep m)) )
+             => p (GenericNeedle m) -> VSCCoercion (Scalar a) a b
                -> Coercion (TensorProduct (GenericNeedle m) a)
                            (TensorProduct (GenericNeedle m) b)
-         cmtp p crc = case coerceFmapTensorProduct ([]::[Needle (VRep m)]) crc of
+         cmtp p crc = case coerceFmapTensorProduct @(Needle (VRep m)) [] crc of
                   Coercion -> Coercion
 
-instance (LinearSpace v, Num (Scalar v)) => LinearSpace (Gnrx.Rec0 v s) where
+instance ∀ v s . (LinearSpace v, Num (Scalar v)) => LinearSpace (Gnrx.Rec0 v s) where
   type DualVector (Gnrx.Rec0 v s) = DualVector v
   dualSpaceWitness = genericTensorspaceError
   linearId = pseudoPrecomposeLinmap Gnrx.unK1
@@ -1762,6 +1786,8 @@ instance (LinearSpace v, Num (Scalar v)) => LinearSpace (Gnrx.Rec0 v s) where
   applyTensorLinMap = bilinearFunction $ \(LinearMap f) t
                 -> (applyTensorLinMap-+$>LinearMap f)-+$>pseudoFmapTensorLHS Gnrx.unK1 $ t
   useTupleLinearSpaceComponents _ = usingNonTupleTypeAsTupleError
+  coerceDoubleDual = case coerceDoubleDual @v of
+    VSCCoercion -> VSCCoercion
 
 instance (LinearSpace (f p), Num (Scalar (f p))) => LinearSpace (Gnrx.M1 i c f p) where
   type DualVector (Gnrx.M1 i c f p) = DualVector (f p)
@@ -1779,6 +1805,8 @@ instance (LinearSpace (f p), Num (Scalar (f p))) => LinearSpace (Gnrx.M1 i c f p
   applyTensorLinMap = bilinearFunction $ \(LinearMap f) t
                 -> (applyTensorLinMap-+$>LinearMap f)-+$>pseudoFmapTensorLHS Gnrx.unM1 $ t
   useTupleLinearSpaceComponents _ = usingNonTupleTypeAsTupleError
+  coerceDoubleDual = case coerceDoubleDual @(f p) of
+    VSCCoercion -> VSCCoercion
 
 data GenericTupleDual f g p
     = GenericTupleDual !(DualVector (f p)) !(DualVector (g p)) deriving (Generic)
@@ -2020,14 +2048,33 @@ instance ∀ f g p . ( LinearSpace (f p), LinearSpace (g p), Scalar (f p) ~ Scal
      (DualSpaceWitness, DualSpaceWitness) -> bilinearFunction $
                   \(LinearMap (fu,fv)) (Tensor (tu,tv))
           -> ((applyTensorFunctional-+$>fu)-+$>tu) + ((applyTensorFunctional-+$>fu)-+$>tu)
-  applyTensorLinMap = case ( dualSpaceWitness :: DualSpaceWitness (f p)
-                           , dualSpaceWitness :: DualSpaceWitness (g p) ) of
-     (DualSpaceWitness, DualSpaceWitness) -> bilinearFunction`id`
+  applyTensorLinMap :: ∀ u w . ( LinearSpace u, TensorSpace w
+                               , Scalar u ~ Scalar (g p), Scalar w ~ Scalar (g p) )
+      => LinearFunction (Scalar (g p))
+           (LinearMap (Scalar (g p)) (Tensor (Scalar (g p)) ((:*:) f g p) u) w)
+           (LinearFunction (Scalar (g p)) (Tensor (Scalar (g p)) ((:*:) f g p) u) w)
+  applyTensorLinMap = case ( dualSpaceWitness @(f p)
+                           , dualSpaceWitness @(g p)
+                           , dualSpaceWitness @u ) of
+     (DualSpaceWitness, DualSpaceWitness, DualSpaceWitness) -> bilinearFunction`id`
              \(LinearMap (fu,fv)) (Tensor (tu,tv))
-          -> ((applyTensorLinMap -+$> uncurryLinearMap . fmap fromTensor $ fu)-+$>tu)
-           ^+^ ((applyTensorLinMap -+$> uncurryLinearMap . fmap fromTensor $ fv)-+$>tv)
+          -> ((applyTensorLinMap -+$> uncurryLinearMap -+$=> fmap fromTensor -+$=> fu)-+$>tu)
+           ^+^ ((applyTensorLinMap -+$> uncurryLinearMap -+$=> fmap fromTensor -+$=> fv)-+$>tv)
   useTupleLinearSpaceComponents _ = usingNonTupleTypeAsTupleError
+  coerceDoubleDual = case ( coerceDoubleDual @(f p), dualSpaceWitness @(f p)
+                          , coerceDoubleDual @(g p), dualSpaceWitness @(g p)) of
+    (VSCCoercion, DualSpaceWitness, VSCCoercion, DualSpaceWitness) -> VSCCoercion
 
+instance ( LinearSpace (f p), LinearSpace (g p)
+         , VectorSpace (DualVector (f p)), VectorSpace (DualVector (g p))
+         , Scalar (f p) ~ Scalar (DualVector (f p))
+         , Scalar (g p) ~ Scalar (DualVector (g p))
+         , Scalar (DualVector (f p)) ~ Scalar (DualVector (g p)) )
+    => LinearSpace (GenericTupleDual f g p) where
+  type DualVector (GenericTupleDual f g p) = (f:*:g) p
+  coerceDoubleDual = case ( coerceDoubleDual @(f p), dualSpaceWitness @(f p)
+                          , coerceDoubleDual @(g p), dualSpaceWitness @(g p)) of
+    (VSCCoercion, DualSpaceWitness, VSCCoercion, DualSpaceWitness) -> VSCCoercion
 
 newtype GenericNeedle' m
     = GenericNeedle' { getGenericNeedle' :: DualVector (Needle (VRep m)) }
@@ -2084,7 +2131,7 @@ instance ∀ m . ( Semimanifold m, TensorSpace (DualVector (Needle (VRep m)))
          = TensorProduct (DualVector (Needle (VRep m))) w
   wellDefinedVector = fmap GenericNeedle' . wellDefinedVector . getGenericNeedle'
   wellDefinedTensor = arr (fmap . getVSCCoercion $ pseudoFmapTensorLHS GenericNeedle')
-                         . wellDefinedTensor . arr (pseudoFmapTensorLHS getGenericNeedle')
+                         . wellDefinedTensor . (pseudoFmapTensorLHS getGenericNeedle'-+$=>)
   scalarSpaceWitness = case scalarSpaceWitness
                     :: ScalarSpaceWitness (DualVector (Needle (VRep m))) of
           ScalarSpaceWitness -> ScalarSpaceWitness
@@ -2099,10 +2146,10 @@ instance ∀ m . ( Semimanifold m, TensorSpace (DualVector (Needle (VRep m)))
                   BoundarylessWitness
 #endif
   zeroTensor = pseudoFmapTensorLHS GenericNeedle' $ zeroTensor
-  toFlatTensor = LinearFunction $ arr (pseudoFmapTensorLHS GenericNeedle')
+  toFlatTensor = LinearFunction $ (pseudoFmapTensorLHS GenericNeedle'-+$=>)
                              . getLinearFunction toFlatTensor
                              . getGenericNeedle'
-  fromFlatTensor = LinearFunction $ arr (pseudoFmapTensorLHS getGenericNeedle')
+  fromFlatTensor = LinearFunction $ (pseudoFmapTensorLHS getGenericNeedle'-+$=>)
                              >>> getLinearFunction fromFlatTensor
                              >>> GenericNeedle'
   addTensors (Tensor s) (Tensor t)
@@ -2120,10 +2167,13 @@ instance ∀ m . ( Semimanifold m, TensorSpace (DualVector (Needle (VRep m)))
                 => (GenericNeedle' m ⊗ w) -+> (w ⊗ GenericNeedle' m)
          tT = LinearFunction
            $ arr (Coercion . coerceFmapTensorProduct ([]::[w])
-                              (VSCCoercion :: VSCCoercion (DualVector (Needle (VRep m)))
+                              (VSCCoercion :: VSCCoercion
+                                                    (Scalar (Needle m))
+                                                    (DualVector (Needle (VRep m)))
                                                     (GenericNeedle' m))
                            . Coercion)
-              . getLinearFunction transposeTensor . arr (pseudoFmapTensorLHS getGenericNeedle')
+              . getLinearFunction transposeTensor
+              . (pseudoFmapTensorLHS getGenericNeedle'-+$=>)
   fmapTensor = LinearFunction $
          \f -> envTensorLHSCoercion GenericNeedle' (fmapTensor-+$>f)
   fzipTensorWith = bilinearFunction $
@@ -2155,12 +2205,14 @@ instance ∀ m . ( Semimanifold m, TensorSpace (DualVector (Needle (VRep m)))
     IsStaticDimensional -> \ar
        -> coerce (tensorUnsafeWriteArrayWithOffset
                    @(DualVector (Needle (VRep m))) @w ar)
-  coerceFmapTensorProduct = cmtp
-   where cmtp :: ∀ p a b . Hask.Functor p
-             => p (GenericNeedle' m) -> VSCCoercion a b
+  coerceFmapTensorProduct :: ∀ p a b
+         . ( Hask.Functor p
+           , TensorSpace a, Scalar a ~ Scalar (DualVector (Needle (VRep m)))
+           , TensorSpace b, Scalar b ~ Scalar (DualVector (Needle (VRep m))) )
+             => p (GenericNeedle' m) -> VSCCoercion (Scalar a) a b
                -> Coercion (TensorProduct (GenericNeedle' m) a)
                            (TensorProduct (GenericNeedle' m) b)
-         cmtp p crc = case coerceFmapTensorProduct
+  coerceFmapTensorProduct p crc = case coerceFmapTensorProduct
                               ([]::[DualVector (Needle (VRep m))]) crc of
                   Coercion -> Coercion
 
@@ -2190,6 +2242,8 @@ instance ∀ s m . ( Num' s
                 -> (applyTensorLinMap-+$>LinearMap f)
                     -+$>pseudoFmapTensorLHS getGenericNeedle $ t
   useTupleLinearSpaceComponents _ = usingNonTupleTypeAsTupleError
+  coerceDoubleDual = case coerceDoubleDual @(Needle (VRep m)) of
+    VSCCoercion -> VSCCoercion
 
 instance ∀ s m . ( Num' s
                  , Semimanifold m
@@ -2224,3 +2278,5 @@ instance ∀ s m . ( Num' s
                 -> (applyTensorLinMap-+$>LinearMap f)
                     -+$>pseudoFmapTensorLHS getGenericNeedle' $ t
   useTupleLinearSpaceComponents _ = usingNonTupleTypeAsTupleError
+  coerceDoubleDual = case coerceDoubleDual @(Needle (VRep m)) of
+    VSCCoercion -> VSCCoercion
