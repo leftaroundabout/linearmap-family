@@ -666,6 +666,7 @@ instance ∀ v . ( BasisGeneratedSpace v
                       | (i, Tensor fi) <- enumerate f ]
           )
   useTupleLinearSpaceComponents _ = usingNonTupleTypeAsTupleError
+  coerceDoubleDual = VSCCoercion
 
 
 zipWith' :: (a -> b -> c) -> [a] -> [b] -> ([c], [b])
@@ -803,35 +804,39 @@ scalarsSameInAbstractionAndDuals φ
      = case dualSpaceWitness @(VectorSpaceImplementation v) of
         DualSpaceWitness -> scalarsSameInAbstraction @v φ
 
-abstractDualVectorCoercion :: ∀ a
-   . (LinearSpace (VectorSpaceImplementation a))
-    => VSCCoercion (AbstractDualVector a (VectorSpaceImplementation a))
-              (DualVector (VectorSpaceImplementation a))
+abstractDualVectorCoercion :: ∀ a s
+   . ( LinearSpace (VectorSpaceImplementation a)
+     , Scalar (VectorSpaceImplementation a) ~ s )
+    => VSCCoercion s (AbstractDualVector a (VectorSpaceImplementation a))
+                     (DualVector (VectorSpaceImplementation a))
 abstractDualVectorCoercion = case dualSpaceWitness @(VectorSpaceImplementation a) of
    DualSpaceWitness -> VSCCoercion
 
-abstractDualTensorsCoercion :: ∀ a c w
+abstractDualTensorsCoercion :: ∀ a s c w
   . ( AbstractVectorSpace a, LinearSpace c
     , c ~ VectorSpaceImplementation a, TensorSpace w )
-      => VSCCoercion (AbstractDualVector a c⊗w) (DualVector c⊗w)
+      => VSCCoercion s (AbstractDualVector a c⊗w) (DualVector c⊗w)
 abstractDualTensorsCoercion = case dualSpaceWitness @c of
   DualSpaceWitness -> VSCCoercion
 
-abstractLinmapCoercion :: ∀ a c w
+abstractLinmapCoercion :: ∀ a s c w
   . ( AbstractLinearSpace a, LinearSpace c
     , c ~ VectorSpaceImplementation a, TensorSpace w )
-      => VSCCoercion (AbstractDualVector a c+>w) (DualVector c+>w)
+      => VSCCoercion s (AbstractDualVector a c+>w) (DualVector c+>w)
 abstractLinmapCoercion = case ( dualSpaceWitness @c
                               , abstractTensorProductsCoercion @a @w ) of
    (DualSpaceWitness, Coercion) -> VSCCoercion
 
 coerceLinearMapCodomain :: ∀ v w x
-   . ( LinearSpace v, Coercible w x, StaticDimension w ~ StaticDimension x )
+   . ( LinearSpace v
+     , TensorSpace w, TensorSpace x, Coercible w x
+     , Scalar w ~ Scalar v, Scalar x ~ Scalar w
+     , StaticDimension w ~ StaticDimension x )
          => (v+>w) -> (v+>x)
 coerceLinearMapCodomain = case dualSpaceWitness @v of
  DualSpaceWitness -> \(LinearMap m)
      -> LinearMap $ (coerceFmapTensorProduct ([]::[DualVector v])
-                            (VSCCoercion :: VSCCoercion w x) $ m)
+                            (VSCCoercion :: VSCCoercion (Scalar v) w x) $ m)
 
 instance (Show (DualVector c)) => Show (AbstractDualVector a c) where
   showsPrec p (AbstractDualVector_ φ) = showParen (p>10)
@@ -999,7 +1004,8 @@ instance ∀ a c . ( AbstractLinearSpace a, VectorSpaceImplementation a ~ c
       = case dimensionalityWitness @(DualVector c) of
          IsStaticDimensional -> scalarsSameInAbstractionAndDuals @a
           (coerce (tensorUnsafeWriteArrayWithOffset @(DualVector c) @w ar))
-  coerceFmapTensorProduct _ = coerceFmapTensorProduct ([]::[DualVector c])
+  coerceFmapTensorProduct _ = scalarsSameInAbstractionAndDuals @a
+        (coerceFmapTensorProduct @(DualVector c) [])
 
 witnessAbstractDualVectorTensorSpacyness
   :: ∀ a c r . ( AbstractLinearSpace a, VectorSpaceImplementation a ~ c
@@ -1070,6 +1076,7 @@ instance ∀ a c . ( AbstractLinearSpace a, VectorSpaceImplementation a ~ c
                               . LinearFunction (abstractDualTensorsCoercion @a $)
            )
   useTupleLinearSpaceComponents = \_ -> usingNonTupleTypeAsTupleError
+  coerceDoubleDual = VSCCoercion
 
 instance ∀ a c . ( AbstractLinearSpace a, VectorSpaceImplementation a ~ c
                  , FiniteDimensional a, FiniteDimensional c
@@ -1340,6 +1347,7 @@ abstractVS_tensorProduct = scalarsSameInAbstraction @v
        Coercion -> coerce (tensorProduct @(VectorSpaceImplementation v) @w) )
 
 abstractVS_transposeTensor :: ∀ v w . ( AbstractTensorSpace v
+           , TensorSpace v
            , TensorSpace w, Scalar w ~ Scalar v
            ) => (v ⊗ w) -+> (w ⊗ v)
 abstractVS_transposeTensor
@@ -1391,7 +1399,8 @@ abstractVS_unsafeWriteArrayWithOffset = scalarsSameInAbstraction @v
     (\ar -> coerce (unsafeWriteArrayWithOffset @n @(VectorSpaceImplementation v) ar))
 
 abstractVS_tensorUnsafeFromArrayWithOffset :: ∀ v w n m α
-         . ( AbstractTensorSpace v, n`Dimensional`VectorSpaceImplementation v
+         . ( AbstractTensorSpace v, TensorSpace v
+           , n`Dimensional`VectorSpaceImplementation v
            , TensorSpace w, m`Dimensional`w, Scalar w ~ Scalar v
            , GArr.Vector α (Scalar v) )
                    => Int -> α (Scalar v) -> (v⊗w)
@@ -1400,7 +1409,8 @@ abstractVS_tensorUnsafeFromArrayWithOffset = scalarsSameInAbstraction @v
        . tensorUnsafeFromArrayWithOffset @(VectorSpaceImplementation v) i )
 
 abstractVS_tensorUnsafeWriteArrayWithOffset :: ∀ v w n m α σ
-         . ( AbstractTensorSpace v, n`Dimensional`VectorSpaceImplementation v
+         . ( AbstractTensorSpace v, TensorSpace v
+           , n`Dimensional`VectorSpaceImplementation v
            , TensorSpace w, m`Dimensional`w, Scalar w ~ Scalar v
            , GArr.Vector α (Scalar v) )
                    => GArr.Mutable α σ (Scalar v) -> Int -> (v⊗w) -> ST σ ()
@@ -1409,9 +1419,13 @@ abstractVS_tensorUnsafeWriteArrayWithOffset = scalarsSameInAbstraction @v
        tensorUnsafeWriteArrayWithOffset @(VectorSpaceImplementation v) ar i
         . arr abstractTensorsCoercion )
 
-abstractVS_coerceFmapTensorProduct :: ∀ v u w p .
-         ( AbstractTensorSpace v
-         ) => p v -> VSCCoercion u w -> Coercion (TensorProduct v u) (TensorProduct v w)
+abstractVS_coerceFmapTensorProduct :: ∀ v u w s p .
+         ( AbstractTensorSpace v, TensorSpace u, TensorSpace w
+         , Scalar (VectorSpaceImplementation v) ~ s
+         , Scalar u ~ s
+         , Scalar w ~ s
+         ) => p v -> VSCCoercion s u w
+                  -> Coercion (TensorProduct v u) (TensorProduct v w)
 abstractVS_coerceFmapTensorProduct _ crc
       = case ( abstractTensorProductsCoercion @v @u
              , abstractTensorProductsCoercion @v @w
@@ -1428,21 +1442,23 @@ abstractVS_dualSpaceWitness
       DualSpaceWitness -> DualSpaceWitness
    )
 
-abstractVS_linearId :: ∀ v . ( AbstractLinearSpace v
+abstractVS_linearId :: ∀ v . ( AbstractLinearSpace v, TensorSpace v
            , LinearSpace (VectorSpaceImplementation v) )
                    => v +> v
 abstractVS_linearId = case dualSpaceWitness @(VectorSpaceImplementation v) of
- DualSpaceWitness -> case coerceFmapTensorProduct
+ DualSpaceWitness -> scalarsSameInAbstraction @v ( case coerceFmapTensorProduct
                              @(DualVector (VectorSpaceImplementation v)) []
                              (VSCCoercion @v @(VectorSpaceImplementation v)) of
    Coercion -> coerce (linearId @(VectorSpaceImplementation v))
+  )
 
-abstractTensorsCoercion :: ∀ v w . AbstractTensorSpace v
-    => VSCCoercion (v⊗w) (VectorSpaceImplementation v⊗w)
+abstractTensorsCoercion :: ∀ v w s . AbstractTensorSpace v
+    => VSCCoercion s (v⊗w) (VectorSpaceImplementation v⊗w)
 abstractTensorsCoercion = case abstractTensorProductsCoercion @v @w of
    Coercion -> VSCCoercion
 
 abstractVS_tensorId :: ∀ v w . ( AbstractLinearSpace v
+           , TensorSpace v
            , LinearSpace (VectorSpaceImplementation v)
            , LinearSpace w, Scalar w ~ Scalar v )
                    => (v ⊗ w) +> (v ⊗ w) 
@@ -1454,7 +1470,7 @@ abstractVS_tensorId = scalarsSameInAbstraction @v
          Coercion
            -> case ( coerceFmapTensorProduct 
                       @(DualVector (VectorSpaceImplementation v)) []
-                      (VSCCoercion :: VSCCoercion
+                      (VSCCoercion :: VSCCoercion (Scalar v)
                           (Tensor (Scalar v) (DualVector w) (Tensor (Scalar v) v w))
                           (Tensor (Scalar v)
                                   (DualVector w)

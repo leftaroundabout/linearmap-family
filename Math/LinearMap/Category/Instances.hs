@@ -16,6 +16,7 @@
 {-# LANGUAGE FunctionalDependencies     #-}
 {-# LANGUAGE DataKinds                  #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
+{-# LANGUAGE InstanceSigs               #-}
 {-# LANGUAGE StandaloneDeriving         #-}
 {-# LANGUAGE UnicodeSyntax              #-}
 {-# LANGUAGE CPP                        #-}
@@ -266,7 +267,7 @@ instance ∀ s . (Num' s, Eq s) => LinearSpace (V s) where {                  \
   applyTensorFunctional = bilinearFunction $ \(LinearMap f) (Tensor t) \
              -> sum $ liftA2 (<.>^) f t; \
   applyTensorLinMap = bilinearFunction $ \(LinearMap f) (Tensor t) \
-             -> foldl' (^+^) zeroV $ liftA2 (arr fromTensor >>> \
+             -> foldl' (^+^) zeroV $ liftA2 ((fromTensor-+$=>) >>> \
                          getLinearFunction . getLinearFunction applyLinear) f t; \
   composeLinear = bilinearFunction $   \
          \f (LinearMap g) -> LinearMap $ fmap ((applyLinear-+$>f)-+$>) g; \
@@ -463,12 +464,12 @@ instance (Num' n, UArr.Unbox n) => TensorSpace (Sequence n) where
       = notStaticDimensionalContradiction @(Sequence n)
   coerceFmapTensorProduct _ VSCCoercion = Coercion
 
-instance (Num' n, UArr.Unbox n) => LinearSpace (Sequence n) where
+instance ∀ n . (Num' n, UArr.Unbox n) => LinearSpace (Sequence n) where
   type DualVector (Sequence n) = FinSuppSeq n
   dualSpaceWitness = case closedScalarWitness :: ClosedScalarWitness n of
             ClosedScalarWitness -> DualSpaceWitness
   linearId = LinearMap [basisValue i | i<-[0..]]
-  tensorId = LinearMap [asTensor $ fmap (LinearFunction $
+  tensorId = LinearMap [asTensor -+$=> fmap (LinearFunction $
                            \w -> Tensor $ replicate (i-1) zeroV ++ [w]) $ id | i<-[0..]]
   applyDualVector = bilinearFunction $ adv Seq.minimumChunkSize
    where adv _ (FinSuppSeq v) (Seq.SoloChunk o q)
@@ -492,12 +493,14 @@ instance (Num' n, UArr.Unbox n) => LinearSpace (Sequence n) where
          \(LinearMap m) (Tensor t)
              -> sumV $ zipWith (getLinearFunction . getLinearFunction applyLinear) m t
   useTupleLinearSpaceComponents _ = usingNonTupleTypeAsTupleError
-instance (Num' n, UArr.Unbox n) => LinearSpace (FinSuppSeq n) where
+  coerceDoubleDual = case scalarSpaceWitness @n of
+     ScalarSpaceWitness -> VSCCoercion
+instance ∀ n . (Num' n, UArr.Unbox n) => LinearSpace (FinSuppSeq n) where
   type DualVector (FinSuppSeq n) = Sequence n
   dualSpaceWitness = case closedScalarWitness :: ClosedScalarWitness n of
             ClosedScalarWitness -> DualSpaceWitness
   linearId = LinearMap [basisValue i | i<-[0..]]
-  tensorId = LinearMap [asTensor $ fmap (LinearFunction $
+  tensorId = LinearMap [asTensor -+$=> fmap (LinearFunction $
                            \w -> Tensor $ replicate (i-1) zeroV ++ [w]) $ id | i<-[0..]]
   applyDualVector = bilinearFunction $ adv Seq.minimumChunkSize
    where adv _ (Seq.SoloChunk o q) (FinSuppSeq v)
@@ -515,6 +518,8 @@ instance (Num' n, UArr.Unbox n) => LinearSpace (FinSuppSeq n) where
          \(LinearMap m) (Tensor t)
              -> sumV $ zipWith (getLinearFunction . getLinearFunction applyLinear) m t
   useTupleLinearSpaceComponents _ = usingNonTupleTypeAsTupleError
+  coerceDoubleDual = case scalarSpaceWitness @n of
+     ScalarSpaceWitness -> VSCCoercion
   
 
 
@@ -600,7 +605,8 @@ instance (Num' s, TensorSpace v, Scalar v ~ s) => TensorSpace (SymmetricTensor s
       -- VSCCoercion -> Coercion
   wellDefinedTensor (Tensor t) = Tensor <$> wellDefinedVector t
 
-instance (Num' s, LinearSpace v, Scalar v ~ s) => LinearSpace (SymmetricTensor s v) where
+instance ∀ s v . (Num' s, LinearSpace v, Scalar v ~ s)
+                   => LinearSpace (SymmetricTensor s v) where
   type DualVector (SymmetricTensor s v) = SymmetricTensor s (DualVector v)
   dualSpaceWitness = case ( closedScalarWitness :: ClosedScalarWitness s
                           , dualSpaceWitness :: DualSpaceWitness v ) of 
@@ -619,19 +625,32 @@ instance (Num' s, LinearSpace v, Scalar v ~ s) => LinearSpace (SymmetricTensor s
                          $ fromTensor . deferLinearMap . asLinearMap $ f) $ t
   applyDualVector = bilinearFunction $ \(SymTensor f) (SymTensor v)
                       -> getLinearFunction
-                           (getLinearFunction applyDualVector $ fromTensor $ f) v
-  applyTensorFunctional = case dualSpaceWitness :: DualSpaceWitness v of
-    DualSpaceWitness -> bilinearFunction $ \(LinearMap f) (Tensor t)
+                           (getLinearFunction applyDualVector $ fromTensor -+$=> f) v
+  applyTensorFunctional :: ∀ u . (LinearSpace u, Scalar u ~ s)
+       => LinearFunction s
+               (LinearMap s (SymmetricTensor s v) (DualVector u))
+               (LinearFunction s (Tensor s (SymmetricTensor s v) u) s)
+  applyTensorFunctional = case (dualSpaceWitness @v, dualSpaceWitness @u) of
+    (DualSpaceWitness, DualSpaceWitness)
+             -> bilinearFunction $ \(LinearMap f) (Tensor t)
                    -> getLinearFunction
                         (getLinearFunction applyTensorFunctional
-                             $ fromTensor . fmap fromTensor $ f) t
-  applyTensorLinMap = case dualSpaceWitness :: DualSpaceWitness v of
-    DualSpaceWitness -> bilinearFunction $ \(LinearMap (Tensor f)) (Tensor t)
+                             $ fromTensor . fmap fromTensor -+$=> f) t
+  applyTensorLinMap :: ∀ u w . ( LinearSpace u, Scalar u ~ s
+                               , TensorSpace w, Scalar w ~ s )
+       => LinearFunction s
+               (LinearMap s (Tensor s (SymmetricTensor s v) u) w)
+               (LinearFunction s (Tensor s (SymmetricTensor s v) u) w)
+  applyTensorLinMap = case (dualSpaceWitness @v, dualSpaceWitness @u) of
+    (DualSpaceWitness, DualSpaceWitness)
+              -> bilinearFunction $ \(LinearMap (Tensor f)) (Tensor t)
                    -> getLinearFunction (getLinearFunction applyTensorLinMap
                              $ uncurryLinearMap
                                 . fmap (uncurryLinearMap . fromTensor . fmap fromTensor)
-                                       $ LinearMap f) t  
+                                       -+$=> LinearMap f) t  
   useTupleLinearSpaceComponents _ = usingNonTupleTypeAsTupleError
+  coerceDoubleDual = case (dualSpaceWitness @v, scalarSpaceWitness @s) of
+     (DualSpaceWitness, ScalarSpaceWitness) -> VSCCoercion
 
 
 
@@ -750,7 +769,7 @@ instance ( QC.Arbitrary (Tensor s u w), QC.Arbitrary (Tensor s v w)
   arbitrary = Tensor <$> QC.arbitrary
   shrink (Tensor t) = Tensor <$> QC.shrink t
 
-instance ( LinearSpace u, LinearSpace v
+instance ( LinearSpace u, LinearSpace v, TensorSpace w
          , QC.Arbitrary (LinearMap s u w), QC.Arbitrary (LinearMap s v w)
          , Scalar u ~ s, Scalar v ~ s, Scalar w ~ s )
           => QC.Arbitrary (LinearMap s (u,v) w) where

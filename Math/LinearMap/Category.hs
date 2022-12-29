@@ -420,8 +420,9 @@ infixl 1 |&>
 -- @
 -- v '<.>^' (w |&> 'euclideanNorm')  ≡  v '<.>' w
 -- @
-(|&>) :: LSpace v => DualVector v -> Variance v -> v
-dv |&> Norm m = symVSC coerceDoubleDual $ m-+$>dv
+(|&>) :: ∀ v . LSpace v => DualVector v -> Variance v -> v
+dv |&> Norm m = case dualSpaceWitness @v of
+   DualSpaceWitness -> m-+$>dv
 
 
 -- | 'spanNorm' / 'spanVariance' are inefficient if the number of vectors
