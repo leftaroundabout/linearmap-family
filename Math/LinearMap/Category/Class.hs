@@ -1,6 +1,6 @@
 -- |
 -- Module      : Math.LinearMap.Category.Class
--- Copyright   : (c) Justus Sagemüller 2016
+-- Copyright   : (c) Justus Sagemüller 2016-2022
 -- License     : GPL v3
 -- 
 -- Maintainer  : (@) jsag $ hvl.no
