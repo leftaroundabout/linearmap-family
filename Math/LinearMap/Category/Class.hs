@@ -261,7 +261,9 @@ class (TensorSpace v, Num (Scalar v)) => LinearSpace v where
                         , dualSpaceWitness :: DualSpaceWitness v ) of
     (ScalarSpaceWitness,DualSpaceWitness) -> arr asTensor >>> fromFlatTensor
   
-  coerceDoubleDual :: VSCCoercion (Scalar s) v (DualVector (DualVector v))
+  -- | This will probably be removed in the future, since infinite-dimensional
+  --   (e.g. Banach-) spaces may be not isomorphic to their double dual.
+  coerceDoubleDual :: VSCCoercion (Scalar v) v (DualVector (DualVector v))
   coerceDoubleDual = case dualSpaceWitness :: DualSpaceWitness v of
     DualSpaceWitness -> VSCCoercion
   
