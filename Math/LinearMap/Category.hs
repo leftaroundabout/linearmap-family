@@ -99,6 +99,8 @@ module Math.LinearMap.Category (
             , Num'(..)
             , Fractional'
             , RealFrac', RealFloat', LinearShowable
+            -- ** Coercions
+            , VSCCoercion(..)
             -- ** Double-dual, scalar-scalar etc. identity
             , ClosedScalarWitness(..), TrivialTensorWitness(..)
             , ScalarSpaceWitness(..), DualSpaceWitness(..), LinearManifoldWitness(..)
