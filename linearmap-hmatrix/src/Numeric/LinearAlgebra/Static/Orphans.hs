@@ -110,7 +110,7 @@ instance KnownNat n => PseudoAffine (R n) where
   v .-~. w = Just (v - w)
 
 type family RTensorProduct n w dw where
-  RTensorProduct n w ('Just m) = L n m
+  RTensorProduct n w ('Just m) = L m n
   RTensorProduct n w 'Nothing
      = ArB.Vector w  -- ^ If the dimensionality is not fixed, store the columns as a
                      --   boxed array. This can be ragged (for whatever notion of
@@ -122,6 +122,10 @@ unsafeCreate = fromJust . create
 
 unsafeFromRows :: ∀ m n . (KnownNat m, KnownNat n) => [R n] -> L m n
 unsafeFromRows rs = withRows rs $ -- unsafeCoerce
+                                  fromJust . exactDims
+
+unsafeFromCols :: ∀ m n . (KnownNat m, KnownNat n) => [R n] -> L m n
+unsafeFromCols rs = withColumns rs $ -- unsafeCoerce
                                   fromJust . exactDims
 
 instance ∀ n . KnownNat n => TensorSpace (R n) where
@@ -150,12 +154,12 @@ instance ∀ n . KnownNat n => TensorSpace (R n) where
   scaleTensor = case dimensionalityWitness @w of
      IsStaticDimensional -> bilinearFunction $ \μ (Tensor a) -> Tensor $ dmmap (μ*) a
      IsFlexibleDimensional -> bilinearFunction $ \μ (Tensor a) -> Tensor $ ArB.map (μ*^) a
-  toFlatTensor = LinearFunction $ \v -> Tensor $ col v
-  fromFlatTensor = LinearFunction $ \(Tensor t) -> t #> 1
+  toFlatTensor = LinearFunction $ \v -> Tensor $ row v
+  fromFlatTensor = LinearFunction $ \(Tensor t) -> unrow t
   tensorProduct :: ∀ w . (TensorSpace w, Scalar w ~ ℝ) => Bilinear (R n) w (R n ⊗ w)
   tensorProduct = case dimensionalityWitness @w of
      IsStaticDimensional -> bilinearFunction $ \v w -> Tensor
-          . outer v . unsafeCreate $ toArray w
+          $ outer (unsafeCreate $ toArray w) v
      IsFlexibleDimensional -> bilinearFunction $ \v w -> Tensor
           . ArB.map (*^w) $ toArray v
   transposeTensor :: ∀ w . (TensorSpace w, Scalar w ~ ℝ)
@@ -176,19 +180,19 @@ instance ∀ n . KnownNat n => TensorSpace (R n) where
          $ \(LinearFunction f)       -- TODO make dimension-dependent. Building a
                                      -- matrix for @f@ is inefficient if the dimensions
                                      -- of @w@ and @x@ are larger than @n@.
-             -> let fm = unsafeFromRows
+             -> let fm = unsafeFromCols
                           [ unsafeCreate . toArray $ f x
                           | i <- [0 .. dx - 1]
                           , let Just x = fromArray  -- TODO use unsafeFromArray
                                  $ ArU.generate dx (\j -> if i==j then 1 else 0) ]
                     dx = dimension @x
-                in \(Tensor t) -> Tensor $ mul t fm
+                in \(Tensor t) -> Tensor $ mul fm t
      (IsStaticDimensional, IsFlexibleDimensional) -> bilinearFunction
          $ \(LinearFunction f) (Tensor t)
         -> Tensor . ArB.map (f . unsafeFromArray . extract) . ArB.fromList $ toRows t
      (IsFlexibleDimensional, IsStaticDimensional) -> bilinearFunction
          $ \(LinearFunction f) (Tensor t)
-        -> Tensor . unsafeFromRows . ArB.toList
+        -> Tensor . unsafeFromCols . ArB.toList
                $ ArB.map (unsafeCreate . toArray . f) t
      (IsFlexibleDimensional, IsFlexibleDimensional) -> bilinearFunction
          $ \(LinearFunction f) (Tensor t) -> Tensor $ ArB.map f t
@@ -202,13 +206,13 @@ instance ∀ n . KnownNat n => TensorSpace (R n) where
          $ \(LinearFunction f)       -- TODO make dimension-dependent. Building
                                      -- matrices for @f@ is inefficient if the dimensions
                                      -- of @w@ and @x+y@ are larger than @n@.
-             -> let fmx = unsafeFromRows
+             -> let fmx = unsafeFromCols
                           [ unsafeCreate . toArray $ f (x,zeroV)
                           | i <- [0 .. dx - 1]
                           , let Just x = fromArray  -- TODO use unsafeFromArray
                                  $ ArU.generate dx (\j -> if i==j then 1 else 0)
                           ]
-                    fmy = unsafeFromRows
+                    fmy = unsafeFromCols
                           [ unsafeCreate . toArray $ f (zeroV,y)
                           | i <- [0 .. dy - 1]
                           , let Just y = fromArray  -- TODO use unsafeFromArray
@@ -216,10 +220,10 @@ instance ∀ n . KnownNat n => TensorSpace (R n) where
                           ]
                     dx = dimension @x
                     dy = dimension @y
-                in \(Tensor tx, Tensor ty) -> Tensor $ mul tx fmx + mul ty fmy
+                in \(Tensor tx, Tensor ty) -> Tensor $ mul fmx tx + mul fmy ty
      (IsStaticDimensional, IsFlexibleDimensional, IsStaticDimensional) -> bilinearFunction
          $ \(LinearFunction f)
-             -> let fmx = unsafeFromRows
+             -> let fmx = unsafeFromCols
                           [ unsafeCreate . toArray $ f (x,zeroV)
                           | i <- [0 .. dx - 1]
                           , let Just x = fromArray  -- TODO use unsafeFromArray
@@ -227,8 +231,8 @@ instance ∀ n . KnownNat n => TensorSpace (R n) where
                           ]
                     dx = dimension @x
                 in \(Tensor tx, Tensor ty) -> Tensor
-                       $ mul tx fmx
-                        + unsafeFromRows
+                       $ mul fmx tx
+                        + unsafeFromCols
                            [ wRn
                            | y <- ArG.toList ty
                            , let w = f (zeroV, y)
@@ -237,7 +241,7 @@ instance ∀ n . KnownNat n => TensorSpace (R n) where
                            ]
      (IsFlexibleDimensional, IsStaticDimensional, IsStaticDimensional) -> bilinearFunction
          $ \(LinearFunction f)
-             -> let fmy = unsafeFromRows
+             -> let fmy = unsafeFromCols
                           [ unsafeCreate . toArray $ f (zeroV,y)
                           | i <- [0 .. dy - 1]
                           , let Just y = fromArray  -- TODO use unsafeFromArray
@@ -245,14 +249,14 @@ instance ∀ n . KnownNat n => TensorSpace (R n) where
                           ]
                     dy = dimension @y
                 in \(Tensor tx, Tensor ty) -> Tensor
-                       $ unsafeFromRows
+                       $ unsafeFromCols
                            [ wRn
                            | x <- ArG.toList tx
                            , let w = f (x, zeroV)
                                  wa = toArray w
                                  Just wRn = create wa
                            ]
-                          + mul ty fmy
+                          + mul fmy ty
      (IsStaticDimensional, IsStaticDimensional, IsFlexibleDimensional)
        -> bilinearFunction $ \(LinearFunction f) (Tensor tx, Tensor ty)
         -> Tensor . ArB.map (f . (unsafeFromArray . extract
@@ -261,17 +265,17 @@ instance ∀ n . KnownNat n => TensorSpace (R n) where
      (IsStaticDimensional, IsFlexibleDimensional, IsFlexibleDimensional)
        -> bilinearFunction $ \(LinearFunction f) (Tensor tx, Tensor ty)
         -> Tensor $ ArB.zipWith (curry f)
-             (ArB.map (unsafeFromArray . extract) . ArB.fromList $ toRows tx)
+             (ArB.map (unsafeFromArray . extract) . ArB.fromList $ toColumns tx)
              ty
      (IsFlexibleDimensional, IsStaticDimensional, IsFlexibleDimensional)
        -> bilinearFunction $ \(LinearFunction f) (Tensor tx, Tensor ty)
         -> Tensor $ ArB.zipWith (curry f)
              tx
-             (ArB.map (unsafeFromArray . extract) . ArB.fromList $ toRows ty)
+             (ArB.map (unsafeFromArray . extract) . ArB.fromList $ toColumns ty)
      (IsFlexibleDimensional, IsFlexibleDimensional, IsStaticDimensional)
        -> bilinearFunction
          $ \(LinearFunction f) (Tensor tx, Tensor ty)
-        -> Tensor . unsafeFromRows . ArB.toList
+        -> Tensor . unsafeFromCols . ArB.toList
                $ ArB.zipWith (curry $ unsafeCreate . toArray . f) tx ty
      (IsFlexibleDimensional, IsFlexibleDimensional, IsFlexibleDimensional)
        -> bilinearFunction $ \(LinearFunction f) (Tensor tx, Tensor ty)
