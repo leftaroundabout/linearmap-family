@@ -217,6 +217,42 @@ instance ∀ n . KnownNat n => TensorSpace (R n) where
                     dx = dimension @x
                     dy = dimension @y
                 in \(Tensor tx, Tensor ty) -> Tensor $ mul tx fmx + mul ty fmy
+     (IsStaticDimensional, IsFlexibleDimensional, IsStaticDimensional) -> bilinearFunction
+         $ \(LinearFunction f)
+             -> let fmx = unsafeFromRows
+                          [ unsafeCreate . toArray $ f (x,zeroV)
+                          | i <- [0 .. dx - 1]
+                          , let Just x = fromArray  -- TODO use unsafeFromArray
+                                 $ ArU.generate dx (\j -> if i==j then 1 else 0)
+                          ]
+                    dx = dimension @x
+                in \(Tensor tx, Tensor ty) -> Tensor
+                       $ mul tx fmx
+                        + unsafeFromRows
+                           [ wRn
+                           | y <- ArG.toList ty
+                           , let w = f (zeroV, y)
+                                 wa = toArray w
+                                 Just wRn = create wa
+                           ]
+     (IsFlexibleDimensional, IsStaticDimensional, IsStaticDimensional) -> bilinearFunction
+         $ \(LinearFunction f)
+             -> let fmy = unsafeFromRows
+                          [ unsafeCreate . toArray $ f (zeroV,y)
+                          | i <- [0 .. dy - 1]
+                          , let Just y = fromArray  -- TODO use unsafeFromArray
+                                 $ ArU.generate dy (\j -> if i==j then 1 else 0)
+                          ]
+                    dy = dimension @y
+                in \(Tensor tx, Tensor ty) -> Tensor
+                       $ unsafeFromRows
+                           [ wRn
+                           | x <- ArG.toList tx
+                           , let w = f (x, zeroV)
+                                 wa = toArray w
+                                 Just wRn = create wa
+                           ]
+                          + mul ty fmy
      (IsStaticDimensional, IsStaticDimensional, IsFlexibleDimensional)
        -> bilinearFunction $ \(LinearFunction f) (Tensor tx, Tensor ty)
         -> Tensor . ArB.map (f . (unsafeFromArray . extract
@@ -265,15 +301,15 @@ instance ∀ n . KnownNat n => TensorSpace (R n) where
   tensorUnsafeFromArrayWithOffset i ar
         = case create . HMat.reshape n . ArG.convert $ ArG.slice i (n*m) ar of
              Just t -> Tensor t
-   where n = fromIntegral (natVal @n Proxy) :: Int
-         m = fromIntegral (natVal @m Proxy) :: Int
+   where n = fromIntegral (natVal @n Proxy)
+         m = dimension @w
   tensorUnsafeWriteArrayWithOffset :: ∀ w m α σ
           . (m`Dimensional`w, Scalar w ~ ℝ, ArG.Vector α ℝ)
            => ArG.Mutable α σ ℝ -> Int -> Tensor ℝ (R n) w -> ST σ ()
   tensorUnsafeWriteArrayWithOffset ar i (Tensor t)
      = ArG.unsafeCopy (ArGM.slice i (n*m) ar)
         . ArG.convert . HMat.flatten $ extract t
-   where n = fromIntegral (natVal @n Proxy) :: Int
-         m = fromIntegral (natVal @m Proxy) :: Int
+   where n = fromIntegral (natVal @n Proxy)
+         m = dimension @w
 
 
