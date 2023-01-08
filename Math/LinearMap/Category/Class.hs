@@ -640,8 +640,8 @@ instance ∀ u v . ( TensorSpace u, TensorSpace v, Scalar u ~ Scalar v )
             , staticDimensionSing @v, dimensionalityWitness @v ) of
         ( SJust sn, IsStaticDimensional
          ,SJust sm, IsStaticDimensional )
-          -> let sno = sn %* sing @o
-                 smo = sm %* sing @o
+          -> let sno = sn %* dimensionalitySing @w
+                 smo = sm %* dimensionalitySing @w
              in withKnownNat sno (withKnownNat smo (
                  \i arr -> Tensor ( unsafeFromArrayWithOffset i arr
                                   , unsafeFromArrayWithOffset
@@ -656,8 +656,8 @@ instance ∀ u v . ( TensorSpace u, TensorSpace v, Scalar u ~ Scalar v )
             , staticDimensionSing @v, dimensionalityWitness @v ) of
         ( SJust sn, IsStaticDimensional
          ,SJust sm, IsStaticDimensional )
-          -> let sno = sn %* sing @o
-                 smo = sm %* sing @o
+          -> let sno = sn %* dimensionalitySing @w
+                 smo = sm %* dimensionalitySing @w
              in withKnownNat sno (withKnownNat smo (
                  \arr i (Tensor (x,y)) -> do
                    unsafeWriteArrayWithOffset arr i x
@@ -807,9 +807,9 @@ instance ∀ s u v . ( LinearSpace u, TensorSpace v, Scalar u ~ s, Scalar v ~ s 
     (_, IsFlexibleDimensional) -> IsFlexibleDimensional
 instance ∀ s n u m v nm . ( n`Dimensional`u, m`Dimensional`v
                           , LinearSpace u, TensorSpace v, Scalar u ~ s, Scalar v ~ s
-                          , KnownNat nm
                           , nm ~ (n*m) )
                    => nm`Dimensional`(LinearMap s u v) where
+  knownDimensionalitySing = dimensionalitySing @u %* dimensionalitySing @v
   unsafeFromArrayWithOffset i arr = case dualSpaceWitness @u of
     DualSpaceWitness -> case dimensionalityWitness @(DualVector u) of
       IsStaticDimensional
@@ -882,8 +882,8 @@ instance ∀ s u v . ( LinearSpace u, TensorSpace v, Scalar u ~ s, Scalar v ~ s 
             , dimensionalityWitness @v, staticDimensionSing @v ) of
         ( IsStaticDimensional, SJust sn
          ,IsStaticDimensional, SJust sm )
-           -> withKnownNat (sm%*sing @o) (
-              withKnownNat (sn%*(sm%*sing @o)) (
+           -> withKnownNat (sm%*dimensionalitySing @w) (
+              withKnownNat (sn%*(sm%*dimensionalitySing @w)) (
                \i -> arr (deferLinearMap @s @u @v @w)
                                 . unsafeFromArrayWithOffset i))
   tensorUnsafeWriteArrayWithOffset :: ∀ nm w o α σ
@@ -896,8 +896,8 @@ instance ∀ s u v . ( LinearSpace u, TensorSpace v, Scalar u ~ s, Scalar v ~ s 
             , dimensionalityWitness @v, staticDimensionSing @v ) of
         ( IsStaticDimensional, SJust sn
          ,IsStaticDimensional, SJust sm )
-           -> withKnownNat (sm%*sing @o) (
-              withKnownNat (sn%*(sm%*sing @o)) (
+           -> withKnownNat (sm%*dimensionalitySing @w) (
+              withKnownNat (sn%*(sm%*dimensionalitySing @w)) (
                \ar i -> unsafeWriteArrayWithOffset ar i
                        . arr (hasteLinearMap @s @u @v @w) ))
   coerceFmapTensorProduct = cftlp dualSpaceWitness
@@ -1013,8 +1013,9 @@ instance ∀ s u v . (TensorSpace u, TensorSpace v, Scalar u ~ s, Scalar v ~ s)
     (_, IsFlexibleDimensional) -> IsFlexibleDimensional
 instance ∀ s n u m v nm . ( n`Dimensional`u, m`Dimensional`v
                           , TensorSpace u, TensorSpace v, Scalar u ~ s, Scalar v ~ s
-                          , KnownNat nm, nm ~ (n*m) )
+                          , nm ~ (n*m) )
                    => nm`Dimensional`(Tensor s u v) where
+  knownDimensionalitySing = dimensionalitySing @u %* dimensionalitySing @v
   unsafeFromArrayWithOffset = tensorUnsafeFromArrayWithOffset
   unsafeWriteArrayWithOffset = tensorUnsafeWriteArrayWithOffset
 
@@ -1073,8 +1074,8 @@ instance ∀ s u v . (TensorSpace u, TensorSpace v, Scalar u ~ s, Scalar v ~ s)
             , dimensionalityWitness @v, staticDimensionSing @v ) of
         ( IsStaticDimensional, SJust sn
          ,IsStaticDimensional, SJust sm )
-           -> withKnownNat (sm%*sing @o) (
-              withKnownNat (sn%*(sm%*sing @o)) (
+           -> withKnownNat (sm%*dimensionalitySing @w) (
+              withKnownNat (sn%*(sm%*dimensionalitySing @w)) (
                \i -> arr (lassocTensor @s @u @v @w)
                                 . unsafeFromArrayWithOffset i))
   tensorUnsafeWriteArrayWithOffset :: ∀ nm w o α σ
@@ -1087,8 +1088,8 @@ instance ∀ s u v . (TensorSpace u, TensorSpace v, Scalar u ~ s, Scalar v ~ s)
             , dimensionalityWitness @v, staticDimensionSing @v ) of
         ( IsStaticDimensional, SJust sn
          ,IsStaticDimensional, SJust sm )
-           -> withKnownNat (sm%*sing @o) (
-              withKnownNat (sn%*(sm%*sing @o)) (
+           -> withKnownNat (sm%*dimensionalitySing @w) (
+              withKnownNat (sn%*(sm%*dimensionalitySing @w)) (
                \ar i -> unsafeWriteArrayWithOffset ar i
                          . arr (rassocTensor @s @u @v @w) ))
   coerceFmapTensorProduct :: ∀ a b p . ( TensorSpace a, Scalar a ~ s
@@ -1244,8 +1245,9 @@ instance ∀ s u v . ( LinearSpace u, LinearSpace v
     (_, IsFlexibleDimensional) -> IsFlexibleDimensional
 instance ∀ s n u m v nm . ( n`Dimensional`u, m`Dimensional`v
                           , LinearSpace u, LinearSpace v, Scalar u ~ s, Scalar v ~ s
-                          , KnownNat nm, nm ~ (n*m) )
+                          , nm ~ (n*m) )
                    => nm`Dimensional`(LinearFunction s u v) where
+  knownDimensionalitySing = dimensionalitySing @u %* dimensionalitySing @v
   unsafeFromArrayWithOffset i ar
      = applyLinear-+$>(unsafeFromArrayWithOffset i ar :: LinearMap s u v)
   unsafeWriteArrayWithOffset ar i
@@ -1320,7 +1322,7 @@ instance ∀ s u v . (LinearSpace u, LinearSpace v, Scalar u ~ s, Scalar v ~ s)
         ( IsStaticDimensional, SJust sn
          ,IsStaticDimensional, SJust sm )
            -> withKnownNat (sm%*sn) (
-              withKnownNat ((sm%*sn)%*sing @o) (
+              withKnownNat ((sm%*sn)%*dimensionalitySing @w) (
                \i -> (fromLinearFn @s @v @u @w -+$=>)
                        . (applyLinear-+$>)
                        . unsafeFromArrayWithOffset i ))
@@ -1335,7 +1337,7 @@ instance ∀ s u v . (LinearSpace u, LinearSpace v, Scalar u ~ s, Scalar v ~ s)
         ( IsStaticDimensional, SJust sn
          ,IsStaticDimensional, SJust sm )
            -> withKnownNat (sm%*sn) (
-              withKnownNat ((sm%*sn)%*sing @o) (
+              withKnownNat ((sm%*sn)%*dimensionalitySing @w) (
                \ar i -> unsafeWriteArrayWithOffset ar i
                        . (sampleLinearFunction-+$>)
                        . (asLinearFn @s @u @v @w -+$=>)
@@ -1441,6 +1443,7 @@ instance ∀ v s . DimensionAware v => DimensionAware (Gnrx.Rec0 v s) where
     IsStaticDimensional -> IsStaticDimensional
     IsFlexibleDimensional -> IsFlexibleDimensional
 instance ∀ n v s . n`Dimensional`v => n`Dimensional`(Gnrx.Rec0 v s) where
+  knownDimensionalitySing = dimensionalitySing @v
   unsafeFromArrayWithOffset i ar
      = coerce (unsafeFromArrayWithOffset @n @v i ar)
   unsafeWriteArrayWithOffset i ar
@@ -1514,6 +1517,7 @@ instance ∀ i c f p . DimensionAware (f p) => DimensionAware (Gnrx.M1 i c f p) 
     IsStaticDimensional -> IsStaticDimensional
     IsFlexibleDimensional -> IsFlexibleDimensional
 instance ∀ n i c f p . n`Dimensional`f p => n`Dimensional`Gnrx.M1 i c f p where
+  knownDimensionalitySing = dimensionalitySing @(f p)
   unsafeFromArrayWithOffset i ar
      = coerce (unsafeFromArrayWithOffset @n @(f p) i ar)
   unsafeWriteArrayWithOffset i ar
@@ -1595,14 +1599,15 @@ instance ∀ f g p . ( DimensionAware (f p), DimensionAware (g p)
     (_, IsFlexibleDimensional) -> IsFlexibleDimensional
 instance ∀ n f m g p nm . ( n`Dimensional`(f p), m`Dimensional`(g p)
                           , Scalar (f p) ~ Scalar (g p)
-                          , KnownNat nm, nm ~ (n+m) )
+                          , nm ~ (n+m) )
                    => nm`Dimensional`((f:*:g) p) where
+  knownDimensionalitySing = dimensionalitySing @(f p) %+ dimensionalitySing @(g p)
   unsafeFromArrayWithOffset i ar
       = unsafeFromArrayWithOffset i ar
-        :*: unsafeFromArrayWithOffset (i + fromIntegral (natVal @n Proxy)) ar
+        :*: unsafeFromArrayWithOffset (i + dimension @(f p)) ar
   unsafeWriteArrayWithOffset ar i (x:*:y) = do
       unsafeWriteArrayWithOffset ar i x
-      unsafeWriteArrayWithOffset ar (i + fromIntegral (natVal @n Proxy)) y
+      unsafeWriteArrayWithOffset ar (i + dimension @(f p)) y
 
 instance ∀ f g p . ( TensorSpace (f p), TensorSpace (g p), Scalar (f p) ~ Scalar (g p) )
                        => TensorSpace ((f:*:g) p) where
@@ -1676,9 +1681,9 @@ instance ∀ m . ( Semimanifold m, DimensionAware (Needle (VRep m))
     IsStaticDimensional -> IsStaticDimensional
     IsFlexibleDimensional -> IsFlexibleDimensional
 instance ∀ n m . ( Semimanifold m, n`Dimensional`Needle (VRep m)
-                 , KnownNat n
                  , Scalar (Needle m) ~ Scalar (Needle (VRep m)) )
                   => n`Dimensional`GenericNeedle m where
+  knownDimensionalitySing = dimensionalitySing @(Needle (VRep m))
   unsafeFromArrayWithOffset i ar
      = coerce (unsafeFromArrayWithOffset @n @(Needle (VRep m)) i ar)
   unsafeWriteArrayWithOffset ar i
@@ -1862,8 +1867,9 @@ instance ∀ n f m g p nm .
               , Scalar (f p) ~ Scalar (g p)
               , Scalar (f p) ~ Scalar (DualVector (f p))
               , Scalar (g p) ~ Scalar (DualVector (g p))
-              , KnownNat nm, nm ~ (n+m) )
+              , nm ~ (n+m) )
                    => nm`Dimensional`GenericTupleDual f g p where
+  knownDimensionalitySing = dimensionalitySing @(f p) %+ dimensionalitySing @(g p)
   unsafeFromArrayWithOffset i ar
      = coerce (unsafeFromArrayWithOffset @nm @(GenericTupleDual f g p) i ar)
   unsafeWriteArrayWithOffset i ar
@@ -2118,9 +2124,9 @@ instance ∀ m . ( Semimanifold m, DimensionAware (DualVector (Needle (VRep m)))
     IsStaticDimensional -> IsStaticDimensional
     IsFlexibleDimensional -> IsFlexibleDimensional
 instance ∀ n m . ( Semimanifold m, n`Dimensional`DualVector (Needle (VRep m))
-                 , KnownNat n
                  , Scalar (Needle m) ~ Scalar (DualVector (Needle (VRep m))) )
                   => n`Dimensional`GenericNeedle' m where
+  knownDimensionalitySing = dimensionalitySing @(DualVector (Needle (VRep m)))
   unsafeFromArrayWithOffset i ar
       = coerce (unsafeFromArrayWithOffset @n @(DualVector (Needle (VRep m))) i ar)
   unsafeWriteArrayWithOffset ar
