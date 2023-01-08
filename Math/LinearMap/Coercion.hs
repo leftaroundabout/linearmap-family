@@ -10,6 +10,9 @@
 
 module Math.LinearMap.Coercion
    ( VSCCoercion(..)
+   , (-+$=>)
+   -- * Conversion between the internal types
+   , fromLinearMap, asLinearMap, fromTensor, asTensor
    ) where
 
 import Math.LinearMap.Category.Class
