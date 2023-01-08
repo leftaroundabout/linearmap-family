@@ -71,7 +71,7 @@ import qualified Math.VectorSpace.DimensionAware.Theorems.MaybeNat as Maybe
 
 import qualified Test.QuickCheck as QC
 
-import GHC.TypeNats (KnownNat, natVal)
+import GHC.TypeNats (natVal)
 import qualified GHC.Exts as GHC
 import qualified GHC.Generics as GHC
 
@@ -171,8 +171,8 @@ tensorUnsafeFromArrayWithOffsetViaList
    => ([w] -> TensorProduct v w) -> Int -> α (Scalar v) -> (v⊗w)
 tensorUnsafeFromArrayWithOffsetViaList l2v i ar
    = Tensor $ l2v [ unsafeFromArrayWithOffset
-                      (i + j * fromIntegral (natVal @m Proxy)) ar
-                  | j <- [0 .. fromIntegral (natVal @n Proxy) - 1] ]
+                      (i + j * dimension @w) ar
+                  | j <- [0 .. dimension @v - 1] ]
 
 {-# INLINE tensorUnsafeWriteArrayWithOffsetViaList #-}
 tensorUnsafeWriteArrayWithOffsetViaList
@@ -185,7 +185,7 @@ tensorUnsafeWriteArrayWithOffsetViaList
 tensorUnsafeWriteArrayWithOffsetViaList v2l ar i (Tensor t)
    = forM_ (zip [0..] $ v2l t) $ \(j, v)
        -> unsafeWriteArrayWithOffset ar
-                      (i + j * fromIntegral (natVal @m Proxy)) v
+                      (i + j * dimension @w) v
 
 #if MIN_VERSION_manifolds_core(0,6,0)
 #define FreeLinSpaceInteriorDecls
@@ -574,8 +574,9 @@ instance ∀ s v . (Num' s, TensorSpace v, Scalar v ~ s)
         -> withKnownNat (Maybe.triangularNumSing (dimensionalitySing @v))
               IsStaticDimensional
 instance ∀ s v n m . ( Num' s, n`Dimensional`v, TensorSpace v, Scalar v ~ s
-                     , KnownNat m, m ~ Maybe.TriangularNum n )
-                => m`Dimensional`(SymmetricTensor s v)
+                     , m ~ Maybe.TriangularNum n )
+                => m`Dimensional`(SymmetricTensor s v) where
+  knownDimensionalitySing = Maybe.triangularNumSing $ dimensionalitySing @v
 instance (Num' s, TensorSpace v, Scalar v ~ s) => TensorSpace (SymmetricTensor s v) where
   type TensorProduct (SymmetricTensor s v) x = Tensor s v (Tensor s v x)
   wellDefinedVector (SymTensor t) = SymTensor <$> wellDefinedVector t

@@ -533,7 +533,7 @@ instance (HasBasis v, KnownCardinality (Basis v))
   dimensionalityWitness = case cardinalityWitness @(Basis v) of
      NonfiniteCardinality -> IsFlexibleDimensional
      FiniteCardinality -> IsStaticDimensional
-instance ( HasBasis v, KnownNat n, n#Basis v )
+instance ( HasBasis v, n#Basis v )
               => n`Dimensional`DualVectorFromBasis v where
   unsafeFromArrayWithOffset i ar
      = recompose [ (b, ar GArr.! (i+j))
@@ -893,6 +893,7 @@ instance ∀ n a c . ( AbstractLinearSpace a
                    , n`Dimensional`c
                    , TensorSpace (DualVector c) )
      => n`Dimensional`AbstractDualVector a c where
+  knownDimensionalitySing = dimensionalitySing @c
   unsafeFromArrayWithOffset i
      = scalarsSameInAbstraction @a (
            case (dualSpaceWitness @c, dimensionalityWitness @(DualVector c)) of
@@ -1843,7 +1844,7 @@ copyNewtypeInstances cxtv classes = do
      "Dimensional" -> do
        dim <- pure . VarT <$> newName "n"
        InstanceD Nothing <$> ((:)<$>[t|StaticDimension $c ~ 'Just $dim|]
-                          <*>((:)<$>[t|KnownNat $dim|]<*>cxt)) <*>
+                          <*>cxt) <*>
                           [t|Dimensional $dim $a|] <*> [d|
          $(varP 'unsafeFromArrayWithOffset) = abstractVS_unsafeFromArrayWithOffset
          $(varP 'unsafeWriteArrayWithOffset) = abstractVS_unsafeWriteArrayWithOffset

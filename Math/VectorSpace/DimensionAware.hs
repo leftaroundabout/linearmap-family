@@ -54,7 +54,7 @@ import qualified Math.VectorSpace.DimensionAware.Theorems.MaybeNat as Maybe
 
 
 data DimensionalityWitness v where
-  IsStaticDimensional :: n`Dimensional`v => DimensionalityWitness v
+  IsStaticDimensional :: (KnownNat n, n`Dimensional`v) => DimensionalityWitness v
   IsFlexibleDimensional :: StaticDimension v ~ 'Nothing => DimensionalityWitness v
 
 
@@ -99,17 +99,27 @@ instance ∀ u v . (DimensionAware u, DimensionAware v, Scalar u ~ Scalar v)
     (_, IsFlexibleDimensional) -> IsFlexibleDimensional
 
 
-class (DimensionAware v, KnownNat n, StaticDimension v ~ 'Just n)
+class (DimensionAware v, StaticDimension v ~ 'Just n)
            => n`Dimensional`v | v -> n where
+  knownDimensionalitySing :: Sing n
+  {-# INLINE knownDimensionalitySing #-}
+  default knownDimensionalitySing :: KnownNat n => Sing n
+  knownDimensionalitySing = sing
   -- | Read basis expansion from an array, starting at the specified offset.
   --   The array must have at least length @n + offset@, else the behaviour is undefined.
   unsafeFromArrayWithOffset :: GArr.Vector α (Scalar v) => Int -> α (Scalar v) -> v
   unsafeWriteArrayWithOffset :: GArr.Vector α (Scalar v)
           => GArr.Mutable α σ (Scalar v) -> Int -> v -> ST σ ()
 
+staticDimensionalIsStatic :: ∀ v n r
+     . (DimensionAware v, StaticDimension v ~ 'Just n)
+              => (n`Dimensional`v => r) -> r
+staticDimensionalIsStatic = case dimensionalityWitness @v of
+   IsStaticDimensional -> \φ -> φ
+
 {-# INLINE dimensionalitySing #-}
 dimensionalitySing :: ∀ v n . n`Dimensional`v => Sing n
-dimensionalitySing = sing
+dimensionalitySing = knownDimensionalitySing @n @v
 
 {-# INLINE dimension #-}
 dimension :: ∀ v n a . (n`Dimensional`v, Integral a) => a
@@ -165,7 +175,7 @@ unsafeFromArrayWithOffsetViaList
           :: ∀ v n α . (n`Dimensional`v, GArr.Vector α (Scalar v))
    => ([Scalar v] -> v) -> Int -> α (Scalar v) -> v
 unsafeFromArrayWithOffsetViaList l2v i
-   = l2v . GArr.toList . GArr.unsafeSlice i (fromIntegral $ natVal @n Proxy)
+   = l2v . GArr.toList . GArr.unsafeSlice i (dimension @v)
   
 {-# INLINE unsafeWriteArrayWithOffsetViaList #-}
 unsafeWriteArrayWithOffsetViaList
@@ -173,7 +183,7 @@ unsafeWriteArrayWithOffsetViaList
    => (v -> [Scalar v]) -> GArr.Mutable α σ (Scalar v)
          -> Int -> v -> ST σ ()
 unsafeWriteArrayWithOffsetViaList v2l ar i
-   = GMArr.unsafeCopy (GMArr.unsafeSlice i (fromIntegral $ natVal @n Proxy) ar)
+   = GMArr.unsafeCopy (GMArr.unsafeSlice i (dimension @v) ar)
       <=< GArr.unsafeThaw @(ST σ) @α . GArr.fromList . v2l
   
 instance 1`Dimensional`Float   where
@@ -205,17 +215,18 @@ instance Integral n => 1`Dimensional`Ratio n where
   
 instance ∀ n u m v nm . ( n`Dimensional`u, m`Dimensional`v
                         , Scalar u ~ Scalar v
-                        , KnownNat nm
                         , nm ~ (n+m) )
                    => nm`Dimensional`(u,v) where
+  {-# INLINE knownDimensionalitySing #-}
+  knownDimensionalitySing = dimensionalitySing @u %+ dimensionalitySing @v
   {-# INLINE unsafeFromArrayWithOffset #-}
   unsafeFromArrayWithOffset i arr
       = ( unsafeFromArrayWithOffset i arr
-        , unsafeFromArrayWithOffset (i + fromIntegral (natVal @n Proxy)) arr )
+        , unsafeFromArrayWithOffset (i + dimension @u) arr )
   {-# INLINE unsafeWriteArrayWithOffset #-}
   unsafeWriteArrayWithOffset arr i (x,y) = do
       unsafeWriteArrayWithOffset arr i x
-      unsafeWriteArrayWithOffset arr (i + fromIntegral (natVal @n Proxy)) y
+      unsafeWriteArrayWithOffset arr (i + dimension @u) y
 
 type family FromJust (a :: Maybe k) :: k where
   FromJust ('Just v) = v
