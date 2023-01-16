@@ -33,9 +33,11 @@ import Data.VectorSpace
 import Data.Singletons (SingI, sing, Sing)
 #if MIN_VERSION_singletons(3,0,0)
 import Prelude.Singletons (SNum(..))
+import Data.Maybe.Singletons
 import GHC.TypeLits.Singletons (withKnownNat)
 #else
 import Data.Singletons.Prelude.Num (SNum(..))
+import Data.Singletons.Prelude.Maybe (SMaybe(..))
 import Data.Singletons.TypeLits (withKnownNat)
 #endif
 
@@ -54,7 +56,7 @@ import qualified Math.VectorSpace.DimensionAware.Theorems.MaybeNat as Maybe
 
 
 data DimensionalityWitness v where
-  IsStaticDimensional :: (KnownNat n, n`Dimensional`v) => DimensionalityWitness v
+  IsStaticDimensional :: (n`Dimensional`v) => DimensionalityWitness v
   IsFlexibleDimensional :: StaticDimension v ~ 'Nothing => DimensionalityWitness v
 
 
@@ -157,7 +159,7 @@ toArray v = GArr.create (do
 {-# INLINE staticDimensionSing #-}
 staticDimensionSing :: ∀ v . DimensionAware v => Sing (StaticDimension v)
 staticDimensionSing = case dimensionalityWitness @v of
-  IsStaticDimensional -> sing
+  IsStaticDimensional -> SJust (dimensionalitySing @v)
   IsFlexibleDimensional -> sing
 
 {-# INLINE scalarUnsafeFromArrayWithOffset #-}

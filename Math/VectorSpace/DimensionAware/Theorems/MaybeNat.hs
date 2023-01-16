@@ -60,6 +60,14 @@ type family MaybePred (a :: Nat) :: Maybe Nat where
   MaybePred 0 = 'Nothing
   MaybePred n = 'Just (n-1)
 
+type family ClipPred (n :: Nat) :: Nat where
+  ClipPred 0 = 0
+  ClipPred n = (n-1)
+
+type family FmapClipPred (a :: Maybe Nat) :: Maybe Nat where
+  FmapClipPred 'Nothing = 'Nothing
+  FmapClipPred ('Just n) = 'Just (ClipPred n)
+
 type family BindMaybePred (a :: Maybe Nat) :: Maybe Nat where
   BindMaybePred 'Nothing = 'Nothing
   BindMaybePred ('Just n) = MaybePred n
@@ -76,16 +84,30 @@ justNatSing SNat = sing
 succMaybePredSing :: ∀ n . DTN.SNat n -> Sing (MaybePred (n+1))
 succMaybePredSing s = unsafeCoerce (DTN.withKnownNat s (justNatSing (SNat @n)))
 
-maybePredSing :: ∀ a . Sing a -> Sing (MaybePred a)
-maybePredSing α = withKnownNat α
-   (case DTN.viewNat (DTN.sNat @a) of
+maybePredSing :: ∀ n . Sing n -> Sing (MaybePred n)
+maybePredSing ν = withKnownNat ν
+   (case DTN.viewNat (DTN.sNat @n) of
       DTN.IsZero -> sing
-      DTN.IsSucc β -> succMaybePredSing β
+      DTN.IsSucc μ -> succMaybePredSing μ
     )
 
-binMaybePredSing :: ∀ a . Sing a -> Sing (BindMaybePred a)
-binMaybePredSing SNothing = sing
-binMaybePredSing (SJust ν) = maybePredSing ν
+bindMaybePredSing :: ∀ n . Sing n -> Sing (BindMaybePred n)
+bindMaybePredSing SNothing = sing
+bindMaybePredSing (SJust ν) = maybePredSing ν
+
+succClipPredSing :: ∀ n . DTN.SNat n -> Sing (ClipPred (n+1))
+succClipPredSing s = unsafeCoerce (DTN.withKnownNat s (justNatSing (SNat @n)))
+
+clipPredSing :: ∀ n . Sing n -> Sing (ClipPred n)
+clipPredSing ν = withKnownNat ν
+   (case DTN.viewNat (DTN.sNat @n) of
+      DTN.IsZero -> sing
+      DTN.IsSucc μ -> succClipPredSing μ
+    )
+
+fmapClipPredSing :: ∀ a . Sing a -> Sing (FmapClipPred a)
+fmapClipPredSing SNothing = SNothing
+fmapClipPredSing (SJust ν) = SJust (clipPredSing ν)
 
 triangularNumSing :: ∀ a . Sing a -> Sing (TriangularNum a)
 triangularNumSing α = (α %* (α%+(sing @1)))`sDiv`(sing @2)
