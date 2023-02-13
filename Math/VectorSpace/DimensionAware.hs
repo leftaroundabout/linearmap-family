@@ -55,6 +55,12 @@ import Data.Ratio
 import qualified Math.VectorSpace.DimensionAware.Theorems.MaybeNat as Maybe
 
 
+-- | Low-level case distinction between spaces with a dimension that is both fixed
+--   and low enough that it makes sense to treat it this way, and more general
+--   spaces where this is not feasible.
+--
+--   Use this type only when defining instances of 'DimensionAware'. When making
+--   decisions based on dimensionality, 'DimensionalityCases' is more convenient.
 data DimensionalityWitness v where
   IsStaticDimensional :: (n`Dimensional`v) => DimensionalityWitness v
   IsFlexibleDimensional :: StaticDimension v ~ 'Nothing => DimensionalityWitness v
@@ -113,6 +119,11 @@ class (DimensionAware v, StaticDimension v ~ 'Just n)
   unsafeWriteArrayWithOffset :: GArr.Vector α (Scalar v)
           => GArr.Mutable α σ (Scalar v) -> Int -> v -> ST σ ()
 
+-- | Batteries-included version of 'DimensionalityWitness'.
+data DimensionalityCases v where
+  StaticDimensionalCase :: (KnownNat n, n`Dimensional`v) => DimensionalityCases v
+  FlexibleDimensionalCase :: StaticDimension v ~ 'Nothing => DimensionalityCases v
+
 staticDimensionalIsStatic :: ∀ v n r
      . (DimensionAware v, StaticDimension v ~ 'Just n)
               => (n`Dimensional`v => r) -> r
@@ -122,6 +133,11 @@ staticDimensionalIsStatic = case dimensionalityWitness @v of
 {-# INLINE dimensionalitySing #-}
 dimensionalitySing :: ∀ v n . n`Dimensional`v => Sing n
 dimensionalitySing = knownDimensionalitySing @n @v
+
+dimensionality :: ∀ v . DimensionAware v => DimensionalityCases v
+dimensionality = case dimensionalityWitness @v of
+  IsStaticDimensional -> withKnownNat (dimensionalitySing @v) StaticDimensionalCase
+  IsFlexibleDimensional -> FlexibleDimensionalCase
 
 {-# INLINE dimension #-}
 dimension :: ∀ v n a . (n`Dimensional`v, Integral a) => a
