@@ -22,6 +22,7 @@ library
     , constrained-categories
     , free-vector-spaces
     , hmatrix
+    , singletons <3.0
     , linearmap-category
     , manifolds-core
     , tagged
