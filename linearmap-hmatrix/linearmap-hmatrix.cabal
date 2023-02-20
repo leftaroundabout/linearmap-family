@@ -21,7 +21,7 @@ library
       base >=4.7 && <5
     , constrained-categories
     , free-vector-spaces
-    , hmatrix
+    , hmatrix >=0.20.0 && <0.21
     , singletons <3.0
     , linearmap-category
     , manifolds-core
@@ -31,18 +31,17 @@ library
   default-language: Haskell2010
 
 test-suite linearmap-hmatrix-test
-  type: exitcode-stdio-1.0
-  main-is: Spec.hs
-  other-modules:
-      Paths_linearmap_hmatrix
-  hs-source-dirs:
-      test
-  ghc-options: -threaded -rtsopts -with-rtsopts=-N
-  build-tool-depends:
-      hspec-discover:hspec-discover
-  build-depends:
-      QuickCheck
-    , base >=4.7 && <5
-    , hspec
-    , linearmap-hmatrix
-  default-language: Haskell2010
+  main-is:         tasty.hs
+  type:            exitcode-stdio-1.0
+  hs-source-dirs:  test
+  build-depends:   base, linearmap-category, linearmap-hmatrix
+                   , vector-space
+                   , hmatrix
+                   , QuickCheck
+                   , manifolds-core
+                   , linear, vector
+                   , constrained-categories
+                   , tasty, tasty-quickcheck
+  ghc-options: -threaded "-with-rtsopts -N8 -M2G"
+  default-language:    Haskell2010
+
