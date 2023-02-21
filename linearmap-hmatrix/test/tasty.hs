@@ -18,16 +18,14 @@
 {-# LANGUAGE DataKinds                  #-}
 {-# LANGUAGE UnicodeSyntax              #-}
 {-# LANGUAGE UndecidableInstances       #-}
-{-# LANGUAGE TemplateHaskell            #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE DerivingStrategies         #-}
 
 import qualified Prelude as Hask
 import Control.Category.Constrained.Prelude
 import Control.Arrow.Constrained
 
 import Numeric.LinearAlgebra.Static.Orphans
-import Numeric.LinearAlgebra.Static as HMatS hiding ((===))
+import Numeric.LinearAlgebra.Static as HMatS hiding ((===), (<.>), ℝ)
+import qualified Numeric.LinearAlgebra as HMat
 
 import Data.AffineSpace
 import Linear.V3
@@ -61,6 +59,19 @@ main = do
        $ \v w -> v^+^w === (w^+^v :: R 39)
     , testProperty "Scalar distributivity"
        $ \μ v w -> μ*^(v^+^w) ≈≈≈ μ*^v ^+^ μ*^(w :: R 92)
+    , testProperty "Inner product bilinearity"
+       $ \μ u v ν w x -> (μ*^u ^+^ v)<.>(ν*^w ^+^ x :: R 512)
+                      ≈≈≈ μ*ν*(u<.>w) + μ*(u<.>x) + ν*(v<.>w) + v<.>x
+    ]
+   , testGroup "Linear maps"
+    [ testProperty "Identity"
+       $ \v -> (linearId $ v :: R 7968) === v
+    , testProperty "Linearity"
+       $ \f μ v w -> ((f :: R 67+>R 86) $ μ*^v ^+^ w)
+                    ≈≈≈ μ*^(f $ v) ^+^ (f $ w)
+    , testProperty "Linear space of maps"
+       $ \μ f g v -> ((μ*^f ^+^ g :: R 67+>R 86) $ v)
+                    ≈≈≈ μ*^(f $ v) ^+^ (g $ v)
     ]
    ]
 
@@ -70,6 +81,15 @@ instance ∀ n . KnownNat n => Arbitrary (R n) where
    where n = fromIntegral $ natVal (Proxy @n)
 instance ∀ n . KnownNat n => Eq (R n) where
   (==) = (==)`on`HMatS.extract
+instance ∀ n m r . (KnownNat n, KnownNat m, r~ℝ)
+           => Show (LinearMap r (R n) (R m)) where
+  show _ = "..."
+instance ∀ n m r . (KnownNat n, KnownNat m, r~ℝ)
+           => Arbitrary (LinearMap r (R n) (R m)) where
+  arbitrary = LinearMap . HMatS.fromList
+                <$> vectorOf (n*m) arbitrary
+   where n = fromIntegral $ natVal (Proxy @n)
+         m = fromIntegral $ natVal (Proxy @m)
 
 infix 4 ≈≈≈
 (≈≈≈) :: (InnerSpace v, Show v, Eq v, RealFrac (Scalar v))
