@@ -72,6 +72,9 @@ main = do
     , testProperty "Linear space of maps"
        $ \μ f g v -> ((μ*^f ^+^ g :: R 67+>R 86) $ v)
                     ≈≈≈ μ*^(f $ v) ^+^ (g $ v)
+    , testProperty "Composition"
+       $ \f g v -> (f . g $ v)
+                  ≈≈≈ ((f :: R 21+>R 20) $ g $ (v :: R 22))
     ]
    ]
 

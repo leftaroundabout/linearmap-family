@@ -140,7 +140,11 @@ type family RTensorProduct n w dw where
                      --   of the array should always be exactly @n@.
 
 unsafeCreate :: ∀ n . (KnownNat n, HasCallStack) => ArS.Vector ℝ -> R n
-unsafeCreate = fromJust . create
+unsafeCreate ar
+  | nar==n     = fromJust $ create ar
+  | otherwise  = error $ "Incorrect size "++show nar++" for dimension "++show n
+ where n = fromIntegral . natVal $ Proxy @n
+       nar = ArS.length ar
 
 unsafeCreateMat :: ∀ n m . (KnownNat n, KnownNat m, HasCallStack)
                      => HMat.Matrix ℝ -> L n m
@@ -150,7 +154,7 @@ unsafeFromRows :: ∀ m n . (KnownNat m, KnownNat n, HasCallStack) => [R n] -> L
 unsafeFromRows rs = withRows rs  -- unsafeCoerce
                                 (fromJust . exactDims)
 
-unsafeFromCols :: ∀ m n . (KnownNat m, KnownNat n, HasCallStack) => [R n] -> L m n
+unsafeFromCols :: ∀ m n . (KnownNat m, KnownNat n, HasCallStack) => [R m] -> L m n
 unsafeFromCols rs = withColumns rs  -- unsafeCoerce
                                   (fromJust . exactDims)
 
@@ -206,7 +210,8 @@ instance ∀ n . KnownNat n => TensorSpace (R n) where
          $ \(LinearFunction f)       -- TODO make dimension-dependent. Building a
                                      -- matrix for @f@ is inefficient if the dimensions
                                      -- of @w@ and @x@ are larger than @n@.
-             -> let fm = unsafeFromCols
+             -> let fm :: L (Dimension w) (Dimension x)
+                    fm = unsafeFromCols
                           [ unsafeCreate . toArray $ f x
                           | i <- [0 .. dx - 1]
                           , let Just x = fromArray  -- TODO use unsafeFromArray
