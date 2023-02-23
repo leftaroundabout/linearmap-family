@@ -122,6 +122,11 @@ data DimensionalityCases v where
   StaticDimensionalCase :: (KnownNat n, n`Dimensional`v) => DimensionalityCases v
   FlexibleDimensionalCase :: StaticDimension v ~ 'Nothing => DimensionalityCases v
 
+type family DimensionOfDimensionality d where
+  DimensionOfDimensionality ('Just n) = n
+
+type Dimension v = DimensionOfDimensionality (StaticDimension v)
+
 staticDimensionalIsStatic :: ∀ v n r
      . (DimensionAware v, StaticDimension v ~ 'Just n)
               => (n`Dimensional`v => r) -> r
