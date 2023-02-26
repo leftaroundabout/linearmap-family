@@ -45,7 +45,6 @@ import Data.Singletons.TypeLits (withKnownNat)
 -- hmatrix
 import Numeric.LinearAlgebra.Static as HMatS
 import qualified Numeric.LinearAlgebra as HMat
-import qualified Numeric.LinearAlgebra.Data as HMat
 
 -- vector
 import qualified Data.Vector as ArB
