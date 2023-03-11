@@ -27,6 +27,7 @@ import Data.Maybe (fromJust)
 import Control.Arrow ((***))
 import Data.Type.Coercion (Coercion(..))
 import Control.Monad.ST
+import Data.Function (on)
 
 -- constrained-categories
 import Control.Category.Constrained (id, (.))
@@ -63,7 +64,7 @@ import Data.VectorSpace.Free
 
 -- linearmap-category
 import Math.LinearMap.Category
-import Math.LinearMap.Coercion (fromLinearMap, fromTensor, (-+$=>))
+import Math.LinearMap.Coercion (fromLinearMap, fromTensor, asTensor, (-+$=>))
 import Math.VectorSpace.DimensionAware
 -- import Math.VectorSpace.DimensionAware.Theorems.MaybeNat (zipWithTimesSing)
 
@@ -71,6 +72,9 @@ import Math.VectorSpace.DimensionAware
 #if !MIN_VERSION_manifolds_core(0,6,0)
 import Data.Tagged (Tagged(..))
 #endif
+
+instance ∀ n . KnownNat n => Eq (R n) where
+  (==) = (==)`on`HMatS.extract
 
 --------------------------------------------------
 -- * @vector-space@ instances
@@ -426,3 +430,80 @@ instance ∀ n . KnownNat n => LinearSpace (R n) where
                                   -+$> u) ) zeroV t
 
 
+instance ∀ n . KnownNat n => FiniteDimensional (R n) where
+  data SubBasis (R n) = RnBasis
+  entireBasis = RnBasis
+  enumerateSubBasis RnBasis = HMatS.toRows HMatS.eye
+  decomposeLinMap :: ∀ w . (TensorSpace w, Scalar w ~ ℝ)
+       => LinearMap ℝ (R n) w -> (SubBasis (R n), [w]->[w])
+  decomposeLinMap (LinearMap m) = (RnBasis, decomposition)
+   where decomposition = case dimensionality @w of
+           StaticDimensionalCase -> ((unsafeFromArray . HMatS.extract
+                                       <$> HMatS.toRows m)++)
+           FlexibleDimensionalCase -> (ArB.toList m++)
+  decomposeLinMapWithin RnBasis = Right . snd . decomposeLinMap
+  recomposeSB RnBasis cfs = case splitAt n cfs of
+                (v,r) -> (HMatS.fromList v, r)
+   where n = fromIntegral $ natVal (Proxy @n)
+  recomposeLinMap :: ∀ w . (TensorSpace w, Scalar w ~ ℝ)
+      => SubBasis (R n) -> [w] -> (LinearMap ℝ (R n) w, [w])
+  recomposeLinMap RnBasis ws = case splitAt n ws of
+                (vw,r) -> (recomposition vw, r)
+   where n = fromIntegral $ natVal (Proxy @n)
+         recomposition vw = LinearMap $ case dimensionality @w of
+            StaticDimensionalCase -> unsafeFromCols
+                                       $ unsafeCreate . toArray <$> vw
+            FlexibleDimensionalCase -> ArB.fromList vw
+  recomposeSBTensor :: ∀ w . (FiniteDimensional w, Eq w, Scalar w ~ ℝ)
+              => SubBasis (R n) -> SubBasis w -> [ℝ] -> (Tensor ℝ (R n) w, [ℝ])
+  recomposeSBTensor RnBasis sbw cfs = case dimensionality @w of
+            StaticDimensionalCase -> case splitAt (n * dimension @w) cfs of
+                 (vw, r) -> ( Tensor . unsafeFromCols
+                               $ unsafeCreate . toArray <$> vw
+                            , r )
+            FlexibleDimensionalCase
+               -> let goFlex ws 0 cs = (Tensor . ArB.fromList $ ws [], cs)
+                      goFlex ws i cs = case recomposeSB sbw cs of
+                        (w,r) -> goFlex (ws . (w:)) (i-1) r
+                  in goFlex id n cfs
+   where n = fromIntegral $ natVal (Proxy @n) :: Int
+  recomposeContraLinMap :: ∀ f w . (Functor f, TensorSpace w, Scalar w ~ ℝ)
+       => (f ℝ -> w) -> f (R n) -> LinearMap ℝ (R n) w
+  recomposeContraLinMap f vs = LinearMap $ case dimensionality @w of
+      StaticDimensionalCase -> generateCols $ \i
+            -> unsafeCreate . toArray . f
+                  $ fmap (\v -> extract v ArS.! i) vs -- TODO unsafe index
+      FlexibleDimensionalCase -> ArB.generate (dimension @(R n))
+           $ \i -> f $ fmap (\v -> extract v ArS.! i) vs -- TODO unsafe index
+  recomposeContraLinMapTensor :: ∀ f u w
+          . ( Functor f, LinearSpace w, Scalar w ~ ℝ
+            , FiniteDimensional u, Scalar u ~ ℝ )
+       => (f ℝ -> w) -> f (LinearMap ℝ (R n) (DualVector u))
+             -> LinearMap ℝ (Tensor ℝ (R n) u) w
+  recomposeContraLinMapTensor f ms = LinearMap
+         $ case ( dimensionality @u, dualSpaceWitness @u, dimensionality @w ) of
+     (StaticDimensionalCase, DualSpaceWitness, StaticDimensionalCase)
+       -> withKnownNat (dimensionalitySing @u %* dimensionalitySing @w)
+         ( staticDimensionalIsStatic @(DualVector u)
+         ( generateCols $ \i
+            -> unsafeCreate . toArray . recomposeContraLinMap @u f
+                 $ fmap (\(LinearMap m) -> unsafeFromArray
+                            $ extract m HMat.! i) ms
+         ))
+     (StaticDimensionalCase, DualSpaceWitness, FlexibleDimensionalCase)
+       -> staticDimensionalIsStatic @(DualVector u)
+           ( ArB.generate (dimension @(R n)) $ \i
+            -> asTensor $ recomposeContraLinMap @u f
+                        $ fmap (\(LinearMap m) -> unsafeFromArray
+                                    $ extract m HMat.! i) ms )
+     (FlexibleDimensionalCase, DualSpaceWitness, _)
+       -> ArB.generate (dimension @(R n)) $ \i
+           -> asTensor $ recomposeContraLinMap @u f
+                       $ fmap (\(LinearMap m) -> m ArB.! i) ms
+  tensorEquality :: ∀ w . (TensorSpace w, Eq w)
+              => R n⊗w -> R n⊗w -> Bool
+  tensorEquality (Tensor a) (Tensor b) = case dimensionality @w of
+            StaticDimensionalCase -> extract a==extract b
+            FlexibleDimensionalCase -> a==b
+  uncanonicallyToDual = id
+  uncanonicallyFromDual = id

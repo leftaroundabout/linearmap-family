@@ -75,6 +75,9 @@ main = do
     , testProperty "Composition"
        $ \f g v -> (f . g $ v)
                   ≈≈≈ ((f :: R 21+>R 20) $ g $ (v :: R 22))
+    , testProperty "Composition associativity"
+       $ \f g h -> (f . g :: R 6+>R 8) . h
+                  ≈≈≈ f . (g . h :: R 7+>R 9)
     ]
    ]
 
@@ -82,8 +85,6 @@ main = do
 instance ∀ n . KnownNat n => Arbitrary (R n) where
   arbitrary = HMatS.fromList <$> vectorOf n arbitrary
    where n = fromIntegral $ natVal (Proxy @n)
-instance ∀ n . KnownNat n => Eq (R n) where
-  (==) = (==)`on`HMatS.extract
 instance ∀ n m r . (KnownNat n, KnownNat m, r~ℝ)
            => Show (LinearMap r (R n) (R m)) where
   show _ = "..."
@@ -93,6 +94,10 @@ instance ∀ n m r . (KnownNat n, KnownNat m, r~ℝ)
                 <$> vectorOf (n*m) arbitrary
    where n = fromIntegral $ natVal (Proxy @n)
          m = fromIntegral $ natVal (Proxy @m)
+instance ∀ n m r . (KnownNat n, KnownNat m, r~ℝ)
+           => InnerSpace (LinearMap r (R n) (R m)) where
+  LinearMap f<.>LinearMap g
+      = HMat.flatten (extract f) HMat.<.> HMat.flatten (extract g)
 
 infix 4 ≈≈≈
 (≈≈≈) :: (InnerSpace v, Show v, Eq v, RealFrac (Scalar v))
