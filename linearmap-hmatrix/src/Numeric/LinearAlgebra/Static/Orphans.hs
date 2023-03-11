@@ -151,7 +151,14 @@ unsafeCreate ar
 
 unsafeCreateMat :: ∀ n m . (KnownNat n, KnownNat m, HasCallStack)
                      => HMat.Matrix ℝ -> L n m
-unsafeCreateMat = fromJust . create
+unsafeCreateMat mat
+  | nmat==n, mmat==m  = fromJust $ create mat
+  | otherwise         = error $ "Incorrect size "++show nmat++"×"++show mmat
+                               ++" for dimension "++show n++"×"++show m
+ where n = dimension @(R n)
+       m = dimension @(R m)
+       nmat = HMat.rows mat
+       mmat = HMat.cols mat
 
 unsafeFromRows :: ∀ m n . (KnownNat m, KnownNat n, HasCallStack) => [R n] -> L m n
 unsafeFromRows rs = withRows rs  -- unsafeCoerce
@@ -428,6 +435,26 @@ instance ∀ n . KnownNat n => LinearSpace (R n) where
               -> ArB.ifoldl' (\acc i u -> acc ^+^
                                ( (applyLinear-+$>fromTensor-+$=>(m ArB.! i))
                                   -+$> u) ) zeroV t
+  composeLinear :: ∀ w x . ( LinearSpace w, Scalar w ~ ℝ
+                           , TensorSpace x, Scalar x ~ ℝ )
+        => Bilinear (w+>x) (R n+>w) (R n+>x)
+  composeLinear = case (dimensionality @w, dualSpaceWitness @w, dimensionality @x) of
+    (StaticDimensionalCase, DualSpaceWitness, StaticDimensionalCase)
+       -> bilinearFunction $ \f (LinearMap g)
+            -> LinearMap $ unsafeCreateMat (HMat.reshape (dimension @w) $ toArray f)
+                             HMatS.<> g
+    (StaticDimensionalCase, DualSpaceWitness, FlexibleDimensionalCase)
+       -> bilinearFunction $ \f (LinearMap g)
+            -> LinearMap . ArB.generate (dimension @(R n))
+                $ \i -> (applyLinear-+$>f)-+$>
+                          (unsafeFromArray $ extract g HMat.! i)
+    (FlexibleDimensionalCase, DualSpaceWitness, StaticDimensionalCase)
+       -> bilinearFunction $ \f (LinearMap g)
+            -> LinearMap . generateCols $ \i
+                 -> unsafeCreate . toArray $ (applyLinear-+$>f)-+$>(g ArB.! i)
+    (FlexibleDimensionalCase, DualSpaceWitness, FlexibleDimensionalCase)
+       -> bilinearFunction $ \f (LinearMap g)
+            -> LinearMap $ ArB.map (\w -> (applyLinear-+$>f)-+$>w) g
 
 
 instance ∀ n . KnownNat n => FiniteDimensional (R n) where
