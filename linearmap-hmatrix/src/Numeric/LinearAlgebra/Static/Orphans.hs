@@ -157,6 +157,10 @@ unsafeFromCols :: ∀ m n . (KnownNat m, KnownNat n, HasCallStack) => [R m] -> L
 unsafeFromCols rs = withColumns rs  -- unsafeCoerce
                                   (fromJust . exactDims)
 
+generateCols :: ∀ m n . (KnownNat m, KnownNat n, HasCallStack)
+       => (Int -> R m) -> L m n
+generateCols f = unsafeFromCols $ f <$> [0 .. dimension @(R n) - 1]
+
 instance ∀ n . KnownNat n => TensorSpace (R n) where
   type TensorProduct (R n) w = RTensorProduct n w (StaticDimension w)
   scalarSpaceWitness = ScalarSpaceWitness
@@ -210,11 +214,10 @@ instance ∀ n . KnownNat n => TensorSpace (R n) where
                                      -- matrix for @f@ is inefficient if the dimensions
                                      -- of @w@ and @x@ are larger than @n@.
              -> let fm :: L (Dimension w) (Dimension x)
-                    fm = unsafeFromCols
-                          [ unsafeCreate . toArray $ f x
-                          | i <- [0 .. dx - 1]
-                          , let Just x = fromArray  -- TODO use unsafeFromArray
-                                 $ ArU.generate dx (\j -> if i==j then 1 else 0) ]
+                    fm = generateCols $ \i
+                          -> let Just x = fromArray  -- TODO use unsafeFromArray
+                                  $ ArU.generate dx (\j -> if i==j then 1 else 0)
+                             in unsafeCreate . toArray $ f x
                     dx = dimension @x
                 in \(Tensor t) -> Tensor $ mul fm t
      (StaticDimensionalCase, FlexibleDimensionalCase) -> bilinearFunction
@@ -236,29 +239,23 @@ instance ∀ n . KnownNat n => TensorSpace (R n) where
          $ \(LinearFunction f)       -- TODO make dimension-dependent. Building
                                      -- matrices for @f@ is inefficient if the dimensions
                                      -- of @w@ and @x+y@ are larger than @n@.
-             -> let fmx = unsafeFromCols
-                          [ unsafeCreate . toArray $ f (x,zeroV)
-                          | i <- [0 .. dx - 1]
-                          , let Just x = fromArray  -- TODO use unsafeFromArray
-                                 $ ArU.generate dx (\j -> if i==j then 1 else 0)
-                          ]
-                    fmy = unsafeFromCols
-                          [ unsafeCreate . toArray $ f (zeroV,y)
-                          | i <- [0 .. dy - 1]
-                          , let Just y = fromArray  -- TODO use unsafeFromArray
-                                 $ ArU.generate dy (\j -> if i+dx==j then 1 else 0)
-                          ]
+             -> let fmx = generateCols $ \i
+                           -> let Just x = fromArray  -- TODO use unsafeFromArray
+                                   $ ArU.generate dx (\j -> if i==j then 1 else 0)
+                              in unsafeCreate . toArray $ f (x,zeroV)
+                    fmy = generateCols $ \i
+                           -> let Just y = fromArray  -- TODO use unsafeFromArray
+                                   $ ArU.generate dy (\j -> if i+dx==j then 1 else 0)
+                              in unsafeCreate . toArray $ f (zeroV,y)
                     dx = dimension @x
                     dy = dimension @y
                 in \(Tensor tx, Tensor ty) -> Tensor $ mul fmx tx + mul fmy ty
      (StaticDimensionalCase, FlexibleDimensionalCase, StaticDimensionalCase) -> bilinearFunction
          $ \(LinearFunction f)
-             -> let fmx = unsafeFromCols
-                          [ unsafeCreate . toArray $ f (x,zeroV)
-                          | i <- [0 .. dx - 1]
-                          , let Just x = fromArray  -- TODO use unsafeFromArray
-                                 $ ArU.generate dx (\j -> if i==j then 1 else 0)
-                          ]
+             -> let fmx = generateCols $ \i
+                           -> let Just x = fromArray  -- TODO use unsafeFromArray
+                                   $ ArU.generate dx (\j -> if i==j then 1 else 0)
+                              in unsafeCreate . toArray $ f (x,zeroV)
                     dx = dimension @x
                 in \(Tensor tx, Tensor ty) -> Tensor
                        $ mul fmx tx
@@ -271,12 +268,10 @@ instance ∀ n . KnownNat n => TensorSpace (R n) where
                            ]
      (FlexibleDimensionalCase, StaticDimensionalCase, StaticDimensionalCase) -> bilinearFunction
          $ \(LinearFunction f)
-             -> let fmy = unsafeFromCols
-                          [ unsafeCreate . toArray $ f (zeroV,y)
-                          | i <- [0 .. dy - 1]
-                          , let Just y = fromArray  -- TODO use unsafeFromArray
-                                 $ ArU.generate dy (\j -> if i==j then 1 else 0)
-                          ]
+             -> let fmy = generateCols $ \i
+                           -> let Just y = fromArray  -- TODO use unsafeFromArray
+                                   $ ArU.generate dy (\j -> if i==j then 1 else 0)
+                              in unsafeCreate . toArray $ f (zeroV,y)
                     dy = dimension @y
                 in \(Tensor tx, Tensor ty) -> Tensor
                        $ unsafeFromCols
