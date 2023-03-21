@@ -54,30 +54,36 @@ main = do
   defaultMain $ testGroup "Tests"
    [ testGroup "Vector-space basics"
     [ testProperty "Addition associativity"
-       $ \v w x -> (v^+^w)^+^x ≈≈≈ v^+^(w^+^x :: R 27)
+       $ \v w x -> (v^+^w)^+^x ≈≈≈ v^+^(w^+^x)
+        `with`[v, w, x :: R 27]
     , testProperty "Addition commutativity"
-       $ \v w -> v^+^w === (w^+^v :: R 39)
+       $ \v w -> v^+^w === w^+^v
+        `with`[v, w :: R 39]
     , testProperty "Scalar distributivity"
-       $ \μ v w -> μ*^(v^+^w) ≈≈≈ μ*^v ^+^ μ*^(w :: R 92)
+       $ \μ v w -> μ*^(v^+^w) ≈≈≈ μ*^v ^+^ μ*^w
+        `with`[v, w :: R 92]
     , testProperty "Inner product bilinearity"
-       $ \μ u v ν w x -> (μ*^u ^+^ v)<.>(ν*^w ^+^ x :: R 512)
+       $ \μ u v ν w x -> (μ*^u ^+^ v)<.>(ν*^w ^+^ x)
                       ≈≈≈ μ*ν*(u<.>w) + μ*(u<.>x) + ν*(v<.>w) + v<.>x
+        `with`[u, v, w, x :: R 512]
     ]
    , testGroup "Linear maps"
     [ testProperty "Identity"
        $ \v -> (linearId $ v :: R 7968) === v
     , testProperty "Linearity"
-       $ \f μ v w -> ((f :: R 67+>R 86) $ μ*^v ^+^ w)
-                    ≈≈≈ μ*^(f $ v) ^+^ (f $ w)
+       $ \f μ v w -> (f $ μ*^v ^+^ w) ≈≈≈ μ*^(f $ v) ^+^ (f $ w)
+        `with`(f :: R 67+>R 86)
     , testProperty "Linear space of maps"
-       $ \μ f g v -> ((μ*^f ^+^ g :: R 67+>R 86) $ v)
-                    ≈≈≈ μ*^(f $ v) ^+^ (g $ v)
+       $ \μ f g v -> (μ*^f ^+^ g $ v) ≈≈≈ μ*^(f $ v) ^+^ (g $ v)
+        `with`(f :: R 67+>R 86)
     , testProperty "Composition"
-       $ \f g v -> (f . g $ v)
-                  ≈≈≈ ((f :: R 21+>R 20) $ g $ (v :: R 22))
+       $ \f g v -> (f . g $ v) ≈≈≈ (f $ g $ v)
+        `with`( f :: R 21+>R 20
+              , v :: R 22 )
     , testProperty "Composition associativity"
-       $ \f g h -> (f . g :: R 6+>R 8) . h
-                  ≈≈≈ f . (g . h :: R 7+>R 9)
+       $ \f g h -> (f . g) . h ≈≈≈ f . (g . h)
+        `with`( f :: R 8+>R 9
+              , h :: R 6+>R 7 )
     ]
    ]
 
@@ -106,3 +112,6 @@ v≈≈≈w
  | magnitudeSq (v^-^w) < (magnitudeSq v + magnitudeSq w)*1e-8   = QC.property True
  | otherwise                                                    = v===w
 
+infix 0 `with`
+with :: a -> b -> a
+with = const
