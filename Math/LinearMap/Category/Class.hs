@@ -571,8 +571,8 @@ instance ∀ s . Num' s => PreArrow (LinearMap s) where
              (DualSpaceWitness, DualSpaceWitness, DualSpaceWitness)
                  -> fromTensor $ (fzipTensorWith$id) $ (asTensor $ f, asTensor $ g)
   terminal = zeroV
-  fst = sampleLinearFunction $ fst
-  snd = sampleLinearFunction $ snd
+  fst = id ⊕ zeroV
+  snd = zeroV ⊕ id
 instance Num' s => EnhancedCat (->) (LinearMap s) where
   arr m = arr $ applyLinear $ m
 instance Num' s => EnhancedCat (LinearFunction s) (LinearMap s) where
