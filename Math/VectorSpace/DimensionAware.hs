@@ -124,10 +124,10 @@ data DimensionalityCases v where
   StaticDimensionalCase :: (KnownNat n, n`Dimensional`v) => DimensionalityCases v
   FlexibleDimensionalCase :: StaticDimension v ~ 'Nothing => DimensionalityCases v
 
-type family DimensionOfDimensionality d where
-  DimensionOfDimensionality ('Just n) = n
+type family FromJust (a :: Maybe k) :: k where
+  FromJust ('Just v) = v
 
-type Dimension v = DimensionOfDimensionality (StaticDimension v)
+type Dimension v = FromJust (StaticDimension v)
 
 staticDimensionalIsStatic :: ∀ v n r
      . (DimensionAware v, StaticDimension v ~ 'Just n)
@@ -250,11 +250,6 @@ instance ∀ n u m v nm . ( n`Dimensional`u, m`Dimensional`v
   unsafeWriteArrayWithOffset arr i (x,y) = do
       unsafeWriteArrayWithOffset arr i x
       unsafeWriteArrayWithOffset arr (i + dimension @u) y
-
-type family FromJust (a :: Maybe k) :: k where
-  FromJust ('Just v) = v
-
-type StaticallyKnownDimension v = FromJust (StaticDimension v)
 
 notStaticDimensionalContradiction :: ∀ v n r
   . (n`Dimensional`v, StaticDimension v ~ 'Nothing) => r
