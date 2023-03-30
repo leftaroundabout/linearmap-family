@@ -260,7 +260,7 @@ instance ∀ n . KnownNat n => TensorSpace (R n) where
                               in unsafeCreate . toArray $ f (x,zeroV)
                     fmy = generateCols $ \i
                            -> let Just y = fromArray  -- TODO use unsafeFromArray
-                                   $ ArU.generate dy (\j -> if i+dx==j then 1 else 0)
+                                   $ ArU.generate dy (\j -> if i==j then 1 else 0)
                               in unsafeCreate . toArray $ f (zeroV,y)
                     dx = dimension @x
                     dy = dimension @y
