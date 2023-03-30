@@ -23,6 +23,7 @@ library
     , free-vector-spaces
     , hmatrix >=0.20.0 && <0.21
     , singletons <3.0
+    , finite-typelits >=0.1.6 && <0.2
     , linearmap-category
     , manifolds-core
     , tagged
