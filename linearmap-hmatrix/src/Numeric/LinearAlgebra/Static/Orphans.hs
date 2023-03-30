@@ -388,12 +388,11 @@ instance ∀ n . KnownNat n => LinearSpace (R n) where
     StaticDimensionalCase
       -> let dws = dimensionalitySing @w
              dw = dimension @w
-         in staticDimensionalIsStatic @(DualVector w)
-              ( staticDimensionalIsStatic @(R n ⊗ (R n ⊗ w))
-               ( withKnownNat (sing @n %* dws)
+         in dimensionIsStatic @(DualVector w)
+              ( withKnownNat (sing @n %* dws)
                  (LinearMap . fromJust . staticDimTensorTensorMatrixCreate @n
                                         @(DualVector w) @(R n⊗w)
-               . HMat.reshape n . HMat.flatten $ HMat.ident (n*dw) ) ) )
+               . HMat.reshape n . HMat.flatten $ HMat.ident (n*dw) ) )
     FlexibleDimensionalCase
       -> LinearMap . ArB.generate n
           $ \i -> (fmapTensor -+$> LinearFunction
@@ -407,10 +406,8 @@ instance ∀ n . KnownNat n => LinearSpace (R n) where
                  ℝ
   applyTensorFunctional = case dualSpaceWitness @u of
     DualSpaceWitness -> case dimensionality @u of
-      StaticDimensionalCase -> staticDimensionalIsStatic @(DualVector u)
-       (bilinearFunction $ \(LinearMap m) (Tensor t)
+      StaticDimensionalCase -> bilinearFunction $ \(LinearMap m) (Tensor t)
           -> trace -+$> undiscretizeEndoMap @u (m HMatS.<> tr t)
-         )
       FlexibleDimensionalCase -> bilinearFunction $ \(LinearMap m) (Tensor t)
           -> ArB.sum $ ArB.zipWith (getLinearFunction . getLinearFunction
                                         applyDualVector) m t
@@ -515,18 +512,18 @@ instance ∀ n . KnownNat n => FiniteDimensional (R n) where
          $ case ( dimensionality @u, dualSpaceWitness @u, dimensionality @w ) of
      (StaticDimensionalCase, DualSpaceWitness, StaticDimensionalCase)
        -> withKnownNat (dimensionalitySing @u %* dimensionalitySing @w)
-         ( staticDimensionalIsStatic @(DualVector u)
+         ( dimensionIsStatic @(DualVector u)
          ( generateCols $ \i
             -> unsafeCreate . toArray . recomposeContraLinMap @u f
                  $ fmap (\(LinearMap m) -> unsafeFromArray
                             $ extract m HMat.! i) ms
          ))
      (StaticDimensionalCase, DualSpaceWitness, FlexibleDimensionalCase)
-       -> staticDimensionalIsStatic @(DualVector u)
-           ( ArB.generate (dimension @(R n)) $ \i
+       -> dimensionIsStatic @(DualVector u)
+          (ArB.generate (dimension @(R n)) $ \i
             -> asTensor $ recomposeContraLinMap @u f
                         $ fmap (\(LinearMap m) -> unsafeFromArray
-                                    $ extract m HMat.! i) ms )
+                                    $ extract m HMat.! i) ms)
      (FlexibleDimensionalCase, DualSpaceWitness, _)
        -> ArB.generate (dimension @(R n)) $ \i
            -> asTensor $ recomposeContraLinMap @u f
