@@ -13,6 +13,7 @@
 {-# LANGUAGE GADTs                  #-}
 {-# LANGUAGE DataKinds              #-}
 {-# LANGUAGE PolyKinds              #-}
+{-# LANGUAGE ConstraintKinds        #-}
 {-# LANGUAGE DefaultSignatures      #-}
 {-# LANGUAGE RankNTypes             #-}
 {-# LANGUAGE UnicodeSyntax          #-}
@@ -46,6 +47,7 @@ import Control.Monad.ST (ST)
 import Control.Monad
 
 import GHC.TypeLits
+import GHC.Exts (Constraint)
 import Data.Proxy (Proxy(..))
 
 import Data.Ratio
@@ -127,15 +129,20 @@ type family FromJust (a :: Maybe k) :: k where
 
 type Dimension v = FromJust (StaticDimension v)
 
-staticDimensionalIsStatic :: ∀ v n r
-     . (DimensionAware v, StaticDimension v ~ 'Just n)
-              => (n`Dimensional`v => r) -> r
-staticDimensionalIsStatic = case dimensionalityWitness @v of
-   IsStaticDimensional -> \φ -> φ
+type family IsJust (a :: Maybe k) :: Constraint where
+  IsJust ('Just _) = ()
+
+class DimensionAware v => StaticDimensional v where
+  dimensionIsStatic :: ∀ r . (∀ n . (KnownNat n, n`Dimensional`v) => r) -> r
 
 {-# INLINE dimensionalitySing #-}
 dimensionalitySing :: ∀ v n . n`Dimensional`v => Sing n
 dimensionalitySing = knownDimensionalitySing @n @v
+
+instance ( DimensionAware v, IsJust (StaticDimension v) )
+       => StaticDimensional v where
+  dimensionIsStatic = case dimensionalityWitness @v of
+   IsStaticDimensional -> \φ -> withKnownNat (dimensionalitySing @v) φ
 
 dimensionality :: ∀ v . DimensionAware v => DimensionalityCases v
 dimensionality = case dimensionalityWitness @v of

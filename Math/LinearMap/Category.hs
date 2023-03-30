@@ -78,6 +78,7 @@ module Math.LinearMap.Category (
             , LSpace
             , DimensionAware (..)
             , Dimensional (..)
+            , StaticDimensional (..)
             , Dimension
             , TensorSpace (..)
             , LinearSpace (..)
