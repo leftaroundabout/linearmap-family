@@ -73,6 +73,10 @@ import Math.VectorSpace.DimensionAware
 import Data.Tagged (Tagged(..))
 #endif
 
+-- QuickCheck
+import qualified Test.QuickCheck as QC
+
+
 instance ∀ n . KnownNat n => Eq (R n) where
   (==) = (==)`on`HMatS.extract
 
@@ -534,3 +538,12 @@ instance ∀ n . KnownNat n => FiniteDimensional (R n) where
             FlexibleDimensionalCase -> a==b
   uncanonicallyToDual = id
   uncanonicallyFromDual = id
+
+
+instance ∀ n v r . (KnownNat n, r~ℝ, TensorSpace v, QC.Arbitrary v)
+   => QC.Arbitrary (Tensor r (R n) v) where 
+  arbitrary = case dimensionality @v of
+    StaticDimensionalCase -> Tensor . HMatS.fromList
+              <$> QC.vector (dimension @(R n)*dimension @v)
+    FlexibleDimensionalCase -> Tensor . ArB.fromList <$> QC.vector (dimension @(R n))
+

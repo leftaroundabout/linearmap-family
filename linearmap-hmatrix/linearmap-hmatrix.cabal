@@ -28,6 +28,7 @@ library
     , tagged
     , vector
     , vector-space
+    , QuickCheck
   default-language: Haskell2010
 
 test-suite linearmap-hmatrix-test

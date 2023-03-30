@@ -67,6 +67,18 @@ main = do
                       ≈≈≈ μ*ν*(u<.>w) + μ*(u<.>x) + ν*(v<.>w) + v<.>x
         `with`[u, v, w, x :: R 512]
     ]
+   , testGroup "Tensors"
+    [ testProperty "Tensor product associativity"
+       $ \v w x -> v⊗(w⊗x) ≈≈≈ coerce ((v⊗w)⊗x)
+        `with`(v :: R 37, w :: R 38, x :: R 39)
+    , testProperty "Fmapping identity"
+       $ \t -> (fmap id -+$> t) === t
+        `with`(t :: R 97⊗R 43)
+    , testProperty "Fmapping composition"
+       $ \t f g -> (fmap (applyLinear-+$>g . f) $ t)
+                       ≈≈≈ (fmap (applyLinear-+$>g) $ fmap (applyLinear-+$>f) $ t)
+        `with`(t :: R 97⊗R 43, f :: R 43+>R 44, g :: R 44+> R 45)
+    ]
    , testGroup "Linear maps"
     [ testProperty "Identity"
        $ \v -> (linearId $ v :: R 7968) === v
@@ -100,6 +112,18 @@ instance ∀ n m r . (KnownNat n, KnownNat m, r~ℝ)
                 <$> vectorOf (n*m) arbitrary
    where n = fromIntegral $ natVal (Proxy @n)
          m = fromIntegral $ natVal (Proxy @m)
+instance ∀ n v r . ( KnownNat n, TensorSpace v, r~ℝ, Scalar v~ℝ
+                   , StaticDimensional v )
+           => InnerSpace (Tensor r (R n) v) where
+  (<.>) = dimensionIsStatic @v
+    (\(Tensor f) (Tensor g)
+       -> HMat.flatten (extract f) HMat.<.> HMat.flatten (extract g) )
+
+instance ∀ n v r . ( KnownNat n, TensorSpace v, r~ℝ, Scalar v~ℝ
+                   , StaticDimensional v )
+           => Show (Tensor r (R n) v) where
+  showsPrec p (Tensor t) = dimensionIsStatic @v (
+    showParen (p>9) $ ("Tensor "++) . showsPrec 10 t )
 instance ∀ n m r . (KnownNat n, KnownNat m, r~ℝ)
            => InnerSpace (LinearMap r (R n) (R m)) where
   LinearMap f<.>LinearMap g
