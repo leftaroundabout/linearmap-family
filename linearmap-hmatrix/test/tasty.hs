@@ -104,9 +104,6 @@ instance ∀ n . KnownNat n => Arbitrary (R n) where
   arbitrary = HMatS.fromList <$> vectorOf n arbitrary
    where n = fromIntegral $ natVal (Proxy @n)
 instance ∀ n m r . (KnownNat n, KnownNat m, r~ℝ)
-           => Show (LinearMap r (R n) (R m)) where
-  show _ = "..."
-instance ∀ n m r . (KnownNat n, KnownNat m, r~ℝ)
            => Arbitrary (LinearMap r (R n) (R m)) where
   arbitrary = LinearMap . HMatS.fromList
                 <$> vectorOf (n*m) arbitrary

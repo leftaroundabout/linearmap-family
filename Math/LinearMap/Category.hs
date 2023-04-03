@@ -92,7 +92,7 @@ module Math.LinearMap.Category (
             -- ** Tensors with basis decomposition
             , (.⊗)
             -- ** Hilbert space operations
-            , (·), DualSpace, riesz, coRiesz, showsPrecAsRiesz, (.<)
+            , (·), DualSpace, riesz, sRiesz, coRiesz, showsPrecAsRiesz, (.<)
             -- ** Standard decompositions
             , TensorDecomposable(..), RieszDecomposable(..)
             , tensorDecomposeShowsPrec, rieszDecomposeShowsPrec

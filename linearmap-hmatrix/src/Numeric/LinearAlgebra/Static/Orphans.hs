@@ -19,7 +19,7 @@
 module Numeric.LinearAlgebra.Static.Orphans () where
 
 -- base
-import Prelude hiding (id, (.), ($))
+import Prelude hiding (id, (.), ($), fmap)
 import GHC.TypeLits (KnownNat, natVal)
 import GHC.Stack (HasCallStack)
 import Data.Proxy (Proxy(..))
@@ -32,6 +32,7 @@ import Data.Function (on)
 -- constrained-categories
 import Control.Category.Constrained (id, (.))
 import Control.Arrow.Constrained (($))
+import Control.Functor.Constrained (fmap)
 
 -- singletons
 import Data.Singletons (sing)
@@ -555,4 +556,33 @@ instance ∀ n v r . (KnownNat n, r~ℝ, TensorSpace v, QC.Arbitrary v)
     StaticDimensionalCase -> Tensor . HMatS.fromList
               <$> QC.vector (dimension @(R n)*dimension @v)
     FlexibleDimensionalCase -> Tensor . ArB.fromList <$> QC.vector (dimension @(R n))
+
+instance ∀ n . (KnownNat n) => TensorDecomposable (R n) where
+  tensorDecomposition :: ∀ w . (TensorSpace w, Scalar w ~ ℝ)
+            => Tensor ℝ (R n) w -> [(Finite n, w)]
+  tensorDecomposition = case dimensionality @w of
+    StaticDimensionalCase -> \(Tensor t)
+         -> zip finites $ unsafeFromArray . extract <$> toColumns t
+    FlexibleDimensionalCase -> \(Tensor t)
+         -> zip finites $ ArB.toList t
+  tensorDecompose' :: ∀ w . (TensorSpace w, Scalar w ~ ℝ)
+            => Tensor ℝ (R n) w -> Finite n -> w
+  tensorDecompose' (Tensor t) = case dimensionality @w of
+    StaticDimensionalCase -> \n
+        -> unsafeFromArray $ extract t HMat.! fromIntegral (getFinite n)
+    FlexibleDimensionalCase -> \n
+        -> t ArB.! fromIntegral (getFinite n)
+  showsPrecBasis _ = shows . getFinite
+
+instance KnownNat n => RieszDecomposable (R n) where
+  rieszDecomposition m = [ (n, sRiesz . fmap (LinearFunction
+                                               $ \v -> extract v HMat.! n')
+                                         $ m)
+                         | n <- finites
+                         , let n' = fromIntegral $ getFinite n ]
+
+instance ( FiniteDimensional v, v ~ DualVector v, Scalar v ~ ℝ, Show v
+         , KnownNat n )
+              => Show (LinearMap ℝ v (R n)) where
+  showsPrec = rieszDecomposeShowsPrec
 
