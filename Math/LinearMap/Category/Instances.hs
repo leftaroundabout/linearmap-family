@@ -741,6 +741,42 @@ instance (InnerSpace v, TensorSpace v, Scalar v ~ ℝ)
    => InnerSpace (LinearMap ℝ ℝ v) where
   LinearMap f <.> LinearMap g = f<.>g
 
+instance ( TensorSpace u, TensorSpace v, TensorSpace w
+         , Num s, Scalar u ~ s, Scalar v ~ s, Scalar w ~ s
+         , InnerSpace (Tensor s u w), InnerSpace (Tensor s v w) )
+              => InnerSpace (Tensor s (u,v) w) where
+  Tensor (uw,vw) <.> Tensor (uw',vw') = uw<.>uw' + vw<.>vw'
+instance ( LinearSpace u, LinearSpace v, TensorSpace w
+         , Num s, Scalar u ~ s, Scalar v ~ s, Scalar w ~ s
+         , InnerSpace (LinearMap s u w), InnerSpace (LinearMap s v w) )
+              => InnerSpace (LinearMap s (u,v) w) where
+  (<.>) = case (dualSpaceWitness @u, dualSpaceWitness @v) of
+    (DualSpaceWitness, DualSpaceWitness)
+      -> \(LinearMap (uw,vw)) (LinearMap (uw',vw'))
+            -> (asLinearMap$uw)<.>(asLinearMap$uw')
+                 + (asLinearMap$vw)<.>(asLinearMap$vw')
+
+instance ( TensorSpace u, TensorSpace v, TensorSpace w
+         , Num s, Scalar u ~ s, Scalar v ~ s, Scalar w ~ s
+         , InnerSpace (Tensor s u (Tensor s v w)) )
+              => InnerSpace (Tensor s (Tensor s u v) w) where
+  s <.> t = (rassocTensor$s)<.>(rassocTensor$t)
+instance ( LinearSpace u, TensorSpace v, TensorSpace w
+         , Num s, Scalar u ~ s, Scalar v ~ s, Scalar w ~ s
+         , InnerSpace (LinearMap s u (Tensor s v w)) )
+              => InnerSpace (Tensor s (LinearMap s u v) w) where
+  s <.> t = (hasteLinearMap$s)<.>(hasteLinearMap$t)
+instance ( LinearSpace u, LinearSpace v, TensorSpace w
+         , Num s, Scalar u ~ s, Scalar v ~ s, Scalar w ~ s
+         , InnerSpace (LinearMap s u (LinearMap s v w)) )
+              => InnerSpace (LinearMap s (Tensor s u v) w) where
+  s <.> t = (curryLinearMap$s)<.>(curryLinearMap$t)
+instance ( LinearSpace u, LinearSpace v, TensorSpace w
+         , Num s, Scalar u ~ s, Scalar v ~ s, Scalar w ~ s
+         , InnerSpace (Tensor s u (LinearMap s v w)) )
+              => InnerSpace (LinearMap s (LinearMap s u v) w) where
+  s <.> t = (coCurryLinearMap$s)<.>(coCurryLinearMap$t)
+
 instance (Show v) => Show (Tensor ℝ ℝ v) where
   showsPrec p (Tensor t) = showParen (p>9) $ ("Tensor "++) . showsPrec 10 t
 
