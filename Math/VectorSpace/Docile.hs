@@ -1308,8 +1308,10 @@ infixr 7 .⊗
 b .⊗ w = basisValue b ⊗ w
 
 class (FiniteDimensional v, HasBasis v) => TensorDecomposable v where
-  tensorDecomposition :: v⊗w -> [(Basis v, w)]
-  tensorDecompose' :: v⊗w -> Basis v -> w
+  tensorDecomposition :: (TensorSpace w, Scalar w ~ Scalar v)
+             => v⊗w -> [(Basis v, w)]
+  tensorDecompose' :: (TensorSpace w, Scalar w ~ Scalar v)
+             => v⊗w -> Basis v -> w
   showsPrecBasis :: Int -> Basis v -> ShowS
 
 instance ( TensorDecomposable u, TensorSpace v
@@ -1403,11 +1405,13 @@ instance ∀ u v s
        , Fractional' s, Scalar u ~ s, Scalar v ~ s
        , Scalar (DualVector u) ~ s, Scalar (DualVector v) ~ s )
     => TensorDecomposable (Tensor s u v) where
-  tensorDecomposition :: ∀ w . (Tensor s u v)⊗w -> [((Basis u, Basis v), w)]
+  tensorDecomposition :: ∀ w . (TensorSpace w, Scalar w ~ s)
+      => (Tensor s u v)⊗w -> [((Basis u, Basis v), w)]
   tensorDecomposition (Tensor t) = [ ((bu,bv),w)
                                    | (bu,vw) <- tensorDecomposition @u (Tensor t)
                                    , (bv,w) <- tensorDecomposition @v vw ]
-  tensorDecompose' :: ∀ w . (Tensor s u v)⊗w -> (Basis u, Basis v) -> w
+  tensorDecompose' :: ∀ w . (TensorSpace w, Scalar w ~ s)
+      => (Tensor s u v)⊗w -> (Basis u, Basis v) -> w
   tensorDecompose' (Tensor t) (bu,bv)
      = tensorDecompose' @v (tensorDecompose' @u (Tensor t) bu) bv
   showsPrecBasis :: Int -> (Basis u, Basis v) -> ShowS
