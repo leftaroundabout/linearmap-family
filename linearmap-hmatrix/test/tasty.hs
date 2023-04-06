@@ -33,6 +33,7 @@ import Linear.V4
 import Data.Basis
 import Data.Coerce
 import Math.LinearMap.Category
+import Math.LinearMap.Coercion
 import Math.VectorSpace.DimensionAware (toArray, fromArray, unsafeFromArray)
 import Math.Manifold.Core.Types
 import Math.Manifold.Core.PseudoAffine
@@ -78,6 +79,22 @@ main = do
        $ \t f g -> (fmap (applyLinear-+$>g . f) $ t)
                        ≈≈≈ (fmap (applyLinear-+$>g) $ fmap (applyLinear-+$>f) $ t)
         `with`(t :: R 97⊗R 43, f :: R 43+>R 44, g :: R 44+> R 45)
+    , testProperty "Fmapping pair tensor"
+       $ \t@(Tensor (t₀,t₁)) f
+          -> let fl = applyLinear-+$>f
+              in (fmap fl $ t) ≈≈≈ Tensor (fmap fl $ t₀, fmap fl $ t₁)
+                   `with`(t :: (R 25,R 26)⊗R 43, f :: R 43+>R 44)
+    , testProperty "Fmapping pair-pair tensor"
+       $ \t@(Tensor (t₀,t₁)) f
+          -> let fl = applyLinear-+$>f
+              in (fmap fl $ t) ≈≈≈ Tensor (fmap fl $ t₀, fmap fl $ t₁)
+                   `with`(t :: (R 25,R 26)⊗(R 3,R 4), f :: (R 3,R 4)+>R 55)
+    , testProperty "Fmapping pair-valued function"
+       $ \t f
+          -> let fl = applyLinear-+$>f
+              in (fmap fl $ t) ≈≈≈ (fzipTensor-+$>( fmap (fst.(applyLinear-+$>f))-+$>t
+                                                  , fmap (snd.(applyLinear-+$>f))-+$>t ))
+                   `with`(t :: R 25⊗R 7, f :: R 7+>(R 55, R 49))
     ]
    , testGroup "Linear maps"
     [ testProperty "Identity"
@@ -109,6 +126,16 @@ instance ∀ n m r . (KnownNat n, KnownNat m, r~ℝ)
                 <$> vectorOf (n*m) arbitrary
    where n = fromIntegral $ natVal (Proxy @n)
          m = fromIntegral $ natVal (Proxy @m)
+instance ∀ n r u v . ( KnownNat n, r ~ ℝ
+                     , TensorSpace u, TensorSpace v
+                     , Scalar u ~ ℝ , Scalar v ~ ℝ
+                     , Arbitrary (LinearMap r (R n) u)
+                     , Arbitrary (LinearMap r (R n) v) )
+           => Arbitrary (LinearMap r (R n) (u,v)) where
+  arbitrary = (fromTensor $ ) <$> do
+                curry (fzipTensor-+$>)
+                 <$>((asTensor$) <$> arbitrary @(LinearMap r (R n) u))
+                 <*>((asTensor$) <$> arbitrary @(LinearMap r (R n) v))
 instance ∀ n v r . ( KnownNat n, TensorSpace v, r~ℝ, Scalar v~ℝ
                    , StaticDimensional v )
            => InnerSpace (Tensor r (R n) v) where
@@ -136,3 +163,8 @@ v≈≈≈w
 infix 0 `with`
 with :: a -> b -> a
 with = const
+
+fzipTensor :: ( TensorSpace u, TensorSpace v, TensorSpace w
+               , Scalar v ~ Scalar u, Scalar w ~ Scalar u )
+      => (u ⊗ v, u ⊗ w) -+> (u ⊗ (v,w))
+fzipTensor = fzipTensorWith-+$>id
