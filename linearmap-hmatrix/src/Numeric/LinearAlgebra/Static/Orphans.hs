@@ -473,6 +473,7 @@ instance ∀ n . KnownNat n => LinearSpace (R n) where
 
 instance ∀ n . KnownNat n => FiniteDimensional (R n) where
   data SubBasis (R n) = RnBasis
+   deriving (Eq, Show)
   entireBasis = RnBasis
   enumerateSubBasis RnBasis = HMatS.toRows HMatS.eye
   decomposeLinMap :: ∀ w . (TensorSpace w, Scalar w ~ ℝ)
@@ -480,7 +481,7 @@ instance ∀ n . KnownNat n => FiniteDimensional (R n) where
   decomposeLinMap (LinearMap m) = (RnBasis, decomposition)
    where decomposition = case dimensionality @w of
            StaticDimensionalCase -> ((unsafeFromArray . HMatS.extract
-                                       <$> HMatS.toRows m)++)
+                                       <$> HMatS.toColumns m)++)
            FlexibleDimensionalCase -> (ArB.toList m++)
   decomposeLinMapWithin RnBasis = Right . snd . decomposeLinMap
   recomposeSB RnBasis cfs = case splitAt n cfs of
