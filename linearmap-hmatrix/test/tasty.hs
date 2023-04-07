@@ -117,9 +117,26 @@ main = do
    ]
 
 
+precision :: Double -> Int
+precision x = go 0
+ where go i
+         | i>100
+            || abs (x - fromIntegral (round $ x * 10^^i) / 10^^i) < abs x / 1e9
+                      = i
+         | otherwise  = go (i+1)
+
 instance ∀ n . KnownNat n => Arbitrary (R n) where
   arbitrary = HMatS.fromList <$> vectorOf n arbitrary
    where n = fromIntegral $ natVal (Proxy @n)
+  shrink v  -- uniformly strip away decimals from each entry
+    | shrunk==v   = []
+    | otherwise   = [shrunk]
+   where l = HMat.toList $ extract v
+         prc = maximum $ precision<$>l
+         shrunk = HMatS.fromList
+                   [ fromIntegral (round $ x * 10^^(prc-1)) / 10^^(prc-1)
+                   | x <- l ]
+
 instance ∀ n m r . (KnownNat n, KnownNat m, r~ℝ)
            => Arbitrary (LinearMap r (R n) (R m)) where
   arbitrary = LinearMap . HMatS.fromList
@@ -156,9 +173,10 @@ instance ∀ n m r . (KnownNat n, KnownNat m, r~ℝ)
 infix 4 ≈≈≈
 (≈≈≈) :: (InnerSpace v, Show v, Eq v, RealFrac (Scalar v))
             => v -> v -> QC.Property
-v≈≈≈w
- | magnitudeSq (v^-^w) < (magnitudeSq v + magnitudeSq w)*1e-8   = QC.property True
- | otherwise                                                    = v===w
+v≈≈≈w = QC.counterexample (show v ++ interpret res ++ show w) res
+ where res = magnitudeSq (v^-^w) <= (magnitudeSq v + magnitudeSq w)*1e-8
+       interpret True = " ≈ "
+       interpret False = " ≠ "
 
 infix 0 `with`
 with :: a -> b -> a
