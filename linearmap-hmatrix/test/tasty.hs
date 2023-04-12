@@ -99,12 +99,19 @@ main = do
    , testGroup "Linear maps"
     [ testProperty "Identity"
        $ \v -> (linearId $ v :: R 7968) === v
+    , testProperty "Identity for pairs"
+       $ \v w -> (linearId $ (v,w)) === (v,w)
+        `with`(v :: R 87, w :: R 92)
     , testProperty "Linearity"
        $ \f μ v w -> (f $ μ*^v ^+^ w) ≈≈≈ μ*^(f $ v) ^+^ (f $ w)
         `with`(f :: R 67+>R 86)
     , testProperty "Linear space of maps"
        $ \μ f g v -> (μ*^f ^+^ g $ v) ≈≈≈ μ*^(f $ v) ^+^ (g $ v)
         `with`(f :: R 67+>R 86)
+    , testProperty "fst projection"
+       $ \x y -> ((fst :: (R 2, R 3)+>R 2) $ (x,y)) ≈≈≈ x
+    , testProperty "Identity composition on pairs"
+       $ \x y -> (id . linearId @(R 2, R 3) $ (x,y)) ≈≈≈ (x,y)
     , testProperty "Composition"
        $ \f g v -> (f . g $ v) ≈≈≈ (f $ g $ v)
         `with`( f :: R 21+>R 20
@@ -113,6 +120,30 @@ main = do
        $ \f g h -> (f . g) . h ≈≈≈ f . (g . h)
         `with`( f :: R 8+>R 9
               , h :: R 6+>R 7 )
+    , testProperty "Parallel / blocks"
+       $ \f g x y -> (f *** g $ (x,y)) ≈≈≈ (f $ x, g $ y)
+        `with`( f :: R 46+>R 243
+              , g :: R 98+>R 123 )
+    , testProperty "Duplicates"
+       $ \x -> ((id &&& (id :: R 9+>R 9)) $ x)
+                  ≈≈≈ (x, x)
+    , testProperty "Identity composition for pairs"
+       $ \x y -> (id . linearId @(R 3, R 4) $ (x,y))
+                  ≈≈≈ (x, y)
+    , testProperty "Duplicate add"
+       $ \x -> ((fst^+^snd) . (id &&& (id :: R 9+>R 9)) $ x)
+                  ≈≈≈ 2 *^ x
+    , testProperty "Fanout and add"
+       $ \f g x -> ((fst^+^snd) . (f &&& g) $ x)
+                  ≈≈≈ (f $ x) ^+^ (g $ x)
+        `with`[f, g :: R 9+>R 9]
+    , testProperty "Parallel composition"
+       $ \f g h i x y -> ((f *** g) . (h *** i) $ (x,y))
+                         ≈≈≈ (f . h *** g . i $ (x,y))
+        `with`( f :: R 46+>R 243
+              , g :: R 98+>R 123
+              , h :: R 102+>R 46
+              , i :: R 78+>R 98 )
     ]
    ]
 
