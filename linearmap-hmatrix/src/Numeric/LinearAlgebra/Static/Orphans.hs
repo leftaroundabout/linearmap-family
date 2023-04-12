@@ -65,7 +65,8 @@ import Data.VectorSpace.Free
 
 -- linearmap-category
 import Math.LinearMap.Category
-import Math.LinearMap.Coercion (fromLinearMap, fromTensor, asTensor, (-+$=>))
+import Math.LinearMap.Coercion ( fromLinearMap, asLinearMap
+                               , fromTensor, asTensor, (-+$=>) )
 import Math.VectorSpace.DimensionAware
 -- import Math.VectorSpace.DimensionAware.Theorems.MaybeNat (zipWithTimesSing)
 
@@ -357,7 +358,7 @@ instance ∀ n . KnownNat n => TensorSpace (R n) where
            => Int -> α ℝ -> Tensor ℝ (R n) w
   tensorUnsafeFromArrayWithOffset i ar
      = withKnownNat (dimensionalitySing @w)
-        (Tensor . unsafeCreateMat . HMat.reshape n
+        (Tensor . unsafeCreateMat . HMat.tr . HMat.reshape n
          . ArG.convert $ ArG.slice i (n*m) ar)
    where n = fromIntegral (natVal @n Proxy)
          m = dimension @w
@@ -367,7 +368,7 @@ instance ∀ n . KnownNat n => TensorSpace (R n) where
   tensorUnsafeWriteArrayWithOffset ar i (Tensor t)
      = withKnownNat (dimensionalitySing @w)
         (ArG.unsafeCopy (ArGM.slice i (n*m) ar)
-         . ArG.convert . HMat.flatten $ extract t)
+         . ArG.convert . HMat.flatten . HMat.tr $ extract t)
    where n = fromIntegral (natVal @n Proxy)
          m = dimension @w
 
@@ -455,7 +456,7 @@ instance ∀ n . KnownNat n => LinearSpace (R n) where
   composeLinear = case (dimensionality @w, dualSpaceWitness @w, dimensionality @x) of
     (StaticDimensionalCase, DualSpaceWitness, StaticDimensionalCase)
        -> bilinearFunction $ \f (LinearMap g)
-            -> LinearMap $ unsafeCreateMat (HMat.reshape (dimension @w) $ toArray f)
+            -> LinearMap $ unsafeCreateMat (HMat.tr . HMat.reshape (dimension @x) $ toArray f)
                              HMatS.<> g
     (StaticDimensionalCase, DualSpaceWitness, FlexibleDimensionalCase)
        -> bilinearFunction $ \f (LinearMap g)
