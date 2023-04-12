@@ -1193,8 +1193,8 @@ instance RieszDecomposable ℝ where
 instance ( RieszDecomposable x, RieszDecomposable y
          , Scalar x ~ Scalar y, Scalar (DualVector x) ~ Scalar (DualVector y) )
               => RieszDecomposable (x,y) where
-  rieszDecomposition m = map (first Left) (rieszDecomposition $ fst . m)
-                      ++ map (first Right) (rieszDecomposition $ snd . m)
+  rieszDecomposition m = map (first Left) (rieszDecomposition $ fmap fst -+$> m)
+                      ++ map (first Right) (rieszDecomposition $ fmap snd -+$> m)
 
 instance RieszDecomposable (ZeroDim ℝ) where
   rieszDecomposition _ = []
