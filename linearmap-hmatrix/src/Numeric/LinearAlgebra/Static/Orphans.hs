@@ -358,7 +358,7 @@ instance ∀ n . KnownNat n => TensorSpace (R n) where
            => Int -> α ℝ -> Tensor ℝ (R n) w
   tensorUnsafeFromArrayWithOffset i ar
      = withKnownNat (dimensionalitySing @w)
-        (Tensor . unsafeCreateMat . HMat.tr . HMat.reshape n
+        (Tensor . unsafeCreateMat . HMat.tr . HMat.reshape m
          . ArG.convert $ ArG.slice i (n*m) ar)
    where n = fromIntegral (natVal @n Proxy)
          m = dimension @w
