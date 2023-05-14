@@ -90,8 +90,8 @@ library
                        QuickCheck >=2.11 && <2.15
   if flag(singletons3)
     build-depends:
-                       singletons >=3.0 && <3.1,
-                       singletons-base >=3.0 && <3.1
+                       singletons >=3.0 && <3.3,
+                       singletons-base >=3.0 && <3.3
   else
     build-depends:
                        singletons >=2.7 && <3.0
