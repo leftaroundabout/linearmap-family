@@ -34,9 +34,11 @@ import Data.VectorSpace
 import Data.Singletons (SingI, sing, Sing)
 #if MIN_VERSION_singletons(3,0,0)
 import Prelude.Singletons (SNum(..))
+import Data.Maybe.Singletons
 import GHC.TypeLits.Singletons (withKnownNat)
 #else
 import Data.Singletons.Prelude.Num (SNum(..))
+import Data.Singletons.Prelude.Maybe (SMaybe(..))
 import Data.Singletons.TypeLits (withKnownNat)
 #endif
 
@@ -124,13 +126,18 @@ data DimensionalityCases v where
   StaticDimensionalCase :: (KnownNat n, n`Dimensional`v) => DimensionalityCases v
   FlexibleDimensionalCase :: StaticDimension v ~ 'Nothing => DimensionalityCases v
 
+#if !MIN_VERSION_singletons(3,0,0)
 type family FromJust (a :: Maybe k) :: k where
   FromJust ('Just v) = v
+#endif
 
 type Dimension v = FromJust (StaticDimension v)
 
-type family IsJust (a :: Maybe k) :: Constraint where
-  IsJust ('Just _) = ()
+#if !MIN_VERSION_singletons(3,0,0)
+type family IsJust (a :: Maybe k) :: Bool where
+  IsJust ('Just _) = 'True
+  IsJust _ = 'False
+#endif
 
 class DimensionAware v => StaticDimensional v where
   dimensionIsStatic :: ∀ r . (∀ n . (KnownNat n, n`Dimensional`v) => r) -> r
@@ -139,7 +146,7 @@ class DimensionAware v => StaticDimensional v where
 dimensionalitySing :: ∀ v n . n`Dimensional`v => Sing n
 dimensionalitySing = knownDimensionalitySing @n @v
 
-instance ( DimensionAware v, IsJust (StaticDimension v) )
+instance ( DimensionAware v, IsJust (StaticDimension v) ~ 'True )
        => StaticDimensional v where
   dimensionIsStatic = case dimensionalityWitness @v of
    IsStaticDimensional -> \φ -> withKnownNat (dimensionalitySing @v) φ
@@ -185,7 +192,7 @@ toArray v = GArr.create (do
 {-# INLINE staticDimensionSing #-}
 staticDimensionSing :: ∀ v . DimensionAware v => Sing (StaticDimension v)
 staticDimensionSing = case dimensionalityWitness @v of
-  IsStaticDimensional -> sing
+  IsStaticDimensional -> SJust (dimensionalitySing @v)
   IsFlexibleDimensional -> sing
 
 {-# INLINE scalarUnsafeFromArrayWithOffset #-}

@@ -84,6 +84,7 @@ import GHC.TypeLits (Nat, KnownNat, natVal, type (+), type (*))
 
 #if MIN_VERSION_singletons(3,0,0)
 import GHC.TypeLits.Singletons (withKnownNat)
+import Data.Maybe.Singletons (FromJust)
 import Prelude.Singletons
 #else
 import Data.Singletons.TypeLits (withKnownNat)
