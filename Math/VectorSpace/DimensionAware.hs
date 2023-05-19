@@ -64,7 +64,7 @@ import qualified Math.VectorSpace.DimensionAware.Theorems.MaybeNat as Maybe
 --   Use this type only when defining instances of 'DimensionAware'. When making
 --   decisions based on dimensionality, 'DimensionalityCases' is more convenient.
 data DimensionalityWitness v where
-  IsStaticDimensional :: (KnownNat n, n`Dimensional`v) => DimensionalityWitness v
+  IsStaticDimensional :: (n`Dimensional`v) => DimensionalityWitness v
   IsFlexibleDimensional :: StaticDimension v ~ 'Nothing => DimensionalityWitness v
 
 
