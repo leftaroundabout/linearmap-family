@@ -263,7 +263,19 @@ instance ∀ n u m v nm . ( n`Dimensional`u, m`Dimensional`v
       unsafeWriteArrayWithOffset arr i x
       unsafeWriteArrayWithOffset arr (i + dimension @u) y
 
+-- | To be used as an “absurd” values for implementing methods whose constraints combine
+--   to require both static- and flexible dimensionality (which can thus never be called).
+--
+--   The actual type of this should be
+--
+-- @
+--   notStaticDimensionalContradiction :: ∀ v n r
+--     . (n`Dimensional`v, StaticDimension v ~ 'Nothing) => r
+-- @
+--
+--   GHC 9.6 baulks at that, though. It is a self-contradicting type, but that's the whole point...
 notStaticDimensionalContradiction :: ∀ v n r
-  . (n`Dimensional`v, StaticDimension v ~ 'Nothing) => r
+  . ( -- n`Dimensional`v,
+      StaticDimension v ~ 'Nothing) => r
 notStaticDimensionalContradiction = undefined
 
