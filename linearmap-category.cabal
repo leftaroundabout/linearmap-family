@@ -78,15 +78,15 @@ library
                        tagged,
                        free-vector-spaces >= 0.1.4 && < 0.3,
                        linear, lens, transformers,
-                       manifolds-core >= 0.5.1.0 && < 0.7,
+                       manifolds-core >= 0.6.1.0 && < 0.7,
                        semigroups, hashable,
                        data-default-class,
                        ieee754 >= 0.7 && < 0.9,
                        call-stack,
-                       template-haskell >=2.12 && <2.20,
-                       th-abstraction >=0.4 && <0.5,
+                       template-haskell >=2.12 && <2.21,
+                       th-abstraction >=0.4 && <0.6,
                        ghc-typelits-natnormalise >=0.7 && <0.8,
-                       type-natural >=1.0 && <1.2,
+                       type-natural >=1.0 && <1.4,
                        QuickCheck >=2.11 && <2.15
   if flag(singletons3)
     build-depends:
