@@ -22,7 +22,8 @@ library
     , constrained-categories
     , free-vector-spaces
     , hmatrix >=0.20.0 && <0.21
-    , singletons <3.0
+    , singletons >=3.0 && <3.3
+    , singletons-base >=3.0 && <3.3
     , finite-typelits >=0.1.6 && <0.2
     , linearmap-category
     , manifolds-core
