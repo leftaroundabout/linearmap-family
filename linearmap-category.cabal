@@ -2,8 +2,8 @@
 -- documentation, see http://haskell.org/cabal/users-guide/
 
 name:                linearmap-category
-version:             0.5.0.1
-synopsis:            Native, complete, matrix-free linear algebra.
+version:             0.6.0.1
+synopsis:            Native, complete-ish, matrix-free linear algebra.
 description:         The term /numerical linear algebra/ is often used almost
                      synonymous with /matrix modifications/. However, what's interesting
                      for most applications are really just /points in some vector space/
@@ -13,19 +13,31 @@ description:         The term /numerical linear algebra/ is often used almost
                      .
                      This library implements the crucial LA operations like solving
                      linear equations and eigenvalue problems, without requiring
-                     that the vectors are represented in some particular basis. Apart
-                     from conceptual elegance (only operations that are actually
+                     that the vectors are represented in some particular basis.
+                     This appoach offers:
+                     1. conceptual elegance (only operations that are actually
                      geometrically sensible will typecheck – this is far stronger than
                      just confirming that the dimensions match, as some other libraries
-                     do), this also opens up good optimisation possibilities: the
-                     vectors can be unboxed, use dedicated sparse compression, possibly
-                     carry out the computations on accelerated hardware (GPU etc.).
-                     The spaces can even be infinite-dimensional (e.g. function spaces).
+                     do)
+                     2. opportunity to type tensors more expressively. E.g. instead of
+                     having a tensor with many dimensions that can easily be confused,
+                     one can have e.g. a space of images and take the tensor product
+                     with a linear batch space, etc..
+                     3. it opens up optimisation possibilities: the vectors can be
+                     unboxed, use dedicated sparse compression, possibly carry out the
+                     computations on accelerated hardware (GPU etc.). The spaces can in
+                     principle even be infinite-dimensional (e.g. function spaces).
                      .
                      The linear algebra algorithms in this package only require the
                      vectors to support fundamental operations like addition, scalar
-                     products, double-dual-space coercion and tensor products; none of
-                     this requires a basis representation.
+                     products, double-dual-space coercion and tensor products. These
+                     are expressed by a hierarchy of type classes, none of which requires
+                     a basis representation.
+                     Basis representations are optional to allow storage in matrix-based
+                     backends, but this too is done in a way that allows e.g. taking the
+                     tensor product of a lazy function space with a static-dimensional
+                     matrix space with a low-dimensional channels space, and then only
+                     the inner dimensions will be stored in a packed format.
 homepage:            https://github.com/leftaroundabout/linearmap-family
 license:             GPL-3
 license-file:        LICENSE
@@ -59,27 +71,27 @@ library
                        Math.VectorSpace.Docile
   other-extensions:    FlexibleInstances, UndecidableInstances, FunctionalDependencies, TypeOperators, TypeFamilies
   build-depends:       base >=4.8 && <5,
-                       vector-space >=0.11 && <0.18, MemoTrie,
+                       vector-space >=0.11 && <0.18, MemoTrie <0.7,
                        constrained-categories >=0.3 && <0.5,
-                       containers,
+                       containers <0.7,
                        vector >=0.12 && <0.14,
-                       tagged,
+                       tagged <0.9,
                        free-vector-spaces >= 0.1.4 && < 0.3,
-                       linear, lens, transformers,
-                       manifolds-core >= 0.5.1.0 && < 0.7,
-                       semigroups, hashable,
-                       data-default-class,
+                       linear <1.23, lens <5.3, transformers <0.7,
+                       manifolds-core >= 0.6.1.0 && < 0.7,
+                       semigroups <0.21, hashable <1.5,
+                       data-default-class <0.2,
                        ieee754 >= 0.7 && < 0.9,
-                       call-stack,
-                       template-haskell >=2.12 && <2.20,
-                       th-abstraction >=0.4 && <0.5,
+                       call-stack <0.5,
+                       template-haskell >=2.12 && <2.21,
+                       th-abstraction >=0.4 && <0.7,
                        ghc-typelits-natnormalise >=0.7 && <0.8,
-                       type-natural >=1.0 && <1.2,
+                       type-natural >=1.0 && <1.4,
                        QuickCheck >=2.11 && <2.15
   if flag(singletons3)
     build-depends:
-                       singletons >=3.0 && <3.1,
-                       singletons-base >=3.0 && <3.1
+                       singletons >=3.0 && <3.3,
+                       singletons-base >=3.0 && <3.3
   else
     build-depends:
                        singletons >=2.7 && <3.0
@@ -95,7 +107,7 @@ test-suite tasty
                    , manifolds-core
                    , linear, vector
                    , constrained-categories
-                   , tasty, tasty-quickcheck
+                   , tasty <1.5, tasty-quickcheck <0.11
   ghc-options: -threaded "-with-rtsopts -N8 -M2G"
   default-language:    Haskell2010
 

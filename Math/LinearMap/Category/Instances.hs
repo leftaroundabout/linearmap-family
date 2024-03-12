@@ -613,13 +613,15 @@ instance ∀ s v . (Num' s, LinearSpace v, Scalar v ~ s)
                           , dualSpaceWitness :: DualSpaceWitness v ) of 
           (ClosedScalarWitness, DualSpaceWitness) -> DualSpaceWitness
   linearId = case dualSpaceWitness :: DualSpaceWitness v of
-    DualSpaceWitness -> LinearMap undefined -- $ rassocTensor . asTensor
-                          -- . fmap (unsafeFollowVSC SymTensor . asTensor) $ id
-  tensorId = LinearMap undefined -- $ asTensor . fmap asTensor . curryLinearMap
-                         --  . fmap asTensor
-                         --  . curryLinearMap
-                         --  . fmap (unsafeFollowVSC $ \t -> Tensor $ rassocTensor $ t)
-                         --  $ id
+    DualSpaceWitness -> LinearMap undefined
+                         -- LinearMap $ rassocTensor . asTensor
+                         -- . fmap (unsafeFollowVSC SymTensor . asTensor) $ id
+  tensorId = LinearMap undefined
+                   -- LinearMap $ asTensor . fmap asTensor . curryLinearMap
+                   --  . fmap asTensor
+                   --  . curryLinearMap
+                   --  . fmap (unsafeFollowVSC $ \t -> Tensor $ rassocTensor $ t)
+                   --  $ id
   applyLinear = case dualSpaceWitness :: DualSpaceWitness v of
     DualSpaceWitness -> bilinearFunction $ \(LinearMap f) (SymTensor t)
                    -> (getLinearFunction applyLinear
