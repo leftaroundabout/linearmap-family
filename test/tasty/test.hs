@@ -143,9 +143,10 @@ main = do
    [ testGroup "Euclidean space"
     [ testProperty "co-Riesz inversion"
      $ \v -> (arr coRiesz\$coRiesz-+$>v) === (v :: V4 ℝ)
-    , testProperty "Random operator inversion"      -- This isn't really expected to work
-     $ \f v -> (f \$ (f :: V4 ℝ+>V4 ℝ) $ v) ≈≈≈ v   -- /always/, but singular matrices are
-    ]                                               -- very seldom in the @Arbitrary@ instance.
+    , testProperty "Random operator inversion"
+     $ \f v -> not (isSingular f)
+              ==> (f \$ (f :: V4 ℝ+>V4 ℝ) $ v) ≈≈≈ v
+    ]
    , testGroup "Basis-derived space"
     [ testProperty "Semimanifold addition"
      $ \v w -> v.+~^w === (v^+^w :: ℝ⁵ Int)
@@ -237,6 +238,10 @@ main = do
 v≈≈≈w
  | magnitudeSq (v^-^w) < (magnitudeSq v + magnitudeSq w)*1e-8   = QC.property True
  | otherwise                                                    = v===w
+
+isSingular :: ∀ v n . (n`Dimensional`v, Scalar v ~ ℝ)
+             => (v +> v) -> Bool
+isSingular _ = undefined
 
 uar :: UArr.Unbox a => [a] -> UArr.Vector a
 uar = UArr.fromList
