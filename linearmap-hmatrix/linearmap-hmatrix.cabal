@@ -11,9 +11,10 @@ build-type:     Simple
 
 library
   exposed-modules:
-      Numeric.LinearAlgebra.Static.Orphans
+      Math.LinearMap.Category.Backend.HMatrix
   other-modules:
       Paths_linearmap_hmatrix
+      Numeric.LinearAlgebra.Static.Orphans
   hs-source-dirs:
       src
   ghc-options: -Wall -fprint-potential-instances

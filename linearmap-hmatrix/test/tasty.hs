@@ -23,7 +23,7 @@ import qualified Prelude as Hask
 import Control.Category.Constrained.Prelude
 import Control.Arrow.Constrained
 
-import Numeric.LinearAlgebra.Static.Orphans
+import Math.LinearMap.Category.Backend.HMatrix
 import Numeric.LinearAlgebra.Static as HMatS hiding ((===), (<.>), ℝ)
 import qualified Numeric.LinearAlgebra as HMat
 
