@@ -164,6 +164,10 @@ dimension' = withKnownNat (dimensionalitySing @v) (fromIntegral $ natVal @n Prox
 dimension :: ∀ v a . (StaticDimensional v, Integral a) => a
 dimension = dimensionIsStatic @v (dimension' @v)
 
+withDimension :: ∀ v a r . (StaticDimensional v, Integral a)
+         => ((KnownNat (Dimension v), Dimension v`Dimensional`v) => a -> r) -> r
+withDimension φ = dimensionIsStatic @v (φ (dimension' @v))
+
 -- | Convenience function. The result never depends on the runtime input, only
 --   on its type.
 dimensionOf :: ∀ v a . (StaticDimensional v, Integral a) => v -> a
