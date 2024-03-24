@@ -18,6 +18,8 @@
 
 module Numeric.LinearAlgebra.Static.Orphans () where
 
+import Numeric.LinearAlgebra.Static.Util
+
 -- base
 import Prelude hiding (id, (.), ($), fmap)
 import GHC.TypeLits (KnownNat, natVal)
@@ -156,39 +158,6 @@ type family RTensorProduct n w dw where
                      --   boxed array. This can be ragged (for whatever notion of
                      --   “length” may be applicable in the space @w@), but the length
                      --   of the array should always be exactly @n@.
-
-generateV :: ∀ n . KnownNat n => (Int -> ℝ) -> R n
-generateV = fromJust . create . ArS.generate (dimension @(R n))
-
-unsafeCreate :: ∀ n . (KnownNat n, HasCallStack) => ArS.Vector ℝ -> R n
-unsafeCreate ar
-  | nar==n     = fromJust $ create ar
-  | otherwise  = error $ "Incorrect size "++show nar++" for dimension "++show n
- where n = fromIntegral . natVal $ Proxy @n
-       nar = ArS.length ar
-
-unsafeCreateMat :: ∀ n m . (KnownNat n, KnownNat m, HasCallStack)
-                     => HMat.Matrix ℝ -> L n m
-unsafeCreateMat mat
-  | nmat==n, mmat==m  = fromJust $ create mat
-  | otherwise         = error $ "Incorrect size "++show nmat++"×"++show mmat
-                               ++" for dimension "++show n++"×"++show m
- where n = dimension @(R n)
-       m = dimension @(R m)
-       nmat = HMat.rows mat
-       mmat = HMat.cols mat
-
-unsafeFromRows :: ∀ m n . (KnownNat m, KnownNat n, HasCallStack) => [R n] -> L m n
-unsafeFromRows rs = withRows rs  -- unsafeCoerce
-                                (fromJust . exactDims)
-
-unsafeFromCols :: ∀ m n . (KnownNat m, KnownNat n, HasCallStack) => [R m] -> L m n
-unsafeFromCols rs = withColumns rs  -- unsafeCoerce
-                                  (fromJust . exactDims)
-
-generateCols :: ∀ m n . (KnownNat m, KnownNat n, HasCallStack)
-       => (Int -> R m) -> L m n
-generateCols f = unsafeFromCols $ f <$> [0 .. dimension @(R n) - 1]
 
 instance ∀ n . KnownNat n => TensorSpace (R n) where
   type TensorProduct (R n) w = RTensorProduct n w (StaticDimension w)
