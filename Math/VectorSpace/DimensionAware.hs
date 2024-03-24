@@ -156,13 +156,17 @@ dimensionality = case dimensionalityWitness @v of
   IsStaticDimensional -> withKnownNat (dimensionalitySing @v) StaticDimensionalCase
   IsFlexibleDimensional -> FlexibleDimensionalCase
 
-{-# INLINE dimension #-}
-dimension :: ∀ v n a . (n`Dimensional`v, Integral a) => a
-dimension = withKnownNat (dimensionalitySing @v) (fromIntegral $ natVal @n Proxy)
+{-# INLINE dimension' #-}
+dimension' :: ∀ v n a . (n`Dimensional`v, Integral a) => a
+dimension' = withKnownNat (dimensionalitySing @v) (fromIntegral $ natVal @n Proxy)
 
--- | Convenience function. The result does never depend on the runtime input, only
+{-# INLINE dimension #-}
+dimension :: ∀ v a . (StaticDimensional v, Integral a) => a
+dimension = dimensionIsStatic @v (dimension' @v)
+
+-- | Convenience function. The result never depends on the runtime input, only
 --   on its type.
-dimensionOf :: ∀ v n a . (n`Dimensional`v, Integral a) => v -> a
+dimensionOf :: ∀ v a . (StaticDimensional v, Integral a) => v -> a
 dimensionOf _ = dimension @v
 
 {-# INLINE unsafeFromArray #-}
