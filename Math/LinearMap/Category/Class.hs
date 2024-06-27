@@ -198,7 +198,8 @@ class (DimensionAware v, PseudoAffine v) => TensorSpace v where
             , TensorSpace w, m`Dimensional`w, Scalar w ~ Scalar v
             , GArr.Vector α (Scalar v) )
            => GArr.Mutable α σ (Scalar v) -> Int -> (v⊗w) -> ST σ ()
-  coerceFmapTensorProduct :: ( Hask.Functor p
+  coerceFmapTensorProduct :: ∀ a b p
+                           . ( Hask.Functor p
                              , TensorSpace a, Scalar a ~ Scalar v
                              , TensorSpace b, Scalar b ~ Scalar v )
        => p v -> VSCCoercion (Scalar v) a b

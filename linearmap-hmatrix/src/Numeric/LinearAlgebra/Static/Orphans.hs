@@ -303,7 +303,7 @@ instance ∀ n . KnownNat n => TensorSpace (R n) where
      (FlexibleDimensionalCase, FlexibleDimensionalCase, FlexibleDimensionalCase)
        -> bilinearFunction $ \(LinearFunction f) (Tensor tx, Tensor ty)
         -> Tensor $ ArB.zipWith (curry f) tx ty
-  coerceFmapTensorProduct :: ∀ p a b . (Functor p, DimensionAware a)
+  coerceFmapTensorProduct :: ∀ a b p . (Functor p, DimensionAware a)
      => p (R n) -> VSCCoercion ℝ a b
         -> Coercion (RTensorProduct n a (StaticDimension a))
                     (RTensorProduct n b (StaticDimension b))
