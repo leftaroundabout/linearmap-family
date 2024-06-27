@@ -208,13 +208,13 @@ instance ∀ v . (StaticDimensional v, TensorSpace v, Scalar v ~ ℝ)
      (FlexibleDimensionalCase, StaticDimensionalCase) -> bilinearFunction
          $ \f (Tensor t)
         -> let n = dimension @w
-               wSizeChunk :: ArS.Vector ℝ -> Maybe (R (Dimension w), ArS.Vector ℝ)
+               wSizeChunk :: ArS.Vector ℝ -> [R (Dimension w)]
                wSizeChunk v
                 | ArG.length v >= n
                     = let (chunk, rest) = ArG.splitAt n v
-                      in Just (unsafeCreate chunk, rest)
-                | otherwise  = Nothing
-           in Tensor . unsafeFromCols . unfoldr wSizeChunk . toArray
+                      in unsafeCreate chunk : wSizeChunk rest
+                | otherwise  = []
+           in Tensor . unsafeFromCols . wSizeChunk . toArray
             $ fmap f-+$>t
      (FlexibleDimensionalCase, FlexibleDimensionalCase) -> bilinearFunction
          $ \f (Tensor t) -> Tensor (fmap f -+$> t)
