@@ -20,6 +20,7 @@
 {-# LANGUAGE DataKinds                #-}
 {-# LANGUAGE ScopedTypeVariables      #-}
 {-# LANGUAGE UnicodeSyntax            #-}
+{-# LANGUAGE CPP                      #-}
 
 module Math.LinearMap.Category.Backend.HMatrix where
 
@@ -42,6 +43,15 @@ import Data.Type.Coercion (Coercion(..))
 import Control.Monad.ST (ST)
 --
 
+-- singletons
+#if MIN_VERSION_singletons(3,0,0)
+import Prelude.Singletons (SNum(..))
+import GHC.TypeLits.Singletons (withKnownNat)
+#else
+import Data.Singletons.Prelude.Num (SNum(..))
+import Data.Singletons.TypeLits (withKnownNat)
+#endif
+
 -- vector-space
 import Data.Basis (HasBasis(..))
 
@@ -51,6 +61,7 @@ import Numeric.LinearAlgebra.Static as HMatS
 import qualified Numeric.LinearAlgebra as HMat
 
 -- vector
+import qualified Data.Vector as ArB
 import qualified Data.Vector.Unboxed as ArU
 import qualified Data.Vector.Storable as ArS
 import qualified Data.Vector.Generic as ArG
@@ -268,4 +279,49 @@ instance ∀ v . (StaticDimensional v, TensorSpace v, Scalar v ~ ℝ)
      -> ArG.unsafeCopy (ArGM.slice i (n*m) ar)
          . ArG.convert . HMat.flatten . HMat.tr $ extract t
        ))
+
+
+instance ∀ v . (StaticDimensional v, LinearSpace v, Scalar v ~ ℝ)
+                    => LinearSpace (HMatrixImpl v) where
+  type DualVector (HMatrixImpl v) = HMatrixImpl (DualVector v)
+  dualSpaceWitness = case dualSpaceWitness @v of
+    DualSpaceWitness -> dimensionIsStatic @v DualSpaceWitness
+  linearId = case dualSpaceWitness @v of
+    DualSpaceWitness -> dimensionIsStatic @v (LinearMap $ HMatS.eye)
+  applyDualVector = dimensionIsStatic @v (case dualSpaceWitness @v of
+    DualSpaceWitness -> bilinearFunction
+     (\(HMatrixImpl dv) (HMatrixImpl v) -> dv HMatS.<.> v)
+   )
+  applyLinear :: ∀ w . (TensorSpace w, Scalar w ~ ℝ)
+                            => (HMatrixImpl v+>w) -+> (HMatrixImpl v-+>w)
+  applyLinear = case dualSpaceWitness @v of
+   DualSpaceWitness -> dimensionIsStatic @v (
+    bilinearFunction $ case dimensionality @w of
+      StaticDimensionalCase -> \(LinearMap m) (HMatrixImpl v)
+       -> unsafeFromArray . extract $ m#>v
+      FlexibleDimensionalCase -> \(LinearMap (Tensor m)) v
+       -> (applyLinear -+$> LinearMap m) -+$> (fromHMatrixImpl -+$> v)
+    )
+  tensorId :: ∀ w . (LinearSpace w, Scalar w ~ ℝ)
+                => LinearMap ℝ (HMatrixImpl v⊗w) (HMatrixImpl v⊗w)
+  tensorId = case dualSpaceWitness @v of
+   DualSpaceWitness -> withDimension @v (\n -> case dualSpaceWitness @w of
+    DualSpaceWitness -> case dimensionality @w of
+     StaticDimensionalCase
+       -> uncurryLinearMap -+$=> LinearMap undefined {- let dws = dimensionalitySing @w
+              dw = dimension @w
+          in dimensionIsStatic @(DualVector w)
+               ( withKnownNat (dimensionalitySing @v %* dws)
+                  undefined )
+              -}
+     FlexibleDimensionalCase
+       -> undefined {- LinearMap . ArB.generate n
+           $ \i -> (fmapTensor -+$> LinearFunction
+                     $ \w -> Tensor . ArB.generate n
+                      $ \j -> if i==j then w else zeroV)
+                    -+$> fromLinearMap -+$=> linearId
+                    -}
+    )
+
+
 
