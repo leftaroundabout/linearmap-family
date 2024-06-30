@@ -13,6 +13,7 @@ module Math.LinearMap.Coercion
    , (-+$=>)
    -- * Conversion between the internal types
    , fromLinearMap, asLinearMap, fromTensor, asTensor
+   , curryLinearMap, uncurryLinearMap
    ) where
 
 import Math.LinearMap.Category.Class

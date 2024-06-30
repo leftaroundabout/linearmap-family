@@ -28,6 +28,7 @@ import Control.Category.Constrained ((.))
 import Control.Functor.Constrained (fmap)
 
 import Math.LinearMap.Category
+import Math.LinearMap.Coercion (uncurryLinearMap, (-+$=>))
 import Math.VectorSpace.DimensionAware
 
 import Numeric.LinearAlgebra.Static.Orphans ()
