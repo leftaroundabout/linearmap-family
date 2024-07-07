@@ -339,6 +339,13 @@ linfunFromHMatrixImpl = dimensionIsStatic @v (dimensionIsStatic @w
             . asHMatrixImpl
     ))
 
+linmapFromHMatrixImpl :: ∀ v w . ( StaticDimensional v, StaticDimensional w
+                                 , LinearSpace v, TensorSpace w
+                                 , Scalar v ~ ℝ, Scalar w ~ ℝ )
+                             => (HMatrixImpl v+>HMatrixImpl w) -+> (v+>w)
+linmapFromHMatrixImpl = sampleLinearFunction <.+- linfunFromHMatrixImpl
+                         -- TODO efficient implementation
+
 -- | Inverse of 'linfunFromHMatrixImpl'.
 linfunAsHMatrixImpl :: ∀ v w . ( StaticDimensional v, StaticDimensional w
                                , LinearSpace v, TensorSpace w
@@ -351,3 +358,9 @@ linfunAsHMatrixImpl = dimensionIsStatic @v (dimensionIsStatic @w
           -+$> asHMatrixImpl . f . fromHMatrixImpl
     ))
     
+linmapAsHMatrixImpl :: ∀ v w . ( StaticDimensional v, StaticDimensional w
+                               , LinearSpace v, TensorSpace w
+                               , Scalar v ~ ℝ, Scalar w ~ ℝ )
+                             => (v+>w) -+> (HMatrixImpl v+>HMatrixImpl w)
+linmapAsHMatrixImpl = linfunAsHMatrixImpl <.+- applyLinear
+                         -- TODO efficient implementation
