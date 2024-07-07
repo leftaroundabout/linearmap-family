@@ -324,4 +324,30 @@ instance ∀ v . (StaticDimensional v, LinearSpace v, Scalar v ~ ℝ)
     )
 
 
+-- | Use a HMatrix-based linear map as if it was directly operating on the abstract
+--   vector spaces. Note that this is inefficient if a 'TensorProduct' -based linear
+--   map is built up from the linear function.
+linfunFromHMatrixImpl :: ∀ v w . ( StaticDimensional v, StaticDimensional w
+                                 , LinearSpace v, TensorSpace w
+                                 , Scalar v ~ ℝ, Scalar w ~ ℝ )
+                             => (HMatrixImpl v+>HMatrixImpl w) -+> (v-+>w)
+linfunFromHMatrixImpl = dimensionIsStatic @v (dimensionIsStatic @w
+  (case dualSpaceWitness @v of
+   DualSpaceWitness -> LinearFunction
+    $ \m -> fromHMatrixImpl
+            . (applyLinear-+$>m)
+            . asHMatrixImpl
+    ))
 
+-- | Inverse of 'linfunFromHMatrixImpl'.
+linfunAsHMatrixImpl :: ∀ v w . ( StaticDimensional v, StaticDimensional w
+                               , LinearSpace v, TensorSpace w
+                               , Scalar v ~ ℝ, Scalar w ~ ℝ )
+                             => (v-+>w) -+> (HMatrixImpl v+>HMatrixImpl w)
+linfunAsHMatrixImpl = dimensionIsStatic @v (dimensionIsStatic @w
+  (case dualSpaceWitness @v of
+   DualSpaceWitness -> LinearFunction
+    $ \f -> sampleLinearFunction
+          -+$> asHMatrixImpl . f . fromHMatrixImpl
+    ))
+    
