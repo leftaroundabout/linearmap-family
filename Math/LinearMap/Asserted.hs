@@ -161,5 +161,16 @@ lApply :: Bilinear (v-+>w) v w
 lApply = bilinearFunction $ \(LinearFunction f) v -> f v
 
 infixr 0 -+$>
+
+-- | Apply a linear function to a vector. This is the same as the 'LinearFunction'
+--   instantiation of 'Control.Arrow.Constrained.$', but without a constraint on the
+--   spaces.
 (-+$>) :: LinearFunction s v w -> v -> w
 LinearFunction f -+$> v = f v
+
+infixr 9 <.+-
+-- | Apply a linear function to a vector. This is the same as the 'LinearFunction'
+--   instantiation of 'Control.Category.Constrained.Prelude..', but without a
+--   constraint on the spaces mapped between.
+(<.+-) :: LinearFunction s v w -> LinearFunction s u v -> LinearFunction s u w
+LinearFunction f <.+- LinearFunction g = LinearFunction (f . g)

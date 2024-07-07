@@ -29,7 +29,7 @@ module Math.LinearMap.Category (
 
             -- ** Function implementation
               LinearFunction (..), type (-+>)(), Bilinear
-            , lfun, (-+$>)
+            , lfun, (-+$>), (<.+-)
             -- ** Tensor implementation
             , LinearMap (..), type (+>)()
             , (⊕), (>+<)
