@@ -34,7 +34,7 @@ import Data.Basis
 import Data.Coerce
 import Math.LinearMap.Category
 import Math.LinearMap.Coercion
-import Math.VectorSpace.DimensionAware (toArray, fromArray, unsafeFromArray)
+import Math.VectorSpace.DimensionAware (toArray, fromArray, unsafeFromArray, withDimension)
 import Math.Manifold.Core.Types
 import Math.Manifold.Core.PseudoAffine
 
@@ -145,6 +145,18 @@ main = do
               , h :: R 102+>R 46
               , i :: R 78+>R 98 )
     ]
+   , testGroup "HMatrix-based mappings between free spaces"
+    [ testProperty "Conversion from general tensor-based to HMatrix-based linmap"
+       $ \(f :: ((ℝ,ℝ),ℝ) +> (ℝ,(ℝ,ℝ))) v
+            -> let fHM = linfunAsHMatrixImpl-+$>(applyLinear-+$>f) -- inefficient
+               in (fromHMatrixImpl-+$>((applyLinear-+$>fHM)-+$>(asHMatrixImpl-+$>v)))
+                     ≈≈≈ ((applyLinear-+$>f)-+$>v)
+    , testProperty "Conversion from HMatrix-based to general tensor-based linmap"
+       $ \(fHM :: HMatrixImpl ((ℝ,ℝ),ℝ) +> HMatrixImpl (ℝ,(ℝ,ℝ))) (v :: ((ℝ,ℝ),ℝ))
+            -> let f = sampleLinearFunction-+$>(linfunFromHMatrixImpl-+$>fHM) -- inefficient
+               in (fromHMatrixImpl-+$>((applyLinear-+$>fHM)-+$>(asHMatrixImpl-+$>v)))
+                     ≈≈≈ ((applyLinear-+$>f)-+$>v)
+    ]
    ]
 
 
@@ -200,6 +212,14 @@ instance ∀ n m r . (KnownNat n, KnownNat m, r~ℝ)
            => InnerSpace (LinearMap r (R n) (R m)) where
   LinearMap f<.>LinearMap g
       = HMat.flatten (extract f) HMat.<.> HMat.flatten (extract g)
+
+instance ∀ v w r . ( LinearSpace v, StaticDimensional v, Scalar v ~ ℝ
+                   , StaticDimensional w, Scalar w ~ ℝ
+                   , r~ℝ )
+           => Arbitrary (LinearMap r (HMatrixImpl v) (HMatrixImpl w)) where
+  arbitrary = withDimension @v @Int (\n -> withDimension @w @Int (\m
+                -> case dualSpaceWitness @v of
+   DualSpaceWitness -> LinearMap . HMatS.fromList <$> vectorOf (n*m) arbitrary))
 
 infix 4 ≈≈≈
 (≈≈≈) :: (InnerSpace v, Show v, Eq v, RealFrac (Scalar v))
