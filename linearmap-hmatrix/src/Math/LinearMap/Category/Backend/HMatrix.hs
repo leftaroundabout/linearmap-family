@@ -74,6 +74,10 @@ import Data.Finite (Finite)
 --   @v@, but use HMatrix-vectors as the actual implementations for linear operations.
 newtype HMatrixImpl v = HMatrixImpl {getHMatrixImplementation :: R (Dimension v)}
 
+instance StaticDimensional v => Show (HMatrixImpl v) where
+  showsPrec p (HMatrixImpl v) = dimensionIsStatic @v
+       (showParen (p>9) $ ("HMatrixImpl "++) . showsPrec 10 v)
+
 fromHMatrixImpl :: ∀ v . (StaticDimensional v, Scalar v ~ ℝ)
                              => HMatrixImpl v -+> v
 fromHMatrixImpl = dimensionIsStatic @v
@@ -364,3 +368,12 @@ linmapAsHMatrixImpl :: ∀ v w . ( StaticDimensional v, StaticDimensional w
                              => (v+>w) -+> (HMatrixImpl v+>HMatrixImpl w)
 linmapAsHMatrixImpl = linfunAsHMatrixImpl <.+- applyLinear
                          -- TODO efficient implementation
+
+
+instance ∀ v w s . ( LinearSpace v, StaticDimensional v, StaticDimensional w
+                   , s ~ Scalar v, s ~ Scalar w
+                   ) => Show (LinearMap s (HMatrixImpl v) (HMatrixImpl w)) where
+  showsPrec p (LinearMap m) = case dualSpaceWitness @v of
+   DualSpaceWitness -> dimensionIsStatic @v (dimensionIsStatic @w
+       (showParen (p>9) $ ("LinearMap "++) . showsPrec 10 m))
+
