@@ -98,16 +98,5 @@ library
   -- hs-source-dirs:      
   default-language:    Haskell2010
 
-test-suite tasty
-  main-is:         test.hs
-  type:            exitcode-stdio-1.0
-  hs-source-dirs:  test/tasty
-  build-depends:   base, linearmap-category, vector-space
-                   , QuickCheck
-                   , manifolds-core
-                   , linear, vector
-                   , constrained-categories
-                   , tasty <1.6, tasty-quickcheck <0.11
-  ghc-options: -threaded "-with-rtsopts -N8 -M2G"
-  default-language:    Haskell2010
-
+-- The test suite is part of the linearmap-hmatrix subpackage
+-- (linearmap-hmatrix/test/linearmap-category/)

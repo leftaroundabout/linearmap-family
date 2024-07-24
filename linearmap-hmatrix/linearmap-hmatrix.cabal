@@ -35,6 +35,26 @@ library
     , QuickCheck
   default-language: Haskell2010
 
+-- Test suite for the main linearmap-category package.
+-- This should in principle be part of that package itself,
+-- but some of the tests use HMatrix for reference purposes and
+-- therefore depend on linearmap-hmatrix. Because that in turn
+-- depends on linearmap-category, Cabal complains about a
+-- cyclic dependency although in principle it would be possible
+-- to build everything regardless.
+test-suite linearmap-category-test
+  main-is:         test.hs
+  type:            exitcode-stdio-1.0
+  hs-source-dirs:  test/linearmap-category
+  build-depends:   base, linearmap-category, vector-space
+                   , QuickCheck
+                   , manifolds-core
+                   , linear, vector
+                   , constrained-categories
+                   , tasty <1.6, tasty-quickcheck <0.11
+  ghc-options: -threaded "-with-rtsopts -N8 -M2G"
+  default-language:    Haskell2010
+
 test-suite linearmap-hmatrix-test
   main-is:         test.hs
   type:            exitcode-stdio-1.0
