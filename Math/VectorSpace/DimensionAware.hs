@@ -139,6 +139,11 @@ type family IsJust (a :: Maybe k) :: Bool where
   IsJust _ = 'False
 #endif
 
+-- | This is a simple helper class, not to be user-instantiated. Use this constraint
+--   to express that a space has compile-time known dimension, but you do not need
+--   to know what particular dimension it is.
+--   Any 'DimensionAware' space whose 'StaticDimension' is not 'Nothing' has an
+--   instance.
 class DimensionAware v => StaticDimensional v where
   dimensionIsStatic :: ∀ r . (∀ n . (KnownNat n, n`Dimensional`v) => r) -> r
 

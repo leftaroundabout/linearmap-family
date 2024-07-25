@@ -35,6 +35,7 @@ module Math.VectorSpace.Docile where
 import Math.LinearMap.Category.Class
 import Math.LinearMap.Category.Instances
 import Math.LinearMap.Asserted
+import Math.VectorSpace.DimensionAware (Dimensional, StaticDimensional(..))
 
 import Data.Tree (Tree(..), Forest)
 import Data.List (sortBy, foldl', tails)
@@ -75,6 +76,7 @@ import Numeric.IEEE
 
 import Data.CallStack
 
+import GHC.TypeLits (KnownNat)
 
 
 
@@ -1539,3 +1541,15 @@ multiSplit :: Int -> Int -> [a] -> ([[a]], [a])
 multiSplit chunkSize 0 l = ([],l)
 multiSplit chunkSize nChunks l = case splitAt chunkSize l of
     (chunk, rest) -> first (chunk:) $ multiSplit chunkSize (nChunks-1) rest
+
+-- | Stronger version of 'dimensionIsStatic'. Use this to prove that a
+--   static-dimensional space has indeed a concrete dimension @n@, that
+--   it has a representable dual space (which all finite-dimensional spaces
+--   have in principle, though in this library it requires additionally a
+--   'LinearSpace' instance), and that the dual space has dimension @n@ too.
+dimensionIsStatic' :: ∀ v r . (StaticDimensional v, LinearSpace v)
+       => (∀ n . (KnownNat n, n`Dimensional`v, n`Dimensional`DualVector v)
+            => r) -> r
+dimensionIsStatic' φ = case dualSpaceWitness @v of
+   DualSpaceWitness -> dimensionIsStatic @v (dimensionIsStatic @(DualVector v) φ)
+

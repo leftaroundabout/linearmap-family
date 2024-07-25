@@ -78,7 +78,7 @@ module Math.LinearMap.Category (
             , LSpace
             , DimensionAware (..)
             , Dimensional (..)
-            , StaticDimensional (..)
+            , StaticDimensional
             , Dimension
             , TensorSpace (..)
             , LinearSpace (..)
@@ -113,6 +113,7 @@ module Math.LinearMap.Category (
             , summandSpaceNorms, sumSubspaceNorms
             , sharedNormSpanningSystem, sharedSeminormSpanningSystem
             , sharedSeminormSpanningSystem'
+            , dimensionIsStatic, dimensionIsStatic'
             , convexPolytopeHull
             , symmetricPolytopeOuterVertices
             ) where
