@@ -46,7 +46,9 @@ test-suite linearmap-category-test
   main-is:         test.hs
   type:            exitcode-stdio-1.0
   hs-source-dirs:  test/linearmap-category
-  build-depends:   base, linearmap-category, vector-space
+  build-depends:   base, linearmap-category
+                   , linearmap-hmatrix, hmatrix
+                   , vector-space
                    , QuickCheck
                    , manifolds-core
                    , linear, vector

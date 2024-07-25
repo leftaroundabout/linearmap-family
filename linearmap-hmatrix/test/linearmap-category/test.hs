@@ -42,6 +42,10 @@ import qualified Test.QuickCheck as QC
 
 import qualified Data.Vector.Unboxed as UArr
 
+import Math.LinearMap.Category.Backend.HMatrix
+import qualified Numeric.LinearAlgebra as HMat
+import qualified Numeric.LinearAlgebra.Static as HMatS
+
 
 newtype ℝ⁴ = ℝ⁴ { getℝ⁴ :: V4 ℝ }
  deriving (Eq, Show)
@@ -239,9 +243,14 @@ v≈≈≈w
  | magnitudeSq (v^-^w) < (magnitudeSq v + magnitudeSq w)*1e-8   = QC.property True
  | otherwise                                                    = v===w
 
-isSingular :: ∀ v n . (n`Dimensional`v, Scalar v ~ ℝ)
+asMatrix :: ∀ v . (LinearSpace v, StaticDimensional v, Scalar v ~ ℝ)
+             => (v +> v) -> HMat.Matrix ℝ
+asMatrix f = case linmapAsHMatrixImpl-+$>f of
+  LinearMap m -> dimensionIsStatic' @v (HMatS.extract m)
+
+isSingular :: ∀ v n . (LinearSpace v, StaticDimensional v, Scalar v ~ ℝ)
              => (v +> v) -> Bool
-isSingular _ = undefined
+isSingular f = HMat.det (asMatrix f) == 0
 
 uar :: UArr.Unbox a => [a] -> UArr.Vector a
 uar = UArr.fromList
