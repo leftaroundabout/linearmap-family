@@ -1087,6 +1087,9 @@ infixr 0 \$
  where du = subbasisDimension (entireBasis :: SubBasis u)
        dv = subbasisDimension (entireBasis :: SubBasis v)
     
+{-# DEPRECATED (\$) "The current inversion algorithm is wrong in rare edge cases. It is also dubious how useful it is given that 'SimpleSpace' has in practice just Euclidean-isomorphic spaces as instances, for which off-the-shelf matrix inversion could be used. These functions will probably be removed in favour of something e.g. conjugate-gradient based." #-}
+
+{-# DEPRECATED pseudoInverse "The current inversion algorithm is wrong in rare edge cases. It is also dubious how useful it is given that 'SimpleSpace' has in practice just Euclidean-isomorphic spaces as instances, for which off-the-shelf matrix inversion could be used. These functions will probably be removed in favour of something e.g. conjugate-gradient based." #-}
 
 pseudoInverse :: ∀ u v . ( SimpleSpace u, SimpleSpace v, Scalar u ~ Scalar v )
           => (u+>v) -> v+>u
