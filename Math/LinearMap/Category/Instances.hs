@@ -759,22 +759,26 @@ instance ( LinearSpace u, LinearSpace v, TensorSpace w
                  + (asLinearMap$vw)<.>(asLinearMap$vw')
 
 instance ( TensorSpace u, TensorSpace v, TensorSpace w
-         , Num s, Scalar u ~ s, Scalar v ~ s, Scalar w ~ s
+         , AdditiveGroup s, Num s
+         , Scalar u ~ s, Scalar v ~ s, Scalar w ~ s
          , InnerSpace (Tensor s u (Tensor s v w)) )
               => InnerSpace (Tensor s (Tensor s u v) w) where
   s <.> t = (rassocTensor$s)<.>(rassocTensor$t)
 instance ( LinearSpace u, TensorSpace v, TensorSpace w
-         , Num s, Scalar u ~ s, Scalar v ~ s, Scalar w ~ s
+         , AdditiveGroup s, Num s
+         , Scalar u ~ s, Scalar v ~ s, Scalar w ~ s
          , InnerSpace (LinearMap s u (Tensor s v w)) )
               => InnerSpace (Tensor s (LinearMap s u v) w) where
   s <.> t = (hasteLinearMap$s)<.>(hasteLinearMap$t)
 instance ( LinearSpace u, LinearSpace v, TensorSpace w
-         , Num s, Scalar u ~ s, Scalar v ~ s, Scalar w ~ s
+         , AdditiveGroup s, Num s
+         , Scalar u ~ s, Scalar v ~ s, Scalar w ~ s
          , InnerSpace (LinearMap s u (LinearMap s v w)) )
               => InnerSpace (LinearMap s (Tensor s u v) w) where
   s <.> t = (curryLinearMap$s)<.>(curryLinearMap$t)
 instance ( LinearSpace u, LinearSpace v, TensorSpace w
-         , Num s, Scalar u ~ s, Scalar v ~ s, Scalar w ~ s
+         , AdditiveGroup s, Num s
+         , Scalar u ~ s, Scalar v ~ s, Scalar w ~ s
          , InnerSpace (Tensor s u (LinearMap s v w)) )
               => InnerSpace (LinearMap s (LinearMap s u v) w) where
   s <.> t = (coCurryLinearMap$s)<.>(coCurryLinearMap$t)

@@ -1824,6 +1824,7 @@ instance ( VectorSpace (DualVector (f p)), VectorSpace (DualVector (g p))
     => VectorSpace (GenericTupleDual f g p)
 instance ( InnerSpace (DualVector (f p)), InnerSpace (DualVector (g p))
          , Scalar (DualVector (f p)) ~ Scalar (DualVector (g p))
+         , AdditiveGroup (Scalar (DualVector (g p)))
          , Num (Scalar (DualVector (f p))) )
     => InnerSpace (GenericTupleDual f g p)
 instance (AdditiveGroup (DualVector (f p)), AdditiveGroup (DualVector (g p)))
@@ -2225,7 +2226,7 @@ instance ∀ m . ( Semimanifold m, TensorSpace (DualVector (Needle (VRep m)))
                   Coercion -> Coercion
 
 
-instance ∀ s m . ( Num' s
+instance ∀ s m . ( Num s, Num' s
                  , Semimanifold m, LinearSpace (Needle (VRep m))
                  , Scalar (Needle m) ~ s
                  , Scalar (Needle (VRep m)) ~ s )
@@ -2253,7 +2254,7 @@ instance ∀ s m . ( Num' s
   coerceDoubleDual = case coerceDoubleDual @(Needle (VRep m)) of
     VSCCoercion -> VSCCoercion
 
-instance ∀ s m . ( Num' s
+instance ∀ s m . ( Num s, Num' s
                  , Semimanifold m
                  , LinearSpace (Needle (VRep m))
                  , TensorSpace (DualVector (Needle (VRep m)))
