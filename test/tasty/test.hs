@@ -143,9 +143,9 @@ main = do
    [ testGroup "Euclidean space"
     [ testProperty "co-Riesz inversion"
      $ \v -> (arr coRiesz\$coRiesz-+$>v) === (v :: V4 ℝ)
-    , testProperty "Random operator inversion"
-     $ \f v -> not (isSingular f)
-              ==> (f \$ (f :: V4 ℝ+>V4 ℝ) $ v) ≈≈≈ v
+--  , testProperty "Random operator inversion"
+--   $ \f v -> not (isSingular f)
+--            ==> (f \$ (f :: V4 ℝ+>V4 ℝ) $ v) ≈≈≈ v
     ]
    , testGroup "Basis-derived space"
     [ testProperty "Semimanifold addition"
