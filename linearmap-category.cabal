@@ -73,7 +73,7 @@ library
   build-depends:       base >=4.8 && <5,
                        vector-space >=0.11 && <0.20, MemoTrie <0.7,
                        constrained-categories >=0.3 && <0.5,
-                       containers <0.8,
+                       containers <0.9,
                        vector >=0.12 && <0.14,
                        tagged <0.9,
                        free-vector-spaces >= 0.1.4 && < 0.3,
