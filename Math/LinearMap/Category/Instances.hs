@@ -113,10 +113,10 @@ autoLinearManifoldWitness = LinearManifoldWitness
                              BoundarylessWitness
 #endif
 
-#define LinearScalarSpace(S) \
-instance Num' (S) where {closedScalarWitness = ClosedScalarWitness}; \
-instance TensorSpace (S) where { \
-  type TensorProduct (S) w = w; \
+#define LinearScalarSpace(scl) \
+instance Num' (scl) where {closedScalarWitness = ClosedScalarWitness}; \
+instance TensorSpace (scl) where { \
+  type TensorProduct (scl) w = w; \
   scalarSpaceWitness = ScalarSpaceWitness; \
   linearManifoldWitness = autoLinearManifoldWitness; \
   zeroTensor = Tensor zeroV; \
@@ -138,8 +138,8 @@ instance TensorSpace (S) where { \
     = unsafeWriteArrayWithOffset ar i v; \
   coerceFmapTensorProduct _ VSCCoercion = Coercion; \
   wellDefinedTensor (Tensor w) = Tensor <$> wellDefinedVector w }; \
-instance LinearSpace (S) where { \
-  type DualVector (S) = (S); \
+instance LinearSpace (scl) where { \
+  type DualVector (scl) = (scl); \
   dualSpaceWitness = DualSpaceWitness; \
   linearId = LinearMap 1; \
   tensorId = uncurryLinearMap $ LinearMap $ fmap (LinearFunction $ follow Tensor) -+$> id; \
@@ -194,27 +194,27 @@ tensorUnsafeWriteArrayWithOffsetViaList v2l ar i (Tensor t)
   toInterior = pure; fromInterior = id; translateP = Tagged (^+^);
 #endif
 
-#define FreeLinearSpace( V, d, LV, tp \
+#define FreeLinearSpace( vec_cstr, d, tp \
                        , tenspl, tenid, dspan \
                        , contraction, contraaction \
                        , frls, tols )  \
-instance Num s => Semimanifold (V s) where {  \
-  type Needle (V s) = V s;                      \
+instance Num s => Semimanifold (vec_cstr s) where {  \
+  type Needle (vec_cstr s) = vec_cstr s;                      \
   FreeLinSpaceInteriorDecls                      \
   (.+~^) = (^+^) };                               \
-instance Num s => PseudoAffine (V s) where {         \
+instance Num s => PseudoAffine (vec_cstr s) where {         \
   v.-~.w = pure (v^-^w); (.-~!) = (^-^) };              \
-instance ∀ s . (Num' s, Eq s) => DimensionAware (V s) where {                     \
-  type StaticDimension (V s) = 'Just (d);       \
+instance ∀ s . (Num' s, Eq s) => DimensionAware (vec_cstr s) where {                     \
+  type StaticDimension (vec_cstr s) = 'Just (d);       \
   dimensionalityWitness = IsStaticDimensional };                               \
-instance ∀ s . (Num' s, Eq s) => (d)`Dimensional`V (s) where {                     \
+instance ∀ s . (Num' s, Eq s) => (d)`Dimensional`vec_cstr (s) where {                     \
   unsafeFromArrayWithOffset \
      = unsafeFromArrayWithOffsetViaList (frls); \
   unsafeWriteArrayWithOffset \
      = unsafeWriteArrayWithOffsetViaList (tols) \
    };                               \
-instance ∀ s . (Num' s, Eq s) => TensorSpace (V s) where {                     \
-  type TensorProduct (V s) w = V w;                               \
+instance ∀ s . (Num' s, Eq s) => TensorSpace (vec_cstr s) where {                     \
+  type TensorProduct (vec_cstr s) w = vec_cstr w;                               \
   scalarSpaceWitness = case closedScalarWitness :: ClosedScalarWitness s of{ \
                          ClosedScalarWitness -> ScalarSpaceWitness};        \
   linearManifoldWitness = autoLinearManifoldWitness;   \
@@ -242,17 +242,17 @@ instance ∀ s . (Num' s, Eq s) => TensorSpace (V s) where {                    
   coerceFmapTensorProduct _ VSCCoercion = Coercion; \
   wellDefinedTensor = getTensorProduct >>> Hask.traverse wellDefinedVector \
                        >>> fmap Tensor };                  \
-instance ∀ s . (Num' s, Eq s) => LinearSpace (V s) where {                  \
-  type DualVector (V s) = V s;                                 \
+instance ∀ s . (Num' s, Eq s) => LinearSpace (vec_cstr s) where {                  \
+  type DualVector (vec_cstr s) = vec_cstr s;                                 \
   dualSpaceWitness = case closedScalarWitness :: ClosedScalarWitness s of \
          {ClosedScalarWitness -> DualSpaceWitness};                    \
-  linearId = LV Mat.identity;                                   \
+  linearId = LinearMap Mat.identity;                                   \
   idTensor = Tensor Mat.identity; \
   tensorId = ti dualSpaceWitness where     \
-   { ti :: ∀ w . (LinearSpace w, Scalar w ~ s) => DualSpaceWitness w -> (V s⊗w)+>(V s⊗w) \
+   { ti :: ∀ w . (LinearSpace w, Scalar w ~ s) => DualSpaceWitness w -> (vec_cstr s⊗w)+>(vec_cstr s⊗w) \
    ; ti DualSpaceWitness = LinearMap $ \
           fmap (\f -> fmap (LinearFunction $ Tensor . f)-+$>asTensor $ id) \
-               (tenid :: V (w -> V w)) }; \
+               (tenid :: vec_cstr (w -> vec_cstr w)) }; \
   coerceDoubleDual = VSCCoercion; \
   fromLinearForm = case closedScalarWitness :: ClosedScalarWitness s of{ \
                          ClosedScalarWitness -> LinearFunction $ flout LinearMap}; \
@@ -262,7 +262,7 @@ instance ∀ s . (Num' s, Eq s) => LinearSpace (V s) where {                  \
             \(Tensor wv) dw -> fmap (arr $ applyDualVector $ dw) wv;  -}    \
   contractLinearMapAgainst = bilinearFunction $ getLinearMap >>> (contraaction); \
   applyDualVector = bilinearFunction Mat.dot;           \
-  applyLinear = bilinearFunction $ \(LV m)                        \
+  applyLinear = bilinearFunction $ \(LinearMap m)                        \
                   -> foldl' (^+^) zeroV . liftA2 (^*) m;           \
   applyTensorFunctional = bilinearFunction $ \(LinearMap f) (Tensor t) \
              -> sum $ liftA2 (<.>^) f t; \
@@ -273,7 +273,6 @@ instance ∀ s . (Num' s, Eq s) => LinearSpace (V s) where {                  \
          \f (LinearMap g) -> LinearMap $ fmap ((applyLinear-+$>f)-+$>) g; \
   useTupleLinearSpaceComponents _ = usingNonTupleTypeAsTupleError }
 FreeLinearSpace( V0, 0
-               , LinearMap
                , \(Tensor V0) -> zeroV
                , \_ -> LinearMap V0
                , V0
@@ -284,7 +283,6 @@ FreeLinearSpace( V0, 0
                , \V0 -> []
                )
 FreeLinearSpace( V1, 1
-               , LinearMap
                , \(Tensor (V1 w₀)) -> w₀⊗V1 1
                , \w -> LinearMap $ V1 (Tensor $ V1 w)
                , V1 V1
@@ -295,7 +293,6 @@ FreeLinearSpace( V1, 1
                , \(V1 x) -> [x]
                )
 FreeLinearSpace( V2, 2
-               , LinearMap
                , \(Tensor (V2 w₀ w₁)) -> w₀⊗V2 1 0
                                      ^+^ w₁⊗V2 0 1
                , \w -> LinearMap $ V2 (Tensor $ V2 w zeroV)
@@ -310,7 +307,6 @@ FreeLinearSpace( V2, 2
                , \(V2 x y) -> (x:y:[])
                )
 FreeLinearSpace( V3, 3
-               , LinearMap
                , \(Tensor (V3 w₀ w₁ w₂)) -> w₀⊗V3 1 0 0
                                         ^+^ w₁⊗V3 0 1 0
                                         ^+^ w₂⊗V3 0 0 1
@@ -331,7 +327,6 @@ FreeLinearSpace( V3, 3
                , \(V3 x y z) -> x:y:z:[]
                )
 FreeLinearSpace( V4, 4
-               , LinearMap
                , \(Tensor (V4 w₀ w₁ w₂ w₃)) -> w₀⊗V4 1 0 0 0
                                            ^+^ w₁⊗V4 0 1 0 0
                                            ^+^ w₂⊗V4 0 0 1 0
