@@ -194,7 +194,7 @@ tensorUnsafeWriteArrayWithOffsetViaList v2l ar i (Tensor t)
   toInterior = pure; fromInterior = id; translateP = Tagged (^+^);
 #endif
 
-#define FreeLinearSpace( V, d, LV, tp \
+#define FreeLinearSpace( V, d, tp \
                        , tenspl, tenid, dspan \
                        , contraction, contraaction \
                        , frls, tols )  \
@@ -246,7 +246,7 @@ instance ∀ s . (Num' s, Eq s) => LinearSpace (V s) where {                  \
   type DualVector (V s) = V s;                                 \
   dualSpaceWitness = case closedScalarWitness :: ClosedScalarWitness s of \
          {ClosedScalarWitness -> DualSpaceWitness};                    \
-  linearId = LV Mat.identity;                                   \
+  linearId = LinearMap Mat.identity;                                   \
   idTensor = Tensor Mat.identity; \
   tensorId = ti dualSpaceWitness where     \
    { ti :: ∀ w . (LinearSpace w, Scalar w ~ s) => DualSpaceWitness w -> (V s⊗w)+>(V s⊗w) \
@@ -262,7 +262,7 @@ instance ∀ s . (Num' s, Eq s) => LinearSpace (V s) where {                  \
             \(Tensor wv) dw -> fmap (arr $ applyDualVector $ dw) wv;  -}    \
   contractLinearMapAgainst = bilinearFunction $ getLinearMap >>> (contraaction); \
   applyDualVector = bilinearFunction Mat.dot;           \
-  applyLinear = bilinearFunction $ \(LV m)                        \
+  applyLinear = bilinearFunction $ \(LinearMap m)                        \
                   -> foldl' (^+^) zeroV . liftA2 (^*) m;           \
   applyTensorFunctional = bilinearFunction $ \(LinearMap f) (Tensor t) \
              -> sum $ liftA2 (<.>^) f t; \
@@ -273,7 +273,6 @@ instance ∀ s . (Num' s, Eq s) => LinearSpace (V s) where {                  \
          \f (LinearMap g) -> LinearMap $ fmap ((applyLinear-+$>f)-+$>) g; \
   useTupleLinearSpaceComponents _ = usingNonTupleTypeAsTupleError }
 FreeLinearSpace( V0, 0
-               , LinearMap
                , \(Tensor V0) -> zeroV
                , \_ -> LinearMap V0
                , V0
@@ -284,7 +283,6 @@ FreeLinearSpace( V0, 0
                , \V0 -> []
                )
 FreeLinearSpace( V1, 1
-               , LinearMap
                , \(Tensor (V1 w₀)) -> w₀⊗V1 1
                , \w -> LinearMap $ V1 (Tensor $ V1 w)
                , V1 V1
@@ -295,7 +293,6 @@ FreeLinearSpace( V1, 1
                , \(V1 x) -> [x]
                )
 FreeLinearSpace( V2, 2
-               , LinearMap
                , \(Tensor (V2 w₀ w₁)) -> w₀⊗V2 1 0
                                      ^+^ w₁⊗V2 0 1
                , \w -> LinearMap $ V2 (Tensor $ V2 w zeroV)
@@ -310,7 +307,6 @@ FreeLinearSpace( V2, 2
                , \(V2 x y) -> (x:y:[])
                )
 FreeLinearSpace( V3, 3
-               , LinearMap
                , \(Tensor (V3 w₀ w₁ w₂)) -> w₀⊗V3 1 0 0
                                         ^+^ w₁⊗V3 0 1 0
                                         ^+^ w₂⊗V3 0 0 1
@@ -331,7 +327,6 @@ FreeLinearSpace( V3, 3
                , \(V3 x y z) -> x:y:z:[]
                )
 FreeLinearSpace( V4, 4
-               , LinearMap
                , \(Tensor (V4 w₀ w₁ w₂ w₃)) -> w₀⊗V4 1 0 0 0
                                            ^+^ w₁⊗V4 0 1 0 0
                                            ^+^ w₂⊗V4 0 0 1 0
