@@ -194,27 +194,27 @@ tensorUnsafeWriteArrayWithOffsetViaList v2l ar i (Tensor t)
   toInterior = pure; fromInterior = id; translateP = Tagged (^+^);
 #endif
 
-#define FreeLinearSpace( vecCstr, d, tp \
+#define FreeLinearSpace( vec_cstr, d, tp \
                        , tenspl, tenid, dspan \
                        , contraction, contraaction \
                        , frls, tols )  \
-instance Num s => Semimanifold (vecCstr s) where {  \
-  type Needle (vecCstr s) = vecCstr s;                      \
+instance Num s => Semimanifold (vec_cstr s) where {  \
+  type Needle (vec_cstr s) = vec_cstr s;                      \
   FreeLinSpaceInteriorDecls                      \
   (.+~^) = (^+^) };                               \
-instance Num s => PseudoAffine (vecCstr s) where {         \
+instance Num s => PseudoAffine (vec_cstr s) where {         \
   v.-~.w = pure (v^-^w); (.-~!) = (^-^) };              \
-instance ∀ s . (Num' s, Eq s) => DimensionAware (vecCstr s) where {                     \
-  type StaticDimension (vecCstr s) = 'Just (d);       \
+instance ∀ s . (Num' s, Eq s) => DimensionAware (vec_cstr s) where {                     \
+  type StaticDimension (vec_cstr s) = 'Just (d);       \
   dimensionalityWitness = IsStaticDimensional };                               \
-instance ∀ s . (Num' s, Eq s) => (d)`Dimensional`vecCstr (s) where {                     \
+instance ∀ s . (Num' s, Eq s) => (d)`Dimensional`vec_cstr (s) where {                     \
   unsafeFromArrayWithOffset \
      = unsafeFromArrayWithOffsetViaList (frls); \
   unsafeWriteArrayWithOffset \
      = unsafeWriteArrayWithOffsetViaList (tols) \
    };                               \
-instance ∀ s . (Num' s, Eq s) => TensorSpace (vecCstr s) where {                     \
-  type TensorProduct (vecCstr s) w = vecCstr w;                               \
+instance ∀ s . (Num' s, Eq s) => TensorSpace (vec_cstr s) where {                     \
+  type TensorProduct (vec_cstr s) w = vec_cstr w;                               \
   scalarSpaceWitness = case closedScalarWitness :: ClosedScalarWitness s of{ \
                          ClosedScalarWitness -> ScalarSpaceWitness};        \
   linearManifoldWitness = autoLinearManifoldWitness;   \
@@ -242,17 +242,17 @@ instance ∀ s . (Num' s, Eq s) => TensorSpace (vecCstr s) where {              
   coerceFmapTensorProduct _ VSCCoercion = Coercion; \
   wellDefinedTensor = getTensorProduct >>> Hask.traverse wellDefinedVector \
                        >>> fmap Tensor };                  \
-instance ∀ s . (Num' s, Eq s) => LinearSpace (vecCstr s) where {                  \
-  type DualVector (vecCstr s) = vecCstr s;                                 \
+instance ∀ s . (Num' s, Eq s) => LinearSpace (vec_cstr s) where {                  \
+  type DualVector (vec_cstr s) = vec_cstr s;                                 \
   dualSpaceWitness = case closedScalarWitness :: ClosedScalarWitness s of \
          {ClosedScalarWitness -> DualSpaceWitness};                    \
   linearId = LinearMap Mat.identity;                                   \
   idTensor = Tensor Mat.identity; \
   tensorId = ti dualSpaceWitness where     \
-   { ti :: ∀ w . (LinearSpace w, Scalar w ~ s) => DualSpaceWitness w -> (vecCstr s⊗w)+>(vecCstr s⊗w) \
+   { ti :: ∀ w . (LinearSpace w, Scalar w ~ s) => DualSpaceWitness w -> (vec_cstr s⊗w)+>(vec_cstr s⊗w) \
    ; ti DualSpaceWitness = LinearMap $ \
           fmap (\f -> fmap (LinearFunction $ Tensor . f)-+$>asTensor $ id) \
-               (tenid :: vecCstr (w -> vecCstr w)) }; \
+               (tenid :: vec_cstr (w -> vec_cstr w)) }; \
   coerceDoubleDual = VSCCoercion; \
   fromLinearForm = case closedScalarWitness :: ClosedScalarWitness s of{ \
                          ClosedScalarWitness -> LinearFunction $ flout LinearMap}; \
