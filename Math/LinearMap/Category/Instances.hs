@@ -20,6 +20,7 @@
 {-# LANGUAGE StandaloneDeriving         #-}
 {-# LANGUAGE UnicodeSyntax              #-}
 {-# LANGUAGE CPP                        #-}
+{-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE TupleSections              #-}
 {-# LANGUAGE EmptyCase                  #-}
 {-# LANGUAGE TypeApplications           #-}
@@ -28,6 +29,7 @@ module Math.LinearMap.Category.Instances where
 
 import Math.VectorSpace.DimensionAware
 import Math.LinearMap.Category.Class
+import Math.LinearMap.Category.Instances.THHelpers
 
 import Data.VectorSpace
 import Data.Basis
@@ -102,65 +104,10 @@ f<.>^v = (applyDualVector-+$>f)-+$>v
 
 type ℝ = Double
 
-autoLinearManifoldWitness :: (Semimanifold v, AffineSpace v, v ~ Needle v, v ~ Diff v
-#if !MIN_VERSION_manifolds_core(0,6,0)
-                             , v ~ Interior v
-#endif
-                             )
-                                 => LinearManifoldWitness v
-autoLinearManifoldWitness = LinearManifoldWitness
-#if !MIN_VERSION_manifolds_core(0,6,0)
-                             BoundarylessWitness
-#endif
 
-#define LinearScalarSpace(S) \
-instance Num' (S) where {closedScalarWitness = ClosedScalarWitness}; \
-instance TensorSpace (S) where { \
-  type TensorProduct (S) w = w; \
-  scalarSpaceWitness = ScalarSpaceWitness; \
-  linearManifoldWitness = autoLinearManifoldWitness; \
-  zeroTensor = Tensor zeroV; \
-  scaleTensor = bilinearFunction $ \μ (Tensor t) -> Tensor $ μ*^t; \
-  addTensors (Tensor v) (Tensor w) = Tensor $ v ^+^ w; \
-  subtractTensors (Tensor v) (Tensor w) = Tensor $ v ^-^ w; \
-  negateTensor = LinearFunction $ \(Tensor v) -> Tensor (negateV v); \
-  toFlatTensor = LinearFunction $ follow Tensor; \
-  fromFlatTensor = LinearFunction $ flout Tensor; \
-  tensorProduct = bilinearFunction $ \μ \
-           -> follow Tensor . getLinearFunction (scaleWith μ); \
-  transposeTensor = toFlatTensor . LinearFunction (flout Tensor); \
-  fmapTensor = bilinearFunction $ \f (Tensor t) -> Tensor (f-+$>t); \
-  fzipTensorWith = bilinearFunction \
-                   $ \(LinearFunction f) -> follow Tensor <<< f <<< flout Tensor *** flout Tensor; \
-  tensorUnsafeFromArrayWithOffset i ar \
-    = Tensor (unsafeFromArrayWithOffset i ar); \
-  tensorUnsafeWriteArrayWithOffset ar i (Tensor v) \
-    = unsafeWriteArrayWithOffset ar i v; \
-  coerceFmapTensorProduct _ VSCCoercion = Coercion; \
-  wellDefinedTensor (Tensor w) = Tensor <$> wellDefinedVector w }; \
-instance LinearSpace (S) where { \
-  type DualVector (S) = (S); \
-  dualSpaceWitness = DualSpaceWitness; \
-  linearId = LinearMap 1; \
-  tensorId = uncurryLinearMap $ LinearMap $ fmap (LinearFunction $ follow Tensor) -+$> id; \
-  idTensor = Tensor 1; \
-  fromLinearForm = LinearFunction $ flout LinearMap; \
-  coerceDoubleDual = VSCCoercion; \
-  contractTensorMap = LinearFunction $ flout Tensor . flout LinearMap; \
-  contractMapTensor = LinearFunction $ flout LinearMap . flout Tensor; \
-  applyDualVector = scale; \
-  applyLinear = LinearFunction $ \(LinearMap w) -> scaleV w; \
-  applyTensorFunctional = bilinearFunction $ \(LinearMap du) (Tensor u) -> du<.>^u; \
-  applyTensorLinMap = bilinearFunction $ \fℝuw (Tensor u) \
-                        -> let LinearMap fuw = curryLinearMap $ fℝuw \
-                           in (applyLinear-+$>fuw) -+$> u; \
-  composeLinear = bilinearFunction $ \f (LinearMap g) \
-                     -> LinearMap $ (applyLinear-+$>f)-+$>g; \
-  useTupleLinearSpaceComponents _ = usingNonTupleTypeAsTupleError }
-
-LinearScalarSpace(ℝ)
-LinearScalarSpace(Float)
-LinearScalarSpace(Rational)
+mkLinearScalarSpace ''ℝ
+mkLinearScalarSpace ''Float
+mkLinearScalarSpace ''Rational
 
 {-# INLINE tensorUnsafeFromArrayWithOffsetViaList #-}
 tensorUnsafeFromArrayWithOffsetViaList

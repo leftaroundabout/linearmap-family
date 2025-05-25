@@ -56,6 +56,7 @@ flag singletons3
 
 library
   exposed-modules:     Math.LinearMap.Category
+                       Math.LinearMap.Category.Instances.THHelpers
                        Math.LinearMap.Category.Instances.Deriving
                        Math.LinearMap.Coercion
                        Math.VectorSpace.ZeroDimensional
