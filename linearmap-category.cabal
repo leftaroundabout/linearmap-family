@@ -56,7 +56,6 @@ flag singletons3
 
 library
   exposed-modules:     Math.LinearMap.Category
-                       Math.LinearMap.Category.Instances.THHelpers
                        Math.LinearMap.Category.Instances.Deriving
                        Math.LinearMap.Coercion
                        Math.VectorSpace.ZeroDimensional
@@ -68,8 +67,10 @@ library
   other-modules:       Math.LinearMap.Category.Class
                        Math.LinearMap.Asserted
                        Math.LinearMap.Category.TensorQuot
+                       Math.LinearMap.Category.Instances.THHelpers
                        Math.LinearMap.Category.Instances
                        Math.VectorSpace.Docile
+                       Math.VectorSpace.Docile.Class
   other-extensions:    FlexibleInstances, UndecidableInstances, FunctionalDependencies, TypeOperators, TypeFamilies
   build-depends:       base >=4.8 && <5,
                        vector-space >=0.11 && <0.20, MemoTrie <0.7,
