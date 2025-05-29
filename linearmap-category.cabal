@@ -67,6 +67,7 @@ library
   other-modules:       Math.LinearMap.Category.Class
                        Math.LinearMap.Asserted
                        Math.LinearMap.Category.TensorQuot
+                       Math.LinearMap.Category.TensorQuot.Definitions
                        Math.LinearMap.Category.Instances.THHelpers
                        Math.LinearMap.Category.Instances
                        Math.VectorSpace.Docile

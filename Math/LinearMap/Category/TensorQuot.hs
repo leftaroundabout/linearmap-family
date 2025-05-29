@@ -21,38 +21,18 @@
 {-# LANGUAGE TupleSections         #-}
 {-# LANGUAGE ConstraintKinds       #-}
 
-module Math.LinearMap.Category.TensorQuot where
+module Math.LinearMap.Category.TensorQuot
+   ( TensorQuot(..)
+   ) where
 
 import Math.LinearMap.Category.Class
 import Math.LinearMap.Category.Instances
 import Math.LinearMap.Asserted
+import Math.LinearMap.Category.TensorQuot.Definitions
 
 import Data.VectorSpace
 import Data.VectorSpace.Free
 
-infixl 7 ·
-
-class (TensorSpace v, VectorSpace w) => TensorQuot v w where
-  type v ⨸ w :: *
-  -- | Generalised multiplication operation. This subsumes '<.>^' and '*^'.
-  --   For scalars therefore also '*', and for 'InnerSpace', '<.>'.
-  (·) :: v ⨸ w -> v -> w
-
-instance TensorQuot Double Double where
-  type Double ⨸ Double = Double
-  (·) = (*)
-
-instance ( TensorQuot x v, TensorQuot y w
-         , Scalar x ~ Scalar y, Scalar v ~ Scalar w
-         , (x⨸v) ~ (y⨸w) )
-      => TensorQuot (x,y) (v,w) where
-  type (x,y) ⨸ (v,w) = x⨸v
-  μ·(x,y) = (μ·x, μ·y)
-instance ( TensorQuot x Double, TensorQuot y Double
-         , Scalar x ~ Double, Scalar y ~ Double )
-      => TensorQuot (x,y) Double where
-  type (x,y) ⨸ Double = (x ⨸ Double, y ⨸ Double)
-  (v,w)·(x,y) = v·x + w·y
 
 #define FreeTensorQuot(V)                                \
 instance (Num' s, Eq s) => TensorQuot (V s) (V s) where { \
