@@ -181,7 +181,7 @@ mkFreeLinearSpace :: Name -> Name -> Int -> Q [Dec]
 mkFreeLinearSpace vTCstrName vECstrName dimens = do
   let 
       vTCstr = pure . ConT $ vTCstrName
-      -- vECstr = pure . ConE $ vECstrName
+      
       vExprn xVars = multiAppE (ConE vECstrName) $ VarE<$>xVars
       vPatt xVars = ConP vECstrName [] $ VarP<$>xVars
 
