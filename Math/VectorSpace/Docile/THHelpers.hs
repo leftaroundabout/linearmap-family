@@ -90,12 +90,28 @@ mkFreeFiniteDimensional vTCstrName vECstrName dimens = do
       vExprn xVars = multiAppE (ConE vECstrName) $ VarE<$>xVars
       vPatt xVars = ConP vECstrName [] $ VarP<$>xVars
 
-      dim :: Q Type
-      dim = pure . LitT . NumTyLit $ fromIntegral dimens
+      dim :: Q Exp
+      dim = pure . LitE . IntegerL $ fromIntegral dimens
       newCVars :: Char -> Q [Name]
       newCVars sym = forM [0 .. dimens-1] $ newName . (sym:) . show
 
+      newListToVecTranslation :: Pat -> Q (Pat, Exp)
+      newListToVecTranslation rmdVarPat = do
+         cVars <- newCVars 'c'
+         let csListP = go cVars
+              where go [] = rmdVarPat
+                    go (cVar:cvs) = ConP ('(:)) [] [VarP cVar, go cvs]
+             csVecE = multiAppE (ConE vECstrName)
+                         [VarE cVar | cVar <- cVars]
+         return (csListP, csVecE)
+
+      normalClause :: [Pat] -> Exp -> Clause
+      normalClause pats body = Clause pats (NormalB body) []
+
   scalarTVar <- (pure . VarT <$> newName "s" :: Q (Q Type))
+  subBasisCstrName <- newName $ "CompleteBasis"++nameBase vTCstrName
+
+  let subBasisCstrP = ConP subBasisCstrName [] []
 
   sequence [
     InstanceD Nothing <$> sequence
@@ -103,9 +119,95 @@ mkFreeFiniteDimensional vTCstrName vECstrName dimens = do
                            , [t|Eq $scalarTVar|]
                            , [t|LSpace $scalarTVar|] ]
                       <*> [t|FiniteDimensional ($vTCstr $scalarTVar)|]
-                      <*> sequence
-     [
-     ]
+                      <*> (sequence
+     [ DataInstD [] Nothing
+          <$> (AppT (ConT ''SubBasis)
+                <$> (AppT <$> vTCstr <*> scalarTVar))
+          <*> pure Nothing
+          <*> pure [NormalC subBasisCstrName []]
+          <*> pure []
+     , pure (FunD 'entireBasis [normalClause [] (ConE subBasisCstrName)])
+     , FunD 'enumerateSubBasis <$> sequence
+              [normalClause [subBasisCstrP]
+                 <$> [e| toList $ Mat.identity |]]
+     , FunD 'subbasisDimension <$> sequence
+              [normalClause [subBasisCstrP]
+                 <$> dim]
+     , pure (FunD 'uncanonicallyFromDual [normalClause [] (VarE 'id)])
+     , pure (FunD 'uncanonicallyToDual [normalClause [] (VarE 'id)])
+     , FunD 'recomposeSB <$> sequence
+              [ do
+                 csVar <- newName "cs"
+                 (csListP, csVecE) <- newListToVecTranslation $ VarP csVar
+                 normalClause [WildP, csListP]
+                   <$> pure (TupE [ Just $ csVecE
+                                  , Just $ VarE csVar ])
+              , do
+                 bVar <- newName "b"
+                 csVar <- newName "cs"
+                 normalClause [VarP bVar, VarP csVar]
+                   <$> [e| recomposeSB $(pure (VarE bVar))
+                             $ $(pure (VarE csVar)) ++ [0] |]
+              ]
+     , FunD 'recomposeSBTensor . (:[]) <$> do
+          bwVar <- newName "bw"
+          let bw = pure (VarE bwVar)
+          csVar <- newName "cs"
+          let cs = pure (VarE csVar)
+          normalClause [ subBasisCstrP
+                       , VarP bwVar
+                       , VarP csVar ]
+             <$> ( CaseE <$> [e| recomposeMultiple $(bw) $(dim) $(cs) |]
+                    <*> sequence [ do
+                      cs'Var <- newName "cs'"
+                      (csListP, csVecE) <- newListToVecTranslation $ ListP []
+                      Match (TupP [csListP, VarP cs'Var]) . NormalB
+                        <$> [e| (Tensor $(pure csVecE), $(pure (VarE cs'Var))) |]
+                        <*> pure []
+                     ])
+     , FunD 'recomposeLinMap <$> sequence [ do
+              wsVar <- newName "ws"
+              (wsListP, wsVecE) <- newListToVecTranslation $ VarP wsVar
+              normalClause [subBasisCstrP, wsListP]
+                 <$> [e| (LinearMap $(pure wsVecE), $(pure (VarE wsVar))) |]
+          ]
+     , FunD 'decomposeLinMap <$> sequence [
+               normalClause []
+                 <$> [e| \(LinearMap m)
+                            -> ( $(pure (ConE subBasisCstrName))
+                               , (toList m ++) ) |]
+          ]
+     , FunD 'decomposeLinMapWithin <$> sequence [
+               normalClause [subBasisCstrP]
+                 <$> [e| \(LinearMap m) -> pure (toList m ++) |]
+          ]
+     , FunD 'recomposeContraLinMap <$> sequence [
+               normalClause []
+                 <$> [e| \fw mv
+                            -> LinearMap $ (\v -> fw $ fmap (<.>^v) mv)
+                                             <$> Mat.identity |]
+          ]
+     , FunD 'recomposeContraLinMapTensor <$> sequence [
+          normalClause [] <$> [e|
+           let rclmt :: ∀ u w f . ( FiniteDimensional u, LinearSpace w
+                                  , Scalar u ~ $scalarTVar, Scalar w ~ $scalarTVar
+                                  , Hask.Functor f )
+                  => DualSpaceWitness u
+                  -> (f (Scalar w) -> w)
+                  -> f ($vTCstr $scalarTVar+>DualVector u)
+                  -> ($vTCstr $scalarTVar⊗u)+>w
+               rclmt DualSpaceWitness fw mv = LinearMap $
+                  (\v -> fromLinearMap $ recomposeContraLinMap fw
+                     $ fmap (\(LinearMap q) -> foldl' (^+^) zeroV $ liftA2 (*^) v q) mv)
+                  <$> Mat.identity 
+           in rclmt dualSpaceWitness |]
+        ]
+         
+     , FunD 'tensorEquality <$> sequence [
+               normalClause []
+                 <$> [e| \(Tensor s) (Tensor t) -> s==t |]
+          ]
+     ])
    ]
       
 

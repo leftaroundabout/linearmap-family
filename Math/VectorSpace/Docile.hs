@@ -24,6 +24,7 @@
 {-# LANGUAGE ConstraintKinds      #-}
 {-# LANGUAGE RankNTypes           #-}
 {-# LANGUAGE EmptyCase            #-}
+{-# LANGUAGE TemplateHaskell      #-}
 {-# LANGUAGE AllowAmbiguousTypes  #-}
 {-# LANGUAGE InstanceSigs         #-}
 {-# LANGUAGE TypeApplications     #-}
@@ -50,6 +51,7 @@ import Math.LinearMap.Category.Class
 import Math.LinearMap.Category.Instances
 import Math.LinearMap.Asserted
 import Math.VectorSpace.Docile.Class
+import Math.VectorSpace.Docile.THHelpers (mkFreeFiniteDimensional)
 
 import Data.Tree (Tree(..), Forest)
 import Data.List (sortBy, foldl', tails)
@@ -91,39 +93,12 @@ import Numeric.IEEE
 import Data.CallStack
 
 
+mkFreeFiniteDimensional ''V1 'V1 1
+mkFreeFiniteDimensional ''V2 'V2 2
+mkFreeFiniteDimensional ''V3 'V3 3
+mkFreeFiniteDimensional ''V4 'V4 4
 
 
-#define FreeFiniteDimensional(V, VB, dimens, take, give)        \
-instance (Num' s, Eq s, LSpace s)                            \
-            => FiniteDimensional (V s) where {            \
-  data SubBasis (V s) = VB deriving (Show);             \
-  entireBasis = VB;                                      \
-  enumerateSubBasis VB = toList $ Mat.identity;      \
-  subbasisDimension VB = dimens;                       \
-  uncanonicallyFromDual = id;                               \
-  uncanonicallyToDual = id;                                  \
-  recomposeSB _ (take:cs) = (give, cs);                   \
-  recomposeSB b cs = recomposeSB b $ cs ++ [0];        \
-  recomposeSBTensor VB bw cs = case recomposeMultiple bw dimens cs of \
-                   {(take:[], cs') -> (Tensor (give), cs')};              \
-  recomposeLinMap VB (take:ws') = (LinearMap (give), ws');   \
-  decomposeLinMap (LinearMap m) = (VB, (toList m ++));          \
-  decomposeLinMapWithin VB (LinearMap m) = pure (toList m ++);          \
-  recomposeContraLinMap fw mv \
-         = LinearMap $ (\v -> fw $ fmap (<.>^v) mv) <$> Mat.identity; \
-  recomposeContraLinMapTensor = rclmt dualSpaceWitness \
-   where {rclmt :: ∀ u w f . ( FiniteDimensional u, LinearSpace w \
-           , Scalar u ~ s, Scalar w ~ s, Hask.Functor f ) => DualSpaceWitness u \
-           -> (f (Scalar w) -> w) -> f (V s+>DualVector u) -> (V s⊗u)+>w \
-         ; rclmt DualSpaceWitness fw mv = LinearMap $ \
-       (\v -> fromLinearMap $ recomposeContraLinMap fw \
-                $ fmap (\(LinearMap q) -> foldl' (^+^) zeroV $ liftA2 (*^) v q) mv) \
-                       <$> Mat.identity }; \
-  tensorEquality (Tensor s) (Tensor t) = s==t }
-FreeFiniteDimensional(V1, V1Basis, 1, c₀         , V1 c₀         )
-FreeFiniteDimensional(V2, V2Basis, 2, c₀:c₁      , V2 c₀ c₁      )
-FreeFiniteDimensional(V3, V3Basis, 3, c₀:c₁:c₂   , V3 c₀ c₁ c₂   )
-FreeFiniteDimensional(V4, V4Basis, 4, c₀:c₁:c₂:c₃, V4 c₀ c₁ c₂ c₃)
 
 recomposeMultiple :: FiniteDimensional w
               => SubBasis w -> Int -> [Scalar w] -> ([w], [Scalar w])
