@@ -53,6 +53,8 @@ import Math.LinearMap.Asserted
 import Math.VectorSpace.Docile.Class
 import Math.VectorSpace.Docile.THHelpers (mkFreeFiniteDimensional)
 
+import Math.Manifold.Core.Types (ℝ)
+
 import Data.Tree (Tree(..), Forest)
 import Data.List (sortBy, foldl', tails)
 import qualified Data.Set as Set

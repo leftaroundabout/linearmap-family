@@ -37,6 +37,7 @@ import Data.Basis
 #if MIN_VERSION_manifolds_core(0,6,0)
 import Math.Manifold.Core.Types (EmptyMfd)
 #endif
+import Math.Manifold.Core.Types (ℝ)
 import Math.Manifold.Core.PseudoAffine
 
 import Prelude ()
@@ -101,8 +102,6 @@ instance LinearSpace v => PseudoAffine (EmptyMfd v) where
 infixr 7 <.>^
 (<.>^) :: LinearSpace v => DualVector v -> v -> Scalar v
 f<.>^v = (applyDualVector-+$>f)-+$>v
-
-type ℝ = Double
 
 
 mkLinearScalarSpace ''ℝ

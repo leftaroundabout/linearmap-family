@@ -41,6 +41,7 @@ import Data.Basis
 #if MIN_VERSION_manifolds_core(0,6,0)
 import Math.Manifold.Core.Types (EmptyMfd)
 #endif
+import Math.Manifold.Core.Types (ℝ)
 import Math.Manifold.Core.PseudoAffine
 
 import Prelude ()

@@ -125,6 +125,8 @@ import Math.VectorSpace.DimensionAware
 import Math.VectorSpace.Docile
 import Math.LinearMap.Category.TensorQuot
 
+import Math.Manifold.Core.Types (ℝ)
+
 import Data.Tree (Tree(..), Forest)
 import Data.List (sortBy, foldl')
 import qualified Data.Set as Set

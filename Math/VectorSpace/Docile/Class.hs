@@ -36,6 +36,8 @@ import Math.LinearMap.Category.Class
 import Math.LinearMap.Category.Instances
 import Math.LinearMap.Asserted
 
+import Math.Manifold.Core.Types (ℝ)
+
 import Data.Tree (Tree(..), Forest)
 import Data.List (sortBy, foldl', tails)
 import qualified Data.Set as Set
