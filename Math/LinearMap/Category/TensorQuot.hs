@@ -9,7 +9,7 @@
 -- 
 
 
-{-# LANGUAGE CPP                   #-}
+{-# LANGUAGE TemplateHaskell       #-}
 {-# LANGUAGE TypeOperators         #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -34,18 +34,10 @@ import Data.VectorSpace
 import Data.VectorSpace.Free
 
 
-#define FreeTensorQuot(V)                                \
-instance (Num' s, Eq s) => TensorQuot (V s) (V s) where { \
-  type V s ⨸ V s = s;                                      \
-  (·) = (*^) };                                             \
-instance TensorQuot (V Double) Double where {                \
-  type V Double ⨸ Double = V Double;                          \
-  (·) = (<.>) }
-
-FreeTensorQuot(V1)
-FreeTensorQuot(V2)
-FreeTensorQuot(V3)
-FreeTensorQuot(V4)
+mkFreeTensorQuot ''V1
+mkFreeTensorQuot ''V2
+mkFreeTensorQuot ''V3
+mkFreeTensorQuot ''V4
 
 instance ∀ s x y v w .
     ( TensorSpace v, TensorSpace w, v ~ x, LinearSpace y

@@ -9,7 +9,7 @@
 -- 
 
 
-{-# LANGUAGE CPP                   #-}
+{-# LANGUAGE TemplateHaskell       #-}
 {-# LANGUAGE TypeOperators         #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -29,6 +29,9 @@ import Math.LinearMap.Asserted
 
 import Data.VectorSpace
 import Data.VectorSpace.Free
+
+import Language.Haskell.TH
+import THLego.Helpers (multiAppE)
 
 infixl 7 ·
 
@@ -53,4 +56,18 @@ instance ( TensorQuot x Double, TensorQuot y Double
       => TensorQuot (x,y) Double where
   type (x,y) ⨸ Double = (x ⨸ Double, y ⨸ Double)
   (v,w)·(x,y) = v·x + w·y
+
+
+mkFreeTensorQuot :: Name -> Q [Dec]
+mkFreeTensorQuot vTCstrName = do
+  let 
+      vTCstr = pure . ConT $ vTCstrName
+  [d|
+     instance (Num' s, Eq s) => TensorQuot ($vTCstr s) ($vTCstr s) where
+       type $vTCstr s ⨸ $vTCstr s = s
+       (·) = (*^)
+     instance TensorQuot ($vTCstr Double) Double where
+       type $vTCstr Double ⨸ Double = $vTCstr Double
+       (·) = (<.>)
+    |]
 
