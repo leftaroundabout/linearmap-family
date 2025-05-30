@@ -29,6 +29,7 @@
 module Math.LinearMap.Category.Instances.THHelpers
         ( mkLinearScalarSpace
         , mkFreeLinearSpace
+        , mkFreeArbitrarySpace
         , autoLinearManifoldWitness
         ) where
 
@@ -347,3 +348,16 @@ mkFreeLinearSpace vTCstrName vECstrName dimens = do
                \f (LinearMap g) -> LinearMap $ fmap ((applyLinear-+$>f)-+$>) g
         useTupleLinearSpaceComponents _ = usingNonTupleTypeAsTupleError
    |]
+
+
+mkFreeArbitrarySpace :: Name -> Q [Dec]
+mkFreeArbitrarySpace vTCstrName = do
+  let 
+      vTCstr = pure . ConT $ vTCstrName
+  [d|
+    instance (QC.Arbitrary v, Scalar v ~ ℝ) => QC.Arbitrary (Tensor ℝ ($vTCstr ℝ) v) where
+      arbitrary = Tensor <$> Hask.traverse (const QC.arbitrary) zeroV
+    instance (QC.Arbitrary v, Scalar v ~ ℝ) => QC.Arbitrary (LinearMap ℝ ($vTCstr ℝ) v) where
+      arbitrary = LinearMap <$> Hask.traverse (const QC.arbitrary) zeroV
+   |]
+
