@@ -80,6 +80,64 @@ import Numeric.IEEE
 import Data.CallStack
 
 
+normalClause :: [Pat] -> Exp -> Clause
+normalClause pats body = Clause pats (NormalB body) []
+
+
+mkScalarFiniteDimensional :: Name -> Q [Dec]
+mkScalarFiniteDimensional sclTName = do
+  let sclT = pure . ConT $ sclTName
+  subBasisCstrName <- newName $ "CompleteBasis"++nameBase sclTName
+  let subBasisCstrP = ConP subBasisCstrName [] []
+
+  sequence [InstanceD Nothing [] <$> [t|FiniteDimensional $sclT|]
+   <*> sequence [
+      DataInstD [] Nothing
+            <$> (AppT (ConT ''SubBasis) <$> sclT)
+            <*> pure Nothing
+            <*> pure [NormalC subBasisCstrName []]
+            <*> pure []
+    , pure (FunD 'entireBasis [normalClause [] (ConE subBasisCstrName)])
+    , FunD 'enumerateSubBasis <$> sequence
+             [normalClause [subBasisCstrP]
+                <$> [e| [1] |]]
+    , FunD 'subbasisDimension <$> sequence
+             [normalClause [subBasisCstrP]
+                <$> [e| 1 |] ]
+    , pure (FunD 'uncanonicallyFromDual [normalClause [] (VarE 'id)])
+    , pure (FunD 'uncanonicallyToDual [normalClause [] (VarE 'id)])
+    , FunD 'recomposeSB <$> sequence
+             [normalClause [subBasisCstrP]
+                <$> [e| \l -> case l of
+                          [] -> (0, [])
+                          (μ:cs) -> (μ, cs) |] ]
+    , FunD 'recomposeSBTensor <$> sequence
+             [normalClause [subBasisCstrP]
+                <$> [e| \bw -> first Tensor . recomposeSB bw |] ]
+    , FunD 'recomposeLinMap <$> sequence
+             [normalClause [subBasisCstrP]
+                <$> [e| \(w:ws) -> (LinearMap w, ws) |] ]
+    , FunD 'decomposeLinMap <$> sequence
+             [normalClause []
+                <$> [e| \(LinearMap v)
+                       -> ($(pure . ConE $ subBasisCstrName), (v:)) |] ]
+    , FunD 'decomposeLinMapWithin <$> sequence
+             [normalClause [subBasisCstrP]
+                <$> [e| \(LinearMap v) -> pure (v:) |] ]
+    , FunD 'recomposeContraLinMap <$> sequence
+             [normalClause []
+                <$> [e| \fw -> LinearMap . fw |] ]
+    , FunD 'recomposeContraLinMapTensor <$> sequence
+             [normalClause []
+                <$> [e| \fw -> arr uncurryLinearMap . LinearMap
+                             . recomposeContraLinMap fw . fmap getLinearMap |] ]
+    , FunD 'tensorEquality <$> sequence
+             [normalClause []
+                <$> [e| \(Tensor v) (Tensor w) -> v==w |] ]
+    ]
+   ]
+
+
 
 mkFreeFiniteDimensional :: Name -> Name -> Int -> Q [Dec]
 mkFreeFiniteDimensional vTCstrName vECstrName dimens = do
@@ -104,9 +162,6 @@ mkFreeFiniteDimensional vTCstrName vECstrName dimens = do
              csVecE = multiAppE (ConE vECstrName)
                          [VarE cVar | cVar <- cVars]
          return (csListP, csVecE)
-
-      normalClause :: [Pat] -> Exp -> Clause
-      normalClause pats body = Clause pats (NormalB body) []
 
   scalarTVar <- (pure . VarT <$> newName "s" :: Q (Q Type))
   subBasisCstrName <- newName $ "CompleteBasis"++nameBase vTCstrName

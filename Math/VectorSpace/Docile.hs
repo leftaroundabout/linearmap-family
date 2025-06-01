@@ -51,7 +51,9 @@ import Math.LinearMap.Category.Class
 import Math.LinearMap.Category.Instances
 import Math.LinearMap.Asserted
 import Math.VectorSpace.Docile.Class
-import Math.VectorSpace.Docile.THHelpers (mkFreeFiniteDimensional)
+import Math.VectorSpace.Docile.THHelpers (
+         mkScalarFiniteDimensional, mkFreeFiniteDimensional
+       )
 
 import Math.Manifold.Core.Types (ℝ)
 
@@ -94,6 +96,9 @@ import Numeric.IEEE
 
 import Data.CallStack
 
+mkScalarFiniteDimensional ''Double
+
+deriving instance Show (SubBasis Double)
 
 mkFreeFiniteDimensional ''V1 'V1 1
 mkFreeFiniteDimensional ''V2 'V2 2
@@ -108,8 +113,6 @@ recomposeMultiple bw n dc
  | n<1        = ([], dc)
  | otherwise  = case recomposeSB bw dc of
            (w, dc') -> first (w:) $ recomposeMultiple bw (n-1) dc'
-                                  
-deriving instance Show (SubBasis ℝ)
   
 instance ∀ u v . ( FiniteDimensional u, FiniteDimensional v
                  , Scalar u ~ Scalar v )

@@ -620,21 +620,4 @@ instance (Num' s, Eq s, LinearSpace s) => FiniteDimensional (V0 s) where
   uncanonicallyToDual = id
   tensorEquality (Tensor V0) (Tensor V0) = True
   
-instance FiniteDimensional ℝ where
-  data SubBasis ℝ = RealsBasis
-  entireBasis = RealsBasis
-  enumerateSubBasis RealsBasis = [1]
-  subbasisDimension RealsBasis = 1
-  recomposeSB RealsBasis [] = (0, [])
-  recomposeSB RealsBasis (μ:cs) = (μ, cs)
-  recomposeSBTensor RealsBasis bw = first Tensor . recomposeSB bw
-  recomposeLinMap RealsBasis (w:ws) = (LinearMap w, ws)
-  decomposeLinMap (LinearMap v) = (RealsBasis, (v:))
-  decomposeLinMapWithin RealsBasis (LinearMap v) = pure (v:)
-  recomposeContraLinMap fw = LinearMap . fw
-  recomposeContraLinMapTensor fw = arr uncurryLinearMap . LinearMap
-              . recomposeContraLinMap fw . fmap getLinearMap
-  uncanonicallyFromDual = id
-  uncanonicallyToDual = id
-  tensorEquality (Tensor v) (Tensor w) = v==w
 
