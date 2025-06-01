@@ -275,3 +275,11 @@ recomposeMultiple bw n dc
  | otherwise  = case recomposeSB bw dc of
            (w, dc') -> first (w:) $ recomposeMultiple bw (n-1) dc'
                                   
+
+mkScalarTensorDecomposable :: Name -> Q [Dec]
+mkScalarTensorDecomposable sclTName = [d|
+  instance TensorDecomposable $(pure . ConT $ sclTName) where
+    tensorDecomposition (Tensor r) = [((), r)]
+    tensorDecompose' (Tensor r) () = r
+    showsPrecBasis _ = shows
+ |]

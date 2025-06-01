@@ -52,7 +52,7 @@ import Math.LinearMap.Category.Instances
 import Math.LinearMap.Asserted
 import Math.VectorSpace.Docile.Class
 import Math.VectorSpace.Docile.THHelpers (
-         mkScalarFiniteDimensional, mkFreeFiniteDimensional
+         mkScalarFiniteDimensional, mkFreeFiniteDimensional, mkScalarTensorDecomposable
        )
 
 import Math.Manifold.Core.Types (ℝ)
@@ -108,6 +108,8 @@ mkFreeFiniteDimensional ''V3 'V3 3
 mkFreeFiniteDimensional ''V4 'V4 4
 
 
+mkScalarTensorDecomposable ''Float
+mkScalarTensorDecomposable ''Double
 
 recomposeMultiple :: FiniteDimensional w
               => SubBasis w -> Int -> [Scalar w] -> ([w], [Scalar w])
@@ -750,13 +752,6 @@ infixr 7 .⊗
          => Basis v -> w -> v⊗w
 b .⊗ w = basisValue b ⊗ w
 
-class (FiniteDimensional v, HasBasis v) => TensorDecomposable v where
-  tensorDecomposition :: (TensorSpace w, Scalar w ~ Scalar v)
-             => v⊗w -> [(Basis v, w)]
-  tensorDecompose' :: (TensorSpace w, Scalar w ~ Scalar v)
-             => v⊗w -> Basis v -> w
-  showsPrecBasis :: Int -> Basis v -> ShowS
-
 instance ( TensorDecomposable u, TensorSpace v
          , HasBasis u, HasBasis v
          , Num' s, Scalar u ~ s, Scalar v ~ s
@@ -768,10 +763,7 @@ instance ( TensorDecomposable u, TensorSpace v
                 , (bv,s) <- decompose v ]
   decompose' t (bu, bv) = decompose' (tensorDecompose' t bu) bv
 
-instance TensorDecomposable ℝ where
-  tensorDecomposition (Tensor r) = [((), r)]
-  tensorDecompose' (Tensor r) () = r
-  showsPrecBasis _ = shows
+
 instance ∀ x y . ( TensorDecomposable x, TensorDecomposable y
                  , Scalar x ~ Scalar y, Scalar (DualVector x) ~ Scalar (DualVector y) )
               => TensorDecomposable (x,y) where

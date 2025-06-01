@@ -620,4 +620,10 @@ instance (Num' s, Eq s, LinearSpace s) => FiniteDimensional (V0 s) where
   uncanonicallyToDual = id
   tensorEquality (Tensor V0) (Tensor V0) = True
   
+class (FiniteDimensional v, HasBasis v) => TensorDecomposable v where
+  tensorDecomposition :: (TensorSpace w, Scalar w ~ Scalar v)
+             => v⊗w -> [(Basis v, w)]
+  tensorDecompose' :: (TensorSpace w, Scalar w ~ Scalar v)
+             => v⊗w -> Basis v -> w
+  showsPrecBasis :: Int -> Basis v -> ShowS
 
