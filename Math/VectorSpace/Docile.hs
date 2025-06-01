@@ -779,11 +779,13 @@ instance ∀ x y . ( TensorDecomposable x, TensorDecomposable y
   showsPrecBasis p (Right by)
       = showParen (p>9) $ ("Right "++) . showsPrecBasis @y 10 by
 
-instance TensorDecomposable (ZeroDim ℝ) where
+instance (Eq s, AdditiveGroup s, Num' s, s ~ Scalar s)
+            => TensorDecomposable (ZeroDim s) where
   tensorDecomposition _ = []
   tensorDecompose' _ = absurd
   showsPrecBasis _ = absurd
-instance TensorDecomposable (V0 ℝ) where
+instance (Eq s, AdditiveGroup s, Num' s, s ~ Scalar s)
+            => TensorDecomposable (V0 s) where
   tensorDecomposition _ = []
   tensorDecompose' _ b = case b of {}
 #if MIN_VERSION_free_vector_spaces(0,2,0)
@@ -791,7 +793,8 @@ instance TensorDecomposable (V0 ℝ) where
 #else
   showsPrecBasis _ (Mat.E q) = (V0^.q ++)
 #endif
-instance TensorDecomposable (V1 ℝ) where
+instance (Eq s, AdditiveGroup s, Num' s, s ~ Scalar s)
+            => TensorDecomposable (V1 s) where
 #if MIN_VERSION_free_vector_spaces(0,2,0)
   tensorDecomposition (Tensor (V1 w)) = [(e @0, w)]
   tensorDecompose' (Tensor (V1 w)) _ = w
@@ -801,7 +804,8 @@ instance TensorDecomposable (V1 ℝ) where
   tensorDecompose' (Tensor w) (Mat.E q) = w^.q
   showsPrecBasis _ (Mat.E q) = (V1"ex"^.q ++)
 #endif
-instance TensorDecomposable (V2 ℝ) where
+instance (Eq s, AdditiveGroup s, Num' s, s ~ Scalar s)
+            => TensorDecomposable (V2 s) where
 #if MIN_VERSION_free_vector_spaces(0,2,0)
   tensorDecomposition (Tensor (V2 x y)) = [ (e @0, x), (e @1, y) ]
   tensorDecompose' (Tensor (V2 x y)) b = case getEuclideanBasisIndex b of
@@ -812,7 +816,8 @@ instance TensorDecomposable (V2 ℝ) where
   tensorDecompose' (Tensor w) (Mat.E q) = w^.q
   showsPrecBasis _ (Mat.E q) = (V2"ex""ey"^.q ++)
 #endif
-instance TensorDecomposable (V3 ℝ) where
+instance (Eq s, AdditiveGroup s, Num' s, s ~ Scalar s)
+            => TensorDecomposable (V3 s) where
 #if MIN_VERSION_free_vector_spaces(0,2,0)
   tensorDecomposition (Tensor (V3 x y z)) = [ (e @0, x), (e @1, y), (e @2, z) ]
   tensorDecompose' (Tensor (V3 x y z)) b = case getEuclideanBasisIndex b of
@@ -823,7 +828,8 @@ instance TensorDecomposable (V3 ℝ) where
   tensorDecompose' (Tensor w) (Mat.E q) = w^.q
   showsPrecBasis _ (Mat.E q) = (V3"ex""ey""ez"^.q ++)
 #endif
-instance TensorDecomposable (V4 ℝ) where
+instance (Eq s, AdditiveGroup s, Num' s, s ~ Scalar s)
+            => TensorDecomposable (V4 s) where
 #if MIN_VERSION_free_vector_spaces(0,2,0)
   tensorDecomposition (Tensor (V4 x y z w)) = [(e @0,x), (e @1,y), (e @2,z), (e @3,w)]
   tensorDecompose' (Tensor (V4 x y z w)) b = case getEuclideanBasisIndex b of
