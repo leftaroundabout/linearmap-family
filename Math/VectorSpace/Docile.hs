@@ -96,8 +96,10 @@ import Numeric.IEEE
 
 import Data.CallStack
 
+mkScalarFiniteDimensional ''Float
 mkScalarFiniteDimensional ''Double
 
+deriving instance Show (SubBasis Float)
 deriving instance Show (SubBasis Double)
 
 mkFreeFiniteDimensional ''V1 'V1 1
